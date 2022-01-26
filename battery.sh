@@ -5,7 +5,9 @@ binfolder=/usr/local/bin
 
 # CLI help message
 helpmessage="
-Battery CLI utility. Usage: 
+Battery CLI utility v0.0.1.
+
+Usage: 
 
   battery charging SETTING
     on: sets CH0B to 00 (allow charging)
