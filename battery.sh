@@ -3,19 +3,21 @@
 tempfolder=tmp
 binfolder=/usr/local/bin
 
-# Battery management function
-
+# CLI help message
 helpmessage="
 Battery CLI utility. Usage: 
 
-  battery charging on/off
+  battery charging SETTING
     on: sets CH0B to 00 (allow charging)
     off: sets CH0B to 02 (disallow charging)
 
-  visudo: instructions on how to make which utility exempt from sudo
+  battery visudo: instructions on how to make which utility exempt from sudo
+
+  battery update: run the installation command again to pull latest version
 
 "
 
+# Visudo instructions
 visudoconfig="
 # Put this in /private/etc/sudoers.d/mentor_zshrc on a mac
 # with sudo visudo /private/etc/sudoers.d/battery
@@ -26,15 +28,26 @@ $( whoami ) ALL = NOPASSWD: BATTERYOFF
 $( whoami ) ALL = NOPASSWD: BATTERYON
 "
 
+# Get parameters
 action=$1
 setting=$2
 
+# Help message 
 if [ -z "$action" ]; then
 	echo -e "$helpmessage"
 fi
 
+# Visudo message
 if [[ "$action" == "visudo" ]]; then
 	echo -e "$visudoconfig"
+fi
+
+# Update helper
+if [[ "$action" == "update" ]]; then
+	echo "This will run curl https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | sudo bash"
+	echo "Press any key to continue"
+	read
+	curl https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | sudo bash
 fi
 
 
