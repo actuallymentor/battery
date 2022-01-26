@@ -2,6 +2,16 @@
 
 CLI for managing the battery charging status for M1 Macs. Can be used to enable/disable the Macbook from charging the battery when plugged into power.
 
+The idea is to make it possible to keep a chronically plugged in Macbook at for example `80%` battery, since that will prolong the longevity of the battery.
+
+After running `battery charging off` you can verify the change visually by looking at the battery icon:
+
+![Battery not charging](./screenshots/not-charging-screenshot.png)
+
+After running `battery charging on` you will see it change to this:
+
+![Battery charging](./screenshots/charging-screenshot.png)
+
 ## Installation
 
 One-line installation:
