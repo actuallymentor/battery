@@ -21,7 +21,7 @@ Usage:
 
 # Visudo instructions
 visudoconfig="
-# Put this in /private/etc/sudoers.d/mentor_zshrc on a mac
+# Put this in /private/etc/sudoers.d/battery on a mac
 # with sudo visudo /private/etc/sudoers.d/battery
 
 Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02
