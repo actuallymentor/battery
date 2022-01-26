@@ -18,15 +18,4 @@ This will:
 
 ## Usage
 
-For help, run `battery` without parameters:
-
-```
-Battery CLI utility. Usage: 
-
-  battery charging on/off
-    on: sets CH0B to 00 (allow charging)
-    off: sets CH0B to 02 (disallow charging)
-
-  visudo: log out the contents for a Visudo file you can use to make sure this command doesn't need your sudo password every time.
-
-```
+For help, run `battery` without parameters.
