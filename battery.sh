@@ -44,12 +44,12 @@ setting=$2
 ## Helpers
 ## ###############
 function enable_charging() {
-	echo "$(date +%T) -Enabling battery charging"
+	echo "$(date +%T) - Enabling battery charging"
 	sudo smc -k CH0B -w 00
 }
 
 function disable_charging() {
-	echo "$(date +%T) -Disabling battery charging"
+	echo "$(date +%T) - Disabling battery charging"
 	sudo smc -k CH0B -w 02
 }
 
@@ -96,7 +96,7 @@ if [[ "$action" == "charge" ]]; then
 
 	# Start charging
 	BATT_PERCENT=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
-	echo "$(date +%T) - Charging to $setting from $BATT_PERCENT"
+	echo "$(date +%T) - Charging to $setting% from $BATT_PERCENT%"
 	enable_charging
 
 	# Loop until battery percent is exceeded
