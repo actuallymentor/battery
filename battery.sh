@@ -1,5 +1,8 @@
 #!/bin/bash
 
+## ###############
+## Variables
+## ###############
 tempfolder=tmp
 binfolder=/usr/local/bin
 
@@ -12,6 +15,9 @@ Usage:
   battery charging SETTING
     on: sets CH0B to 00 (allow charging)
     off: sets CH0B to 02 (disallow charging)
+
+  battery charge LEVEL
+    LEVEL: percentage to charge to, charging is disabled when percentage is reached.
 
   battery visudo: instructions on how to make which utility exempt from sudo
 
@@ -33,6 +39,23 @@ $( whoami ) ALL = NOPASSWD: BATTERYON
 # Get parameters
 action=$1
 setting=$2
+
+## ###############
+## Helpers
+## ###############
+function enable_charging() {
+	echo "Enabling battery charging"
+	sudo smc -k CH0B -w 00
+}
+
+function disable_charging() {
+	echo "Disabling battery charging"
+	sudo smc -k CH0B -w 02
+}
+
+## ###############
+## Actions
+## ###############
 
 # Help message 
 if [ -z "$action" ]; then
@@ -60,11 +83,30 @@ if [[ "$action" == "charging" ]]; then
 	
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
-		echo "Enabling battery charging"
-		sudo smc -k CH0B -w 00
+		enable_charging
 	elif [[ "$setting" == "off" ]]; then
-		echo "Disabling battery charging"
-		sudo smc -k CH0B -w 02
+		disable_charging
 	fi
+
+fi
+
+# Charging on/off controller
+if [[ "$action" == "charge" ]]; then
+
+	# Start charging
+	BATT_PERCENT=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
+	echo "$(date) - Charging to $setting from $BATT_PERCENT"
+	enable_charging
+
+	# Loop until battery percent is exceeded
+	while [[ "$BATT_PERCENT" -lt "$setting" ]]; do
+
+		echo "$(date) - Battery at $BATT_PERCENT%"
+		sleep 60
+		
+	done
+
+	disable_charging
+	echo "$(date) - Charged to $BATT_PERCENT"
 
 fi
