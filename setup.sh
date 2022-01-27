@@ -4,7 +4,7 @@
 tempfolder=tmp
 binfolder=/usr/local/bin
 
-echo -e "\nCloning fam control version of smc"
+echo -e "\nCloning fan control version of smc"
 git clone https://github.com/hholtmann/smcFanControl.git $tempfolder
 cd $tempfolder/smc-command
 echo -e "\nMaking smc from source"
