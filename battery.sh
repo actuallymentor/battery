@@ -104,6 +104,7 @@ if [[ "$action" == "charge" ]]; then
 
 		echo "$(date +%T) - Battery at $BATT_PERCENT%"
 		sleep 60
+		BATT_PERCENT=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
 		
 	done
 
