@@ -109,6 +109,6 @@ if [[ "$action" == "charge" ]]; then
 	done
 
 	disable_charging
-	echo "$(date +%T) - Charged to $BATT_PERCENT"
+	echo "$(date +%T) - Charging completed at $BATT_PERCENT%"
 
 fi
