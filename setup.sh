@@ -5,10 +5,10 @@ tempfolder=tmp
 binfolder=/usr/local/bin
 
 echo -e "\nCloning fan control version of smc"
-git clone https://github.com/hholtmann/smcFanControl.git $tempfolder
+git clone -–depth 1 https://github.com/hholtmann/smcFanControl.git $tempfolder
 cd $tempfolder/smc-command
 echo -e "\nMaking smc from source"
-make 1> /dev/null
+make &> /dev/null
 
 # Move built file to bin folder
 echo -e "\nMove smc to executable folder"
@@ -21,7 +21,6 @@ cd ../..
 echo -e "\nRemoving temp folder $(pwd)/$tempfolder"
 rm -rf $tempfolder
 echo -e "\nSmc binary built"
-
 
 # Write battery function as executable
 

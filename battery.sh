@@ -8,9 +8,12 @@ binfolder=/usr/local/bin
 
 # CLI help message
 helpmessage="
-Battery CLI utility v0.0.1.
+Battery CLI utility v0.0.2.
 
 Usage: 
+
+  battery status
+    output battery SMC status, % and time remaining
 
   battery charging SETTING
     on: sets CH0B to 00 (allow charging)
@@ -19,9 +22,11 @@ Usage:
   battery charge LEVEL
     LEVEL: percentage to charge to, charging is disabled when percentage is reached.
 
-  battery visudo: instructions on how to make which utility exempt from sudo
+  battery visudo
+    instructions on how to make which utility exempt from sudo
 
-  battery update: run the installation command again to pull latest version
+  battery update
+    run the installation command again to pull latest version
 
 "
 

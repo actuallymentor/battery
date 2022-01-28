@@ -28,4 +28,26 @@ This will:
 
 ## Usage
 
-For help, run `battery` without parameters.
+For help, run `battery` without parameters:
+
+```
+Battery CLI utility v0.0.2.
+
+Usage: 
+
+  battery status
+    output battery SMC status, % and time remaining
+
+  battery charging SETTING
+    on: sets CH0B to 00 (allow charging)
+    off: sets CH0B to 02 (disallow charging)
+
+  battery charge LEVEL
+    LEVEL: percentage to charge to, charging is disabled when percentage is reached.
+
+  battery visudo
+    instructions on how to make which utility exempt from sudo
+
+  battery update
+    run the installation command again to pull latest version
+```
