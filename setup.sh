@@ -33,4 +33,4 @@ echo -e "\nRemoving temp folder $tempfolder"
 rm -rf $tempfolder
 echo -e "\nSmc binary built"
 
-echo -e "\nBattery tool installed. Type \"battery\" for instructions."
+echo -e "\n🎉 Battery tool installed. Type \"battery\" for instructions."

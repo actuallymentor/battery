@@ -91,11 +91,13 @@ function log() {
 # Help message 
 if [ -z "$action" ]; then
 	echo -e "$helpmessage"
+	exit 0
 fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
 	echo -e "$visudoconfig"
+	exit 0
 fi
 
 # Update helper
@@ -104,6 +106,8 @@ if [[ "$action" == "update" ]]; then
 	echo "Press any key to continue"
 	read
 	curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | sudo bash
+	battery
+	exit 0
 fi
 
 
@@ -118,6 +122,8 @@ if [[ "$action" == "charging" ]]; then
 	elif [[ "$setting" == "off" ]]; then
 		disable_charging
 	fi
+
+	exit 0
 
 fi
 
@@ -141,6 +147,8 @@ if [[ "$action" == "charge" ]]; then
 	disable_charging
 	log "Charging completed at $battery_percentage%"
 
+	exit 0
+
 fi
 
 
@@ -148,5 +156,6 @@ fi
 if [[ "$action" == "status" ]]; then
 
 	log "Battery at $( get_battery_percentage  )% ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
+	exit 0
 
 fi
