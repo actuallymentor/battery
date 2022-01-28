@@ -95,10 +95,10 @@ fi
 
 # Update helper
 if [[ "$action" == "update" ]]; then
-	echo "This will run curl https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | sudo bash"
+	echo "This will run curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | sudo bash"
 	echo "Press any key to continue"
 	read
-	curl https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | sudo bash
+	curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | sudo bash
 fi
 
 
