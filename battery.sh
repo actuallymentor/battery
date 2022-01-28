@@ -136,7 +136,7 @@ if [[ "$action" == "charge" ]]; then
 	enable_charging
 
 	# Loop until battery percent is exceeded
-	while [[ "$BATT_PERCENT" -lt "$setting" ]]; do
+	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
 		log "Battery at $battery_percentage%"
 		sleep 60
