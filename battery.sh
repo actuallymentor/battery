@@ -53,6 +53,31 @@ function disable_charging() {
 	sudo smc -k CH0B -w 02
 }
 
+function get_smc_charging_status() {
+	hex_status=$( smc -k CH0B -r | awk '{print $4}' | sed s:\):: )
+	if [[ "$hex_status" == "02" ]]; then
+		echo "disabled"
+	else
+		echo "enabled"
+	fi
+}
+
+function get_charging_status() {
+	battery_percentage=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
+	echo "$battery_percentage"
+}
+
+function get_remaining_time() {
+	time_remaining=`pmset -g batt | tail -n1 | awk '{print $5}'`
+	echo "$time_remaining"
+}
+
+function log() {
+
+	echo -e "$(date +%T) - $1"
+
+}
+
 
 ## ###############
 ## Actions
@@ -80,7 +105,7 @@ fi
 # Charging on/off controller
 if [[ "$action" == "charging" ]]; then
 
-	echo "Setting $action to $setting"
+	log "Setting $action to $setting"
 	
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
@@ -95,20 +120,28 @@ fi
 if [[ "$action" == "charge" ]]; then
 
 	# Start charging
-	BATT_PERCENT=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
-	echo "$(date +%T) - Charging to $setting% from $BATT_PERCENT%"
+	battery_percentage=$( get_battery_percentage )
+	log "Charging to $setting% from $battery_percentage%"
 	enable_charging
 
 	# Loop until battery percent is exceeded
 	while [[ "$BATT_PERCENT" -lt "$setting" ]]; do
 
-		echo "$(date +%T) - Battery at $BATT_PERCENT%"
+		log "Battery at $battery_percentage%"
 		sleep 60
-		BATT_PERCENT=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
+		battery_percentage=$( get_battery_percentage )
 		
 	done
 
 	disable_charging
-	echo "$(date +%T) - Charging completed at $BATT_PERCENT%"
+	log "Charging completed at $battery_percentage%"
+
+fi
+
+
+# Status logget
+if [[ "$action" == "status" ]]; then
+
+	log "Battery at $( get_battery_percentage  ) ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
 
 fi

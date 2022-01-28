@@ -8,7 +8,7 @@ echo -e "\nCloning fan control version of smc"
 git clone https://github.com/hholtmann/smcFanControl.git $tempfolder
 cd $tempfolder/smc-command
 echo -e "\nMaking smc from source"
-make
+make 1> /dev/null
 
 # Move built file to bin folder
 echo -e "\nMove smc to executable folder"
