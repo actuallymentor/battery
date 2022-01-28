@@ -147,6 +147,6 @@ fi
 # Status logget
 if [[ "$action" == "status" ]]; then
 
-	log "Battery at $( get_battery_percentage  ) ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
+	log "Battery at $( get_battery_percentage  )% ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
 
 fi
