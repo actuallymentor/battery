@@ -67,7 +67,7 @@ function get_smc_charging_status() {
 	fi
 }
 
-function get_charging_status() {
+function get_battery_percentage() {
 	battery_percentage=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
 	echo "$battery_percentage"
 }
