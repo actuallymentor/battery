@@ -33,14 +33,12 @@ Usage:
 
 # Visudo instructions
 visudoconfig="
-# Put this in $visudo_path on a mac
-
+# Visudo settings for the battery utility installed from https://github.com/actuallymentor/battery
+# intended to be placed in $visudo_path on a mac
 Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0B -w 00
-Cmnd_Alias			UPDATE = $binfolder/battery update
 $( whoami ) ALL = NOPASSWD: BATTERYOFF
 $( whoami ) ALL = NOPASSWD: BATTERYON
-$( whoami ) ALL = NOPASSWD: UPDATE
 "
 
 # Get parameters
@@ -106,7 +104,7 @@ fi
 if [[ "$action" == "visudo" ]]; then
 	echo -e "This will write the following to $visudo_path:\n"
 	echo -e "$visudoconfig"
-	echo "If you would like to customise your visodu settings, exit this script and edit the file manually"
+	echo "If you would like to customise your visudo settings, exit this script and edit the file manually"
 	echo -e "\nPress any key to continue\n"
 	read
 	echo -e "$visudoconfig" | sudo tee $visudo_path
