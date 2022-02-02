@@ -37,8 +37,10 @@ visudoconfig="
 
 Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0B -w 00
+Cmnd_Alias			UPDATE = $binfolder/battery update
 $( whoami ) ALL = NOPASSWD: BATTERYOFF
 $( whoami ) ALL = NOPASSWD: BATTERYON
+$( whoami ) ALL = NOPASSWD: UPDATE
 "
 
 # Get parameters
@@ -102,12 +104,13 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
-	echo "This will write the following to $visudo_path:\n"
+	echo -e "This will write the following to $visudo_path:\n"
 	echo -e "$visudoconfig"
+	echo "If you would like to customise your visodu settings, exit this script and edit the file manually"
 	echo -e "\nPress any key to continue\n"
 	read
-	sudo echo -e "$visudoconfig" > $visudo_path
-	echo "Visudo file $visudo_path now contains: \n"
+	echo -e "$visudoconfig" | sudo tee $visudo_path
+	echo -e "Visudo file $visudo_path now contains: \n"
 	sudo cat $visudo_path
 	exit 0
 fi
@@ -143,7 +146,7 @@ fi
 if [[ "$action" == "charge" ]]; then
 
 	# Helpful message
-	echo -e "Note: you can prevent your mac from sleeping bu using the caffeinate built-in utility. Example usage:\ncaffeinate -s battery charge 80"
+	echo -e "Note: you can prevent your mac from sleeping by using the caffeinate built-in utility. Example usage:\ncaffeinate -s battery charge 80"
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
