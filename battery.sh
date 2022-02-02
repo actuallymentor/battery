@@ -5,6 +5,7 @@
 ## ###############
 tempfolder=tmp
 binfolder=/usr/local/bin
+visudo_path=/private/etc/sudoers.d/battery
 
 # CLI help message
 helpmessage="
@@ -32,11 +33,10 @@ Usage:
 
 # Visudo instructions
 visudoconfig="
-# Put this in /private/etc/sudoers.d/battery on a mac
-# with sudo visudo /private/etc/sudoers.d/battery
+# Put this in $visudo_path on a mac
 
-Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02
-Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00
+Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02
+Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0B -w 00
 $( whoami ) ALL = NOPASSWD: BATTERYOFF
 $( whoami ) ALL = NOPASSWD: BATTERYON
 "
@@ -48,14 +48,20 @@ setting=$2
 ## ###############
 ## Helpers
 ## ###############
+
+# Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
+# but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
+# so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
 function enable_charging() {
 	echo "$(date +%T) - Enabling battery charging"
 	sudo smc -k CH0B -w 00
+	sudo smc -k CH0C -w 00
 }
 
 function disable_charging() {
 	echo "$(date +%T) - Disabling battery charging"
 	sudo smc -k CH0B -w 02
+	sudo smc -k CH0C -w 02
 }
 
 function get_smc_charging_status() {
@@ -96,7 +102,13 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
+	echo "This will write the following to $visudo_path:\n"
 	echo -e "$visudoconfig"
+	echo -e "\nPress any key to continue\n"
+	read
+	sudo echo -e "$visudoconfig" > $visudo_path
+	echo "Visudo file $visudo_path now contains: \n"
+	sudo cat $visudo_path
 	exit 0
 fi
 
@@ -129,6 +141,9 @@ fi
 
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
+
+	# Helpful message
+	echo -e "Note: you can prevent your mac from sleeping bu using the caffeinate built-in utility. Example usage:\ncaffeinate -s battery charge 80"
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
