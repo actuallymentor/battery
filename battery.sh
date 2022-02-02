@@ -36,7 +36,7 @@ visudoconfig="
 # Visudo settings for the battery utility installed from https://github.com/actuallymentor/battery
 # intended to be placed in $visudo_path on a mac
 Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02
-Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0B -w 00
+Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
 $( whoami ) ALL = NOPASSWD: BATTERYOFF
 $( whoami ) ALL = NOPASSWD: BATTERYON
 "
@@ -108,6 +108,7 @@ if [[ "$action" == "visudo" ]]; then
 	echo -e "\nPress any key to continue\n"
 	read
 	echo -e "$visudoconfig" | sudo tee $visudo_path
+	sudo chmod 0440 $visudo_path
 	echo -e "Visudo file $visudo_path now contains: \n"
 	sudo cat $visudo_path
 	exit 0
