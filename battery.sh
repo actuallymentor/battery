@@ -66,10 +66,10 @@ function disable_charging() {
 
 function get_smc_charging_status() {
 	hex_status=$( smc -k CH0B -r | awk '{print $4}' | sed s:\):: )
-	if [[ "$hex_status" == "02" ]]; then
-		echo "disabled"
-	else
+	if [[ "$hex_status" == "00" ]]; then
 		echo "enabled"
+	else
+		echo "disabled"
 	fi
 }
 
