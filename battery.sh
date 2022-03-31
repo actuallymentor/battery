@@ -156,7 +156,7 @@ if [[ "$action" == "charge" ]]; then
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
 		log "Battery at $battery_percentage%"
-		sleep 60
+		caffeinate -i sleep 60
 		battery_percentage=$( get_battery_percentage )
 		
 	done
