@@ -174,25 +174,23 @@ if [[ "$action" == "maintain" ]]; then
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
 
-	# Keep track of status
-	is_charging=1
-
 	log "Charging to and maintaining at $setting% from $battery_percentage%"
 
 	# Loop until battery percent is exceeded
 	while true; do
 
-		if [[ "$battery_percentage" -gt "$setting" && "$is_charging" -eq 1 ]]; then
+		# Keep track of status
+		is_charging=$( get_smc_charging_status )
+
+		if [[ "$battery_percentage" -gt "$setting" && "$is_charging" -eq "disabled" ]]; then
 
 			log "Charge above $setting"
 			disable_charging
-			is_charging=0
 
-		elif [[ "$is_charging" -eq 0 ]]; then
+		elif [[ "$is_charging" -eq "enabled" ]]; then
 
 			log "Charge below $setting"
 			enable_charging
-			is_charging=1
 
 		fi
 
@@ -201,8 +199,6 @@ if [[ "$action" == "maintain" ]]; then
 		battery_percentage=$( get_battery_percentage )
 		
 	done
-
-	disable_charging
 
 	exit 0
 
