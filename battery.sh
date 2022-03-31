@@ -182,7 +182,7 @@ if [[ "$action" == "maintain" ]]; then
 	# Loop until battery percent is exceeded
 	while true; do
 
-		if [[ "$battery_percentage" -lt "$setting" ]]; then
+		if [[ "$battery_percentage" -gt "$setting" ]]; then
 			log "Max charge $setting%: charging disabled"
 			disable_charging
 		else
