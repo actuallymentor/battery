@@ -171,17 +171,13 @@ fi
 # Maintain at level
 if [[ "$action" == "maintain" ]]; then
 
-	# Helpful message
-	echo -e "Note: you can prevent your mac from sleeping by using the caffeinate built-in utility. Example usage:\ncaffeinate -s battery charge 80"
-
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
 
 	# Keep track of status
-	is_charging=0
+	is_charging=1
 
 	log "Charging to and maintaining at $setting% from $battery_percentage%"
-	enable_charging
 
 	# Loop until battery percent is exceeded
 	while true; do
