@@ -182,12 +182,12 @@ if [[ "$action" == "maintain" ]]; then
 		# Keep track of status
 		is_charging=$( get_smc_charging_status )
 
-		if [[ "$battery_percentage" -gt "$setting" && "$is_charging" -eq "enabled" ]]; then
+		if [[ "$battery_percentage" -gt "$setting" && "$is_charging" == "enabled" ]]; then
 
 			log "Charge above $setting"
 			disable_charging
 
-		elif [[ "$is_charging" -eq "disabled" ]]; then
+		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
 			log "Charge below $setting"
 			enable_charging
