@@ -9,7 +9,7 @@ visudo_path=/private/etc/sudoers.d/battery
 
 # CLI help message
 helpmessage="
-Battery CLI utility v0.0.2.
+Battery CLI utility v0.0.3.
 
 Usage: 
 
@@ -22,6 +22,9 @@ Usage:
 
   battery charge LEVEL
     LEVEL: percentage to charge to, charging is disabled when percentage is reached.
+
+  battery maintain LEVEL
+    LEVEL: percentage under which to charge, and above which to disable charging.
 
   battery visudo
     instructions on how to make which utility exempt from sudo
@@ -186,6 +189,8 @@ if [[ "$action" == "maintain" ]]; then
 			log "Charge below $setting% ($battery_percentage%): charging enabled"
 			enable_charging
 		fi
+
+		sleep 60
 
 		battery_percentage=$( get_battery_percentage )
 		
