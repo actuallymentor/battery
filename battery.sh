@@ -144,9 +144,6 @@ fi
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
 
-	# Helpful message
-	echo -e "Note: you can prevent your mac from sleeping by using the caffeinate built-in utility. Example usage:\ncaffeinate -s battery charge 80"
-
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
 	log "Charging to $setting% from $battery_percentage%"
@@ -163,6 +160,38 @@ if [[ "$action" == "charge" ]]; then
 
 	disable_charging
 	log "Charging completed at $battery_percentage%"
+
+	exit 0
+
+fi
+
+# Maintain at level
+if [[ "$action" == "maintain" ]]; then
+
+	# Helpful message
+	echo -e "Note: you can prevent your mac from sleeping by using the caffeinate built-in utility. Example usage:\ncaffeinate -s battery charge 80"
+
+	# Start charging
+	battery_percentage=$( get_battery_percentage )
+	log "Charging to and maintaining at $setting% from $battery_percentage%"
+	enable_charging
+
+	# Loop until battery percent is exceeded
+	while true; do
+
+		if [[ "$battery_percentage" -lt "$setting" ]]; then
+			log "Max charge $setting%: charging disabled"
+			disable_charging
+		else
+			log "Charge below $setting% ($battery_percentage%): charging enabled"
+			enable_charging
+		fi
+
+		battery_percentage=$( get_battery_percentage )
+		
+	done
+
+	disable_charging
 
 	exit 0
 
