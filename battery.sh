@@ -130,6 +130,15 @@ if [[ "$action" == "update" ]]; then
 	exit 0
 fi
 
+# Uninstall helper
+if [[ "$action" == "uninstall" ]]; then
+    echo "This will enable charging, and remove the `smc` tool and `battery` script"
+    echo "Press any key to continue"
+    read
+    enable_charging
+    sudo rm -v "$binfolder/smc" "$binfolder/smc"
+    exit 0
+fi
 
 # Charging on/off controller
 if [[ "$action" == "charging" ]]; then
