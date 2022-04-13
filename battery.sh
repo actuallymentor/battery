@@ -32,6 +32,9 @@ Usage:
   battery update
     run the installation command again to pull latest version
 
+  battery uninstall
+    enable charging and remove the `smc` tool and the `battery` script
+
 "
 
 # Visudo instructions
@@ -127,6 +130,15 @@ if [[ "$action" == "update" ]]; then
 	exit 0
 fi
 
+# Uninstall helper
+if [[ "$action" == "uninstall" ]]; then
+    echo "This will enable charging, and remove the `smc` tool and `battery` script"
+    echo "Press any key to continue"
+    read
+    enable_charging
+    sudo rm -v "$binfolder/smc" "$binfolder/battery"
+    exit 0
+fi
 
 # Charging on/off controller
 if [[ "$action" == "charging" ]]; then
