@@ -136,7 +136,7 @@ if [[ "$action" == "uninstall" ]]; then
     echo "Press any key to continue"
     read
     enable_charging
-    sudo rm -v "$binfolder/smc" "$binfolder/smc"
+    sudo rm -v "$binfolder/smc" "$binfolder/battery"
     exit 0
 fi
 
