@@ -32,6 +32,9 @@ Usage:
   battery update
     run the installation command again to pull latest version
 
+  battery uninstall
+    enable charging and remove the `smc` tool and the `battery` script
+
 "
 
 # Visudo instructions
