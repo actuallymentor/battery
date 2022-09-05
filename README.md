@@ -31,9 +31,9 @@ This will:
 For help, run `battery` without parameters:
 
 ```
-Battery CLI utility v0.0.2.
+Battery CLI utility v0.0.3.
 
-Usage: 
+Usage:
 
   battery status
     output battery SMC status, % and time remaining
@@ -44,6 +44,9 @@ Usage:
 
   battery charge LEVEL
     LEVEL: percentage to charge to, charging is disabled when percentage is reached.
+
+  battery maintain LEVEL
+    LEVEL: percentage under which to charge, and above which to disable charging.
 
   battery visudo
     instructions on how to make which utility exempt from sudo
