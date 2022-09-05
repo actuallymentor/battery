@@ -11,7 +11,7 @@ visudo_path=/private/etc/sudoers.d/battery
 helpmessage="
 Battery CLI utility v0.0.3.
 
-Usage: 
+Usage:
 
   battery status
     output battery SMC status, % and time remaining
@@ -100,7 +100,7 @@ function log() {
 ## Actions
 ## ###############
 
-# Help message 
+# Help message
 if [ -z "$action" ]; then
 	echo -e "$helpmessage"
 	exit 0
@@ -144,7 +144,7 @@ fi
 if [[ "$action" == "charging" ]]; then
 
 	log "Setting $action to $setting"
-	
+
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
 		enable_charging
@@ -170,7 +170,7 @@ if [[ "$action" == "charge" ]]; then
 		log "Battery at $battery_percentage%"
 		caffeinate -i sleep 60
 		battery_percentage=$( get_battery_percentage )
-		
+
 	done
 
 	disable_charging
@@ -209,7 +209,7 @@ if [[ "$action" == "maintain" ]]; then
 		sleep 60
 
 		battery_percentage=$( get_battery_percentage )
-		
+
 	done
 
 	exit 0

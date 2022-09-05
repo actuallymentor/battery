@@ -33,7 +33,7 @@ For help, run `battery` without parameters:
 ```
 Battery CLI utility v0.0.2.
 
-Usage: 
+Usage:
 
   battery status
     output battery SMC status, % and time remaining
