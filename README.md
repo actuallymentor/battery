@@ -45,6 +45,9 @@ Usage:
   battery charge LEVEL
     LEVEL: percentage to charge to, charging is disabled when percentage is reached.
 
+  battery maintain LEVEL
+    LEVEL: percentage under which to charge, and above which to disable charging.
+
   battery visudo
     instructions on how to make which utility exempt from sudo
 
