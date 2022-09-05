@@ -31,7 +31,7 @@ This will:
 For help, run `battery` without parameters:
 
 ```
-Battery CLI utility v0.0.2.
+Battery CLI utility v0.0.4.
 
 Usage:
 

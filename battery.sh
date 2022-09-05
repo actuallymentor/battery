@@ -9,7 +9,7 @@ visudo_path=/private/etc/sudoers.d/battery
 
 # CLI help message
 helpmessage="
-Battery CLI utility v0.0.3.
+Battery CLI utility v0.0.4.
 
 Usage:
 
