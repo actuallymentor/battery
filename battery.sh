@@ -9,9 +9,9 @@ visudo_path=/private/etc/sudoers.d/battery
 
 # CLI help message
 helpmessage="
-Battery CLI utility v0.0.3.
+Battery CLI utility v0.0.4.
 
-Usage: 
+Usage:
 
   battery status
     output battery SMC status, % and time remaining
@@ -31,6 +31,9 @@ Usage:
 
   battery update
     run the installation command again to pull latest version
+
+  battery uninstall
+    enable charging and remove the `smc` tool and the `battery` script
 
 "
 
@@ -97,7 +100,7 @@ function log() {
 ## Actions
 ## ###############
 
-# Help message 
+# Help message
 if [ -z "$action" ]; then
 	echo -e "$helpmessage"
 	exit 0
@@ -127,12 +130,21 @@ if [[ "$action" == "update" ]]; then
 	exit 0
 fi
 
+# Uninstall helper
+if [[ "$action" == "uninstall" ]]; then
+    echo "This will enable charging, and remove the `smc` tool and `battery` script"
+    echo "Press any key to continue"
+    read
+    enable_charging
+    sudo rm -v "$binfolder/smc" "$binfolder/battery"
+    exit 0
+fi
 
 # Charging on/off controller
 if [[ "$action" == "charging" ]]; then
 
 	log "Setting $action to $setting"
-	
+
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
 		enable_charging
@@ -158,7 +170,7 @@ if [[ "$action" == "charge" ]]; then
 		log "Battery at $battery_percentage%"
 		caffeinate -i sleep 60
 		battery_percentage=$( get_battery_percentage )
-		
+
 	done
 
 	disable_charging
@@ -197,7 +209,7 @@ if [[ "$action" == "maintain" ]]; then
 		sleep 60
 
 		battery_percentage=$( get_battery_percentage )
-		
+
 	done
 
 	exit 0

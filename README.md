@@ -31,7 +31,7 @@ This will:
 For help, run `battery` without parameters:
 
 ```
-Battery CLI utility v0.0.3.
+Battery CLI utility v0.0.4.
 
 Usage:
 
@@ -53,4 +53,8 @@ Usage:
 
   battery update
     run the installation command again to pull latest version
+
+  battery uninstall
+    enable charging and remove the `smc` tool and the `battery` script
+
 ```
