@@ -9,7 +9,7 @@ echo -e "####################################################################\n\
 # Ask for sudo once, in most systems this will cache the permissions for a bit
 sudo echo "🔋 Starting battery installation"
 
-echo "[ 1/8 ] Superuser permissions acquired."
+echo -e "\n[ 1/8 ] Superuser permissions acquired."
 
 # Get smc source and build it
 tempfolder=~/.battery-tmp
