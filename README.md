@@ -17,7 +17,7 @@ After running `battery charging on` you will see it change to this:
 One-line installation:
 
 ```bash
-curl https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash
+curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash
 ````
 
 This will:

@@ -7,7 +7,9 @@ echo -e "# Note: this script will ask for your password once or multiple times."
 echo -e "####################################################################\n\n"
 
 # Ask for sudo once, in most systems this will cache the permissions for a bit
-sudo echo "[ 1/8 ] Superuser permissions acquired."
+sudo echo -e "\n\n🔋 Starting battery installation\n"
+
+echo "[ 1/8 ] Superuser permissions acquired."
 
 # Get smc source and build it
 tempfolder=~/.battery-tmp
