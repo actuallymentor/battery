@@ -7,7 +7,7 @@ echo -e "# Note: this script will ask for your password once or multiple times."
 echo -e "####################################################################\n\n"
 
 # Ask for sudo once, in most systems this will cache the permissions for a bit
-sudo echo -e "\n\n🔋 Starting battery installation\n"
+sudo echo "🔋 Starting battery installation"
 
 echo "[ 1/8 ] Superuser permissions acquired."
 
