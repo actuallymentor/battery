@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# User welcome message
+echo -e '\n👋 Welcome, this is the setup script for the battery CLI tool.'
+echo -e "Note: this sccript will ask for your password once or multiple times. This is needed install battery to your system."
+echo -e "\nPress any key to continue\n"
+read
+
 # Get smc source and build it
 tempfolder=~/.battery-tmp
 binfolder=/usr/local/bin
