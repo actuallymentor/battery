@@ -33,7 +33,7 @@ Usage:
     run the installation command again to pull latest version
 
   battery uninstall
-    enable charging and remove the `smc` tool and the `battery` script
+    enable charging and remove the smc tool and the battery script
 
 "
 
@@ -132,7 +132,7 @@ fi
 
 # Uninstall helper
 if [[ "$action" == "uninstall" ]]; then
-    echo "This will enable charging, and remove the `smc` tool and `battery` script"
+    echo "This will enable charging, and remove the smc tool and battery script"
     echo "Press any key to continue"
     read
     enable_charging
