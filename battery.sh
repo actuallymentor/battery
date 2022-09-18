@@ -41,7 +41,7 @@ Usage:
   battery maintain LEVEL[1-100,stop]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
     eg: battery maintain 80
-	eg: battery maintain stop
+    eg: battery maintain stop
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
