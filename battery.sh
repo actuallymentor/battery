@@ -285,7 +285,7 @@ if [[ "$action" == "maintain" ]]; then
 	echo $! > $pidfile
 	pid=$( cat "$pidfile" 2> /dev/null )
 	echo $setting > $maintain_percentage_tracker_file
-	log "Battery maintenance active (pid $pid). Run 'battery status' anytime to check the battery status."
+	log "Maintaining battery at $setting%"
 
 	# Enable the daemon that continues maintaining after reboot
 	battery create_daemon
