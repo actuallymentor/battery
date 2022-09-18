@@ -6,31 +6,51 @@
 tempfolder=tmp
 binfolder=/usr/local/bin
 visudo_path=/private/etc/sudoers.d/battery
+configfolder=$HOME/.battery
+pidfile=$configfolder/battery.pid
+logfile=$configfolder/battery.log
+maintain_percentage_tracker_file=$configfolder/maintain.percentage
+
+## ###############
+## Housekeeping
+## ###############
+
+# Create config folder if needed
+mkdir $configfolder &> $logfile
+
+# Trim logfile if needed
+logsize=$(stat -f%z "$logfile")
+max_logsize_bytes=5000000
+if (( logsize > max_logsize_bytes )); then
+	tail -n 100 $logfile > $logfile
+fi
 
 # CLI help message
 helpmessage="
-Battery CLI utility v0.0.4.
+Battery CLI utility v0.0.5.
 
 Usage:
 
   battery status
     output battery SMC status, % and time remaining
 
-  battery charging SETTING
-    on: sets CH0B to 00 (allow charging)
-    off: sets CH0B to 02 (disallow charging)
+  battery maintain LEVEL[1-100]
+    turn off charging above, and off below a certain value
+    eg: battery maintain 80
 
-  battery charge LEVEL
-    LEVEL: percentage to charge to, charging is disabled when percentage is reached.
+  battery charging SETTING[on/off]
+    manually set the battery to (not) charge
+    eg: battery charging on
 
-  battery maintain LEVEL
-    LEVEL: percentage under which to charge, and above which to disable charging.
+  battery charge LEVEL[1-100]
+    charge the battery to a certain percentage, and disable charging when that percentage is reached
+    eg: battery charge 90
 
   battery visudo
-    instructions on how to make which utility exempt from sudo
+    instructions on how to make which utility exempt from sudo, highly recommended
 
   battery update
-    run the installation command again to pull latest version
+    update the battery utility to the latest version (reruns the installation script)
 
   battery uninstall
     enable charging and remove the smc tool and the battery script
@@ -181,7 +201,7 @@ if [[ "$action" == "charge" ]]; then
 fi
 
 # Maintain at level
-if [[ "$action" == "maintain" ]]; then
+if [[ "$action" == "maintain_synchronous" ]]; then
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
@@ -216,11 +236,43 @@ if [[ "$action" == "maintain" ]]; then
 
 fi
 
+# Asynchronous battery level maintenance
+if [[ "$action" == "maintain" ]]; then
+
+	# Kill old process silently
+	if test -f "$pidfile"; then
+		pid=$( cat "$pidfile" )
+		kill $pid &> /dev/null
+	fi
+
+	if [[ "$setting" == "stop" ]]; then
+		rm $pidfile 2> /dev/null
+		rm $maintain_percentage_tracker_file 2> /dev/null
+		battery status
+		exit 0
+	fi
+
+	# Start maintenance script
+	log "Starting battery maintenance at $setting%"
+	nohup battery maintain_synchronous $setting >> $logfile &
+
+	# Store pid of maintenance process and setting
+	echo $! > $pidfile
+	pid=$( cat "$pidfile" )
+	echo $setting > $maintain_percentage_tracker_file
+	log "Battery maintenance active (pid $pid). Run 'battery status' anytime to check the battery status."
+	
+fi
+
 
 # Status logget
 if [[ "$action" == "status" ]]; then
 
 	log "Battery at $( get_battery_percentage  )% ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
+	if test -f $pidfile; then
+		maintain_percentage=$( cat $maintain_percentage_tracker_file )
+		log "Your battery is currently being maintained at $maintain_percentage%"
+	fi
 	exit 0
 
 fi

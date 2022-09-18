@@ -4,7 +4,14 @@ CLI for managing the battery charging status for M1 Macs. Can be used to enable/
 
 The idea is to make it possible to keep a chronically plugged in Macbook at for example `80%` battery, since that will prolong the longevity of the battery.
 
-After running `battery charging off` you can verify the change visually by looking at the battery icon:
+Example usage:
+
+```shell
+# This will enable charging when your battery dips under 80, and disable it when it exceeds 80
+battery maintain 80
+```
+
+After running a command like `battery charging off` you can verify the change visually by looking at the battery icon:
 
 ![Battery not charging](./screenshots/not-charging-screenshot.png)
 
@@ -31,30 +38,31 @@ This will:
 For help, run `battery` without parameters:
 
 ```
-Battery CLI utility v0.0.4.
+Battery CLI utility v0.0.5.
 
 Usage:
 
   battery status
     output battery SMC status, % and time remaining
 
-  battery charging SETTING
-    on: sets CH0B to 00 (allow charging)
-    off: sets CH0B to 02 (disallow charging)
+  battery maintain LEVEL[1-100]
+    turn off charging above, and off below a certain value
+    eg: battery maintain 80
 
-  battery charge LEVEL
-    LEVEL: percentage to charge to, charging is disabled when percentage is reached.
+  battery charging SETTING[on/off]
+    manually set the battery to (not) charge
+    eg: battery charging on
 
-  battery maintain LEVEL
-    LEVEL: percentage under which to charge, and above which to disable charging.
+  battery charge LEVEL[1-100]
+    charge the battery to a certain percentage, and disable charging when that percentage is reached
+    eg: battery charge 90
 
   battery visudo
-    instructions on how to make which utility exempt from sudo
+    instructions on how to make which utility exempt from sudo, highly recommended
 
   battery update
-    run the installation command again to pull latest version
+    update the battery utility to the latest version (reruns the installation script)
 
   battery uninstall
-    enable charging and remove the `smc` tool and the `battery` script
-
+    enable charging and remove the smc tool and the battery script
 ```
