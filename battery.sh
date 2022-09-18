@@ -10,6 +10,7 @@ configfolder=$HOME/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 maintain_percentage_tracker_file=$configfolder/maintain.percentage
+daemon_path=$HOME/Library/LaunchAgents/battery.plist
 
 ## ###############
 ## Housekeeping
@@ -37,9 +38,10 @@ Usage:
   battery status
     output battery SMC status, % and time remaining
 
-  battery maintain LEVEL[1-100]
-    turn off charging above, and off below a certain value
+  battery maintain LEVEL[1-100,stop]
+    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
     eg: battery maintain 80
+	eg: battery maintain stop
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
@@ -78,17 +80,23 @@ setting=$2
 ## Helpers
 ## ###############
 
+function log() {
+
+	echo -e "$(date +%T) - $1"
+
+}
+
 # Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
 # but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
 function enable_charging() {
-	echo "$(date +%T) - Enabling battery charging"
+	log "Enabling battery charging"
 	sudo smc -k CH0B -w 00
 	sudo smc -k CH0C -w 00
 }
 
 function disable_charging() {
-	echo "$(date +%T) - Disabling battery charging"
+	log "Disabling battery charging"
 	sudo smc -k CH0B -w 02
 	sudo smc -k CH0C -w 02
 }
@@ -112,11 +120,6 @@ function get_remaining_time() {
 	echo "$time_remaining"
 }
 
-function log() {
-
-	echo -e "$(date +%T) - $1"
-
-}
 
 
 ## ###############
@@ -159,6 +162,7 @@ if [[ "$action" == "uninstall" ]]; then
     echo "Press any key to continue"
     read
     enable_charging
+	battery remove_daemon
     sudo rm -v "$binfolder/smc" "$binfolder/battery"
     exit 0
 fi
@@ -244,13 +248,26 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Kill old process silently
 	if test -f "$pidfile"; then
-		pid=$( cat "$pidfile" )
+		pid=$( cat "$pidfile" 2> /dev/null )
 		kill $pid &> /dev/null
+	fi
+
+	# Recover old maintain status if old setting is found
+	if [[ "$setting" == "recover" ]]; then
+		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
+		if [[ $maintain_percentage ]]; then
+			log "Recovering maintenance percentage $maintain_percentage"
+			battery maintain $maintain_percentage
+		else
+			log "No setting to recover, exiting"
+		fi
+		exit 0
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
 		rm $pidfile 2> /dev/null
 		rm $maintain_percentage_tracker_file 2> /dev/null
+		battery remove_daemon
 		battery status
 		exit 0
 	fi
@@ -261,21 +278,63 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Store pid of maintenance process and setting
 	echo $! > $pidfile
-	pid=$( cat "$pidfile" )
+	pid=$( cat "$pidfile" 2> /dev/null )
 	echo $setting > $maintain_percentage_tracker_file
 	log "Battery maintenance active (pid $pid). Run 'battery status' anytime to check the battery status."
+
+	# Enable the daemon that continues maintaining after reboot
+	battery create_daemon
 	
 fi
 
 
-# Status logget
+# Status logger
 if [[ "$action" == "status" ]]; then
 
 	log "Battery at $( get_battery_percentage  )% ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
 	if test -f $pidfile; then
-		maintain_percentage=$( cat $maintain_percentage_tracker_file )
+		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
 		log "Your battery is currently being maintained at $maintain_percentage%"
 	fi
 	exit 0
+
+fi
+
+# launchd daemon creator, inspiration: https://www.launchd.info/
+if [[ "$action" == "create_daemon" ]];then
+
+	daemon_definition="
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+	<dict>
+
+		<key>Label</key>
+		<string>com.battery.app</string>
+
+		<key>PATH</key>
+		<string>/bin:/usr/bin:$binfolder</string>		
+
+		<key>ProgramArguments</key>
+		<array>
+			<string>$binfolder/battery</string>
+			<string>maintain</string>
+			<string>recover</string>
+		</array>
+
+		<key>RunAtLoad</key>
+		<true/>
+	</dict>
+</plist>
+"
+
+	echo "$daemon_definition" > "$daemon_path"
+
+fi
+
+# Remove daemon
+if [[ "$action" == "remove_daemon" ]];then
+
+	rm $daemon_path
 
 fi
