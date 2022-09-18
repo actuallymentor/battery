@@ -139,7 +139,7 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
-	echo -e "$visudoconfig" | sudo tee $visudo_path
+	echo -e "$visudoconfig" | sudo EDITOR='tee -a' visudo
 	sudo chmod 0440 $visudo_path
 	exit 0
 fi
@@ -343,7 +343,7 @@ fi
 # Remove daemon
 if [[ "$action" == "remove_daemon" ]];then
 
-	rm $daemon_path
+	rm $daemon_path 2> /dev/null
 	exit 0
 
 fi
