@@ -170,6 +170,9 @@ if [[ "$action" == "charging" ]]; then
 
 	log "Setting $action to $setting"
 
+	# Disable running daemon
+	battery maintain stop
+
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
 		enable_charging
@@ -183,6 +186,9 @@ fi
 
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
+
+	# Disable running daemon
+	battery maintain stop
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
@@ -282,6 +288,8 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Enable the daemon that continues maintaining after reboot
 	battery create_daemon
+
+	exit 0
 	
 fi
 
@@ -328,11 +336,14 @@ if [[ "$action" == "create_daemon" ]];then
 
 	echo "$daemon_definition" > "$daemon_path"
 
+	exit 0
+
 fi
 
 # Remove daemon
 if [[ "$action" == "remove_daemon" ]];then
 
 	rm $daemon_path
+	exit 0
 
 fi
