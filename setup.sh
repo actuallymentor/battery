@@ -1,10 +1,14 @@
 #!/bin/bash
 
+platypus=$1
+
 # User welcome message
-echo -e "\n####################################################################"
-echo '# 👋 Welcome, this is the setup script for the battery CLI tool.'
-echo -e "# Note: this script will ask for your password once or multiple times."
-echo -e "####################################################################\n\n"
+if [ -z "$platypus" ]; then
+    echo -e "\n####################################################################"
+    echo '# 👋 Welcome, this is the setup script for the battery CLI tool.'
+    echo -e "# Note: this script will ask for your password once or multiple times."
+    echo -e "####################################################################\n\n"
+fi
 
 # Ask for sudo once, in most systems this will cache the permissions for a bit
 sudo echo "🔋 Starting battery installation"
@@ -44,4 +48,6 @@ echo "[ 7/8 ] Removing temp folder $tempfolder"
 rm -rf $tempfolder
 echo "[ 8/8 ] Removed temporary build files"
 
-echo -e "\n🎉 Battery tool installed. Type \"battery\" for instructions.\n"
+if [ -z "$platypus" ]; then
+    echo -e "\n🎉 Battery tool installed. Type \"battery\" for instructions.\n"
+fi

@@ -75,6 +75,7 @@ $( whoami ) ALL = NOPASSWD: BATTERYON
 # Get parameters
 action=$1
 setting=$2
+platypus=$3
 
 ## ###############
 ## Helpers
@@ -82,7 +83,11 @@ setting=$2
 
 function log() {
 
-	echo -e "$(date +%T) - $1"
+	if [ -z "$platypus" ]; then
+		echo -e "$(date +%T) - $1"
+	else
+		echo -e "$1"
+	fi
 
 }
 
