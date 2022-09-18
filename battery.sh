@@ -139,14 +139,8 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
-	echo -e "This will write the following to $visudo_path:\n"
-	echo -e "$visudoconfig"
-	echo "If you would like to customise your visudo settings, exit this script and edit the file manually"
-	echo -e "\nPress any key to continue\n"
-	read
 	echo -e "$visudoconfig" | sudo tee $visudo_path
 	sudo chmod 0440 $visudo_path
-	echo -e "Visudo file $visudo_path now contains: \n"
 	sudo cat $visudo_path
 	exit 0
 fi
