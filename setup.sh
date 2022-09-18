@@ -42,14 +42,16 @@ sudo cp $bateryfolder/battery.sh $binfolder/battery
 sudo chmod 755 $binfolder/battery
 sudo chmod u+x $binfolder/battery
 
+sudo bash $bateryfolder/battery.sh visudo
+echo "[ 7/9 ] Set up visudo declarations"
+
 # Remove tempfiles
 cd ../..
-echo "[ 7/9 ] Removing temp folder $tempfolder"
+echo "[ 8/9 ] Removing temp folder $tempfolder"
 rm -rf $tempfolder
-echo "[ 8/9 ] Removed temporary build files"
+echo "[ 9/9 ] Removed temporary build files"
 
-$binfolder/battery visudo
-echo "[ 9/9 ] Set up visudo declarations"
+
 
 if [ -z "$platypus" ]; then
     echo -e "\n🎉 Battery tool installed. Type \"battery\" for instructions.\n"
