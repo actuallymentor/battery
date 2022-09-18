@@ -139,9 +139,8 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
-	echo -e "$visudoconfig" | sudo tee $visudo_path
+	echo -e "$visudoconfig" | sudo tee $visudo_path > /dev/null
 	sudo chmod 0440 $visudo_path
-	sudo cat $visudo_path
 	exit 0
 fi
 
