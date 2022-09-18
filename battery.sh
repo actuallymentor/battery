@@ -16,7 +16,7 @@ maintain_percentage_tracker_file=$configfolder/maintain.percentage
 ## ###############
 
 # Create config folder if needed
-mkdir $configfolder &> $logfile
+mkdir -p $configfolder
 
 # Trim logfile if needed
 logsize=$(stat -f%z "$logfile")
