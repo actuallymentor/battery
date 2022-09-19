@@ -3,7 +3,6 @@
 ## ###############
 ## Variables
 ## ###############
-tempfolder=tmp
 binfolder=/usr/local/bin
 visudo_path=/private/etc/sudoers.d/battery
 configfolder=$HOME/.battery
@@ -55,7 +54,10 @@ Usage:
     instructions on how to make which utility exempt from sudo, highly recommended
 
   battery update
-    update the battery utility to the latest version (reruns the installation script)
+    update the battery utility to the latest version
+
+  battery reinstall
+    reinstall the battery utility to the latest version (reruns the installation script)
 
   battery uninstall
     enable charging and remove the smc tool and the battery script
@@ -75,7 +77,6 @@ $( whoami ) ALL = NOPASSWD: BATTERYON
 # Get parameters
 action=$1
 setting=$2
-platypus=$3
 
 ## ###############
 ## Helpers
@@ -83,11 +84,7 @@ platypus=$3
 
 function log() {
 
-	if [ -z "$platypus" ]; then
-		echo -e "$(date +%T) - $1"
-	else
-		echo -e "$1"
-	fi
+	echo -e "$(date +%T) - $1"
 
 }
 
@@ -144,12 +141,26 @@ if [[ "$action" == "visudo" ]]; then
 	exit 0
 fi
 
+# Reinstall helper
+if [[ "$action" == "reinstall" ]]; then
+	echo "This will run curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash"
+	if [[ ! "$setting" == "silent" ]]; then
+		echo "Press any key to continue"
+		read
+	fi
+	curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash
+	battery
+	exit 0
+fi
+
 # Update helper
 if [[ "$action" == "update" ]]; then
-	echo "This will run curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash"
-	echo "Press any key to continue"
-	read
-	curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash
+	echo "This will run curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash"
+	if [[ ! "$setting" == "silent" ]]; then
+		echo "Press any key to continue"
+		read
+	fi
+	curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash
 	battery
 	exit 0
 fi
