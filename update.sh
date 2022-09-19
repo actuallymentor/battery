@@ -6,7 +6,7 @@ binfolder=/usr/local/bin
 bateryfolder="$tempfolder/battery"
 mkdir -p $bateryfolder
 
-echo "🔋 Starting battery update"
+echo -e "🔋 Starting battery update\n"
 
 # Write battery function as executable
 
@@ -23,7 +23,5 @@ chmod u+x $binfolder/battery
 cd
 rm -rf $tempfolder
 echo "[ 3/3 ] Removed temporary folder"
-
-
 
 echo -e "\n🎉 Battery tool updated.\n"

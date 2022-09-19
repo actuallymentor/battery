@@ -149,7 +149,6 @@ if [[ "$action" == "reinstall" ]]; then
 		read
 	fi
 	curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash
-	battery
 	exit 0
 fi
 
@@ -161,7 +160,6 @@ if [[ "$action" == "update" ]]; then
 		read
 	fi
 	curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash
-	battery
 	exit 0
 fi
 
