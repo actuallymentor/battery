@@ -70,8 +70,8 @@ visudoconfig="
 # intended to be placed in $visudo_path on a mac
 Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
-$( whoami ) ALL = NOPASSWD: BATTERYOFF
-$( whoami ) ALL = NOPASSWD: BATTERYON
+ALL ALL = NOPASSWD: BATTERYOFF
+ALL ALL = NOPASSWD: BATTERYON
 "
 
 # Get parameters
@@ -142,7 +142,7 @@ if [[ "$action" == "visudo" ]]; then
 		sudo cp $configfolder/visudo.tmp $visudo_path
 		rm $configfolder/visudo.tmp
 	fi
-	sudo chmod 0440 $visudo_path
+	sudo chmod 440 $visudo_path
 	exit 0
 fi
 
