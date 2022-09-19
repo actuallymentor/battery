@@ -136,7 +136,12 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
-	echo -e "$visudoconfig" | sudo EDITOR='tee -a' visudo
+	echo -e "$visudoconfig" >> $configfolder/visudo.tmp
+	sudo visudo -c -f $configfolder/visudo.tmp 1> /dev/null
+	if [ "$?" -eq "0" ]; then
+		sudo cp $configfolder/visudo.tmp $visudo_path
+		rm $configfolder/visudo.tmp
+	fi
 	sudo chmod 0440 $visudo_path
 	exit 0
 fi
