@@ -2,7 +2,7 @@
 const { exec } = require('node:child_process')
 const sudo = require( 'sudo-prompt' )
 const { log, alert } = require( './helpers' )
-
+const { USER } = process.env
 const path_fix = 'PATH=$PATH:/usr/local/bin/battery'
 const battery = `${ path_fix } battery`
 const shell_options = {
@@ -80,9 +80,9 @@ const update_or_install_battery = async () => {
 
         // If not installed, run install script
         if( !is_installed ) {
-            log( `Installing battery...` )
+            log( `Installing battery for $USER...` )
             await alert( `Welcome to the Battery limiting tool. The app needs to install some components, so it will ask for your password. This should only be needed once.` )
-            const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -l` )
+            const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
             log( `Install result: `, result )
         }
 

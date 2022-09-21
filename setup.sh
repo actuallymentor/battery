@@ -11,6 +11,9 @@ tempfolder=~/.battery-tmp
 binfolder=/usr/local/bin
 mkdir -p $tempfolder
 
+# Set script value
+calling_user=${1:="$USER"}
+
 # Ask for sudo once, in most systems this will cache the permissions for a bit
 sudo echo "🔋 Starting battery installation"
 
@@ -35,9 +38,9 @@ sudo chmod u+x $binfolder/smc
 bateryfolder="$tempfolder/battery"
 echo "[ 5/9 ] Cloning battery repository"
 git clone --depth 1 https://github.com/actuallymentor/battery.git $bateryfolder &> /dev/null
-echo "[ 6/9 ] Writing script to $binfolder/battery"
+echo "[ 6/9 ] Writing script to $binfolder/battery for user $calling_user"
 sudo cp $bateryfolder/battery.sh $binfolder/battery
-sudo chown $USER $binfolder/battery
+sudo chown $calling_user $binfolder/battery
 sudo chmod 755 $binfolder/battery
 sudo chmod u+x $binfolder/battery
 
