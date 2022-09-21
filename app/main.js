@@ -9,6 +9,13 @@ const { set_initial_interface } = require( './modules/interface' )
 app.whenReady().then( set_initial_interface )
 
 /* ///////////////////////////////
+// Global config
+// /////////////////////////////*/
+
+// Hide dock entry
+app.dock.hide()
+
+/* ///////////////////////////////
 // Debugging
 // /////////////////////////////*/
 const debug = false

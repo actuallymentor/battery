@@ -13,7 +13,7 @@ exports.default = async function( context ) {
         log( '\n\n🪝 afterPack hook triggered: ' )
         await Promise.all( troublesome_files.map( file => {
             log( `Deleting ${ file }` )
-            return fs.rm( file )
+            return fs.rm( file ).catch( f => log( `No need to delete ${ file }` ) )
         } ) )
         log( 'Cleaned up LICENSE files\n\n' )
         return context

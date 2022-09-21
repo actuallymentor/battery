@@ -3,7 +3,6 @@ const { enable_battery_limiter, disable_battery_limiter, update_or_install_batte
 const { log } = require("./helpers")
 const { get_inactive_logo, get_active_logo } = require('./theme')
 
-
 /* ///////////////////////////////
 // Initialisation
 // /////////////////////////////*/

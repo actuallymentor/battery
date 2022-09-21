@@ -42,7 +42,6 @@
     "electron-notarize": "^1.2.1"
   },
   "dependencies": {
-    "electron-sudo": "^4.0.12",
     "sudo-prompt": "^9.2.1"
   }
 }

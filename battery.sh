@@ -30,7 +30,7 @@ fi
 
 # CLI help message
 helpmessage="
-Battery CLI utility v0.0.5.
+Battery CLI utility v1.0.0
 
 Usage:
 
@@ -170,9 +170,12 @@ fi
 
 # Uninstall helper
 if [[ "$action" == "uninstall" ]]; then
-    echo "This will enable charging, and remove the smc tool and battery script"
-    echo "Press any key to continue"
-    read
+
+	if [[ ! "$setting" == "silent" ]]; then
+		echo "This will enable charging, and remove the smc tool and battery script"
+		echo "Press any key to continue"
+		read
+	fi
     enable_charging
 	battery remove_daemon
     sudo rm -v "$binfolder/smc" "$binfolder/battery"
