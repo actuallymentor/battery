@@ -12,7 +12,7 @@ binfolder=/usr/local/bin
 mkdir -p $tempfolder
 
 # Set script value
-calling_user=${1:="$USER"}
+calling_user=${1:-"$USER"}
 
 # Ask for sudo once, in most systems this will cache the permissions for a bit
 sudo echo "🔋 Starting battery installation"

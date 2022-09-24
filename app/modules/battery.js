@@ -80,7 +80,7 @@ const update_or_install_battery = async () => {
 
         // If not installed, run install script
         if( !is_installed ) {
-            log( `Installing battery for $USER...` )
+            log( `Installing battery for ${ USER }...` )
             await alert( `Welcome to the Battery limiting tool. The app needs to install some components, so it will ask for your password. This should only be needed once.` )
             const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
             log( `Install result: `, result )
