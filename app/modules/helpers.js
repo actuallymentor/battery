@@ -2,12 +2,23 @@ const { promises: fs } = require( 'fs' )
 const { HOME } = process.env
 let has_alerted_user_no_home = false
 
-const log = ( ...messages ) => {
+const log = async ( ...messages ) => {
+
+    // Log to console
     console.log( ...messages )
-    if( HOME ) fs.appendFile( `${ HOME }/.battery/gui.log`, `${ messages.join( '\n' ) }\n`, 'utf8' )
-    else if( !has_alerted_user_no_home ) {
-        alert( `No HOME variable set` )
-        has_alerted_user_no_home = true
+
+    // Log to file if possible
+    try {
+        if( HOME ) {
+            await fs.mkdir( `${ HOME }/.battery/`, { recursive: true } )
+            await fs.appendFile( `${ HOME }/.battery/gui.log`, `${ messages.join( '\n' ) }\n`, 'utf8' )
+        }
+        else if( !has_alerted_user_no_home ) {
+            alert( `No HOME variable set, this should never happen` )
+            has_alerted_user_no_home = true
+        }
+    } catch( e ) {
+        console.log( `Unable to write logs to file: `, e )
     }
 }
 

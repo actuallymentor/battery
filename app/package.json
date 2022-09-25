@@ -1,6 +1,6 @@
 {
   "name": "battery",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A battery charge limiter for M1 Mac devices",
   "main": "main.js",
   "build": {
