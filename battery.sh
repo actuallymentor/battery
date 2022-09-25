@@ -289,6 +289,7 @@ if [[ "$action" == "maintain" ]]; then
 		rm $pidfile 2> /dev/null
 		rm $maintain_percentage_tracker_file 2> /dev/null
 		battery remove_daemon
+		enable_charging
 		battery status
 		exit 0
 	fi
