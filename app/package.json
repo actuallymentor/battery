@@ -1,6 +1,6 @@
 {
   "name": "battery",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A battery charge limiter for M1 Mac devices",
   "main": "main.js",
   "build": {
@@ -25,15 +25,13 @@
     "start": "development=true electron .",
     "build": "rm -rf ./dist/* && electron-builder build --mac --arm64"
   },
-  "repository": "https://github.com/electron/electron-quick-start",
+  "repository": "https://github.com/actuallymentor/battery",
   "keywords": [
-    "Electron",
-    "quick",
-    "start",
-    "tutorial",
-    "demo"
+    "battery",
+    "m1",
+    "mac"
   ],
-  "author": "GitHub",
+  "author": "actuallymentor",
   "license": "MIT",
   "devDependencies": {
     "dotenv": "^16.0.2",

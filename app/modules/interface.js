@@ -33,14 +33,37 @@ async function set_initial_interface() {
             click: enable_limiter
         },
         {
+            sublabel: 'thing',
             label: 'Disable 80% battery limit',
             type: 'radio',
             checked: !limiter_on,
             click: disable_limiter
         },
         {
-            label: 'About',
-            click: () => shell.openExternal( `https://github.com/actuallymentor/battery` )
+            type: 'separator'
+        },
+        {
+            label: `About v${ app.getVersion() }`,
+            submenu: [
+                {
+                    label: `Check for updates`,
+                    click: () => shell.openExternal( `https://github.com/actuallymentor/battery/releases` )
+                },
+                {
+                    label: `User manual`,
+                    click: () => shell.openExternal( `https://github.com/actuallymentor/battery#readme` )
+                },
+                {
+                    type: 'normal',
+                    label: 'Command-line usage',
+                    click: () => shell.openExternal( `https://github.com/actuallymentor/battery#-command-line-version` )
+                },
+                {
+                    type: 'normal',
+                    label: 'Help and feature requests',
+                    click: () => shell.openExternal( `https://github.com/actuallymentor/battery/issues` )
+                }
+            ]
         },
         {
             label: 'Quit',
