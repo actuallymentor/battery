@@ -242,7 +242,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		# Keep track of status
 		is_charging=$( get_smc_charging_status )
 
-		if [[ "$battery_percentage" -gt "$setting" && "$is_charging" == "enabled" ]]; then
+		if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
 
 			log "Charge above $setting"
 			disable_charging
