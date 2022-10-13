@@ -4,19 +4,17 @@ This tool it possible to keep a chronically plugged in M1 Macbook at `80%` batte
 
 ![Tray icon](./screenshots/tray.png)
 
+> Want to know if this tool does anything or is just a placebo? Read [this excellent article](https://batteryuniversity.com/article/bu-808-how-to-prolong-lithium-based-batteries). TL;DR: keep your battery cool, keep it at 80% when plugged in, and discharge it as shallowly as feasible.
+
 ### Requirements
 
 This is an app for M1 Macs. It will not work on non-M1 macs. Do you have an older Mac? Consider the free version of the [Al Dente](https://apphousekitchen.com/) software package. It is a good alternative and has a premium version with many more features.
 
 ### Installation
 
-[🌐 You can download the latest app version here]( https://github.com/actuallymentor/battery/releases/ ).
-
-Then you download the app, install it by:
-
-1. Opening the `.dmg` file
-2. Dragging the `battery.app` icon to the `Applications` folder
-3. Double clicking the `battery.app` icon in the `Applications` folder
+- Option 1: install through brew with `brew install battery`
+- Option 2: [🌐 You can download the latest app dmg version here]( https://github.com/actuallymentor/battery/releases/ ).
+- Option 3: command-line only installation (see section below)
 
 The first time you open the app, it will ask for your administator password to it can install the needed components. Please note that the app:
 
@@ -74,16 +72,17 @@ After running `battery charging on` you will see it change to this:
 For help, run `battery` without parameters:
 
 ```
-Battery CLI utility v0.0.5.
+Battery CLI utility v1.0.0
 
 Usage:
 
   battery status
     output battery SMC status, % and time remaining
 
-  battery maintain LEVEL[1-100]
-    turn off charging above, and off below a certain value
+  battery maintain LEVEL[1-100,stop]
+    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
     eg: battery maintain 80
+    eg: battery maintain stop
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
@@ -97,7 +96,10 @@ Usage:
     instructions on how to make which utility exempt from sudo, highly recommended
 
   battery update
-    update the battery utility to the latest version (reruns the installation script)
+    update the battery utility to the latest version
+
+  battery reinstall
+    reinstall the battery utility to the latest version (reruns the installation script)
 
   battery uninstall
     enable charging and remove the smc tool and the battery script
@@ -108,3 +110,15 @@ Usage:
 I was looking at the Al Dente software package for battery limiting, but I found the [license too limiting](https://github.com/davidwernhart/AlDente/discussions/558) for a poweruser like myself.
 
 I would actually have preferred using Al Dente, but decided to create a command-line utility to replace it as a side-project on holiday. A colleague mentioned they would like a GUI, so I spend a few evenings setting up an Electron app. And voila, here we are.
+
+## "It's not working"
+
+If you used one of the earlier versions of the `battery` utility, you may run into [path/permission issues](https://github.com/actuallymentor/battery/issues/8). This is not your fault but mine. To fix it:
+
+```
+sudo rm -rf ~/.battery
+binfolder=/usr/local/bin
+sudo rm -v "$binfolder/smc" "$binfolder/battery"
+```
+
+Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new) and I'll try to help you fix it.
