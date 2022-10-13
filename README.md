@@ -11,10 +11,10 @@ This is an app for M1 Macs. It will not work on non-M1 macs. Do you have an olde
 ### Installation
 
 - Option 1: install through brew with `brew install battery`
-- Option 2: [🌐 You can download the latest app dmg version here]( https://github.com/actuallymentor/battery/releases/ ).
+- Option 2: [You can download the latest app dmg version here]( https://github.com/actuallymentor/battery/releases/ ).
 - Option 3: command-line only installation (see section below)
 
-The first time you open the app, it will ask for your administator password to it can install the needed components. Please note that the app:
+The first time you open the app, it will ask for your administator password so it can install the needed components. Please note that the app:
 
 - Disables charging when your battery is above 80% charged
 - Enabled charging when your battery is under 80% charged
