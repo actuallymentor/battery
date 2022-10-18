@@ -308,7 +308,7 @@ if [[ "$action" == "maintain" ]]; then
 	battery create_daemon
 
 	exit 0
-	
+
 fi
 
 
@@ -325,7 +325,7 @@ if [[ "$action" == "status" ]]; then
 fi
 
 # launchd daemon creator, inspiration: https://www.launchd.info/
-if [[ "$action" == "create_daemon" ]];then
+if [[ "$action" == "create_daemon" ]]; then
 
 	daemon_definition="
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -337,7 +337,7 @@ if [[ "$action" == "create_daemon" ]];then
 		<string>com.battery.app</string>
 
 		<key>PATH</key>
-		<string>/bin:/usr/bin:$binfolder</string>		
+		<string>/bin:/usr/bin:$binfolder</string>
 
 		<key>ProgramArguments</key>
 		<array>
@@ -352,6 +352,7 @@ if [[ "$action" == "create_daemon" ]];then
 </plist>
 "
 
+	mkdir -p "${daemon_path%/*}"
 	echo "$daemon_definition" > "$daemon_path"
 
 	exit 0
@@ -359,7 +360,7 @@ if [[ "$action" == "create_daemon" ]];then
 fi
 
 # Remove daemon
-if [[ "$action" == "remove_daemon" ]];then
+if [[ "$action" == "remove_daemon" ]]; then
 
 	rm $daemon_path 2> /dev/null
 	exit 0
