@@ -129,7 +129,7 @@ function get_remaining_time() {
 ## ###############
 
 # Help message
-if [ -z "$action" ]; then
+if [[ -z "$action" || "$action" == "help" ]]; then
 	echo -e "$helpmessage"
 	exit 0
 fi
