@@ -51,7 +51,7 @@ sudo chmod 755 $binfolder/battery
 sudo chmod u+x $binfolder/battery
 
 # Set permissions for logfiles
-mkdir $configfolder
+mkdir -p $configfolder
 sudo chown $calling_user $configfolder
 
 touch $logfile
