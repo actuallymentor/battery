@@ -13,7 +13,7 @@ mkdir -p $tempfolder
 
 # Set script value
 calling_user=${1:-"$USER"}
-configfolder=/Users/$calling_usercalling_user/.battery
+configfolder=/Users/$calling_user/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 
@@ -38,12 +38,12 @@ sudo mv $smcfolder/smc-command/smc $binfolder
 sudo chmod u+x $binfolder/smc
 
 # Write battery function as executable
-bateryfolder="$tempfolder/battery"
+batteryfolder="$tempfolder/battery"
 echo "[ 5/9 ] Cloning battery repository"
-git clone --depth 1 https://github.com/actuallymentor/battery.git $bateryfolder &> /dev/null
+git clone --depth 1 https://github.com/actuallymentor/battery.git $batteryfolder &> /dev/null
 
 echo "[ 6/9 ] Writing script to $binfolder/battery for user $calling_user"
-sudo cp $bateryfolder/battery.sh $binfolder/battery
+sudo cp $batteryfolder/battery.sh $binfolder/battery
 
 # Set permissions for battery executables
 sudo chown $calling_user $binfolder/battery
@@ -64,7 +64,7 @@ sudo chmod 755 $pidfile
 
 sudo chown $calling_user $binfolder/battery
 
-sudo bash $bateryfolder/battery.sh visudo
+sudo bash $batteryfolder/battery.sh visudo
 echo "[ 7/9 ] Set up visudo declarations"
 
 # Remove tempfiles
