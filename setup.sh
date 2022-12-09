@@ -13,7 +13,7 @@ mkdir -p $tempfolder
 
 # Set script value
 calling_user=${1:-"$USER"}
-configfolder=/Users/$calling_usercalling_user/.battery
+configfolder=/Users/$calling_user/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 
