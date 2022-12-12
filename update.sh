@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Force-set path to include sbin
+PATH="$PATH:/usr/sbin"
+
 # Set environment variables
 tempfolder=~/.battery-tmp
 binfolder=/usr/local/bin
