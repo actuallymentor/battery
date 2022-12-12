@@ -1,5 +1,7 @@
 #!/bin/bash
 
+PATH=/bin:/usr/bin:/usr/local/bin
+
 ## ###############
 ## Variables
 ## ###############
@@ -231,6 +233,19 @@ fi
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
 
+	kill $(pgrep -f '^/bin/bash /usr/local/bin/battery maintain_synchronous.*') 2> /dev/null
+	# Recover old maintain status if old setting is found
+	if [[ "$setting" == "recover" ]]; then
+		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
+		if [[ $maintain_percentage ]]; then
+			log "Recovering maintenance percentage $maintain_percentage"
+			setting=$( echo $maintain_percentage)
+		else
+			log "No setting to recover, exiting"
+			exit 0
+		fi
+	fi
+
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
 
@@ -271,18 +286,6 @@ if [[ "$action" == "maintain" ]]; then
 	if test -f "$pidfile"; then
 		pid=$( cat "$pidfile" 2> /dev/null )
 		kill $pid &> /dev/null
-	fi
-
-	# Recover old maintain status if old setting is found
-	if [[ "$setting" == "recover" ]]; then
-		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
-		if [[ $maintain_percentage ]]; then
-			log "Recovering maintenance percentage $maintain_percentage"
-			battery maintain $maintain_percentage
-		else
-			log "No setting to recover, exiting"
-		fi
-		exit 0
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
@@ -332,20 +335,14 @@ if [[ "$action" == "create_daemon" ]]; then
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
 <plist version=\"1.0\">
 	<dict>
-
 		<key>Label</key>
 		<string>com.battery.app</string>
-
-		<key>PATH</key>
-		<string>/bin:/usr/bin:$binfolder</string>
-
 		<key>ProgramArguments</key>
 		<array>
 			<string>$binfolder/battery</string>
-			<string>maintain</string>
+			<string>maintain_synchronous</string>
 			<string>recover</string>
 		</array>
-
 		<key>RunAtLoad</key>
 		<true/>
 	</dict>
