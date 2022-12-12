@@ -363,3 +363,4 @@ if [[ "$action" == "remove_daemon" ]]; then
 	exit 0
 
 fi
+
