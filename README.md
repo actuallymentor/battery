@@ -1,6 +1,6 @@
 # Battery charge limiter for M1 Mac devices
 
-<img align="right" src="./screenshots/tray.png"/>This tool it possible to keep a chronically plugged in M1 Macbook at `80%` battery, since that will prolong the longevity of the battery. It is free and open-source and will remain that way.
+<img align="right" src="./screenshots/tray.png"/>This tool makes it possible to keep a chronically plugged in M1 Macbook at `80%` battery, since that will prolong the longevity of the battery. It is free and open-source and will remain that way.
 
 > Want to know if this tool does anything or is just a placebo? Read [this excellent article](https://batteryuniversity.com/article/bu-808-how-to-prolong-lithium-based-batteries). TL;DR: keep your battery cool, keep it at 80% when plugged in, and discharge it as shallowly as feasible.
 
@@ -20,7 +20,7 @@ The first time you open the app, it will ask for your administator password so i
 - Enabled charging when your battery is under 80% charged
 - Keeps the limit engaged even after rebooting
 - Keeps the limit engaged even after closing the tray app
-- Also automatically installs the `battery` command line tool. If you want a custom charging percentage, the CLI the only way to do that.
+- Also automatically installs the `battery` command line tool. If you want a custom charging percentage, the CLI is the only way to do that.
 
 Do you have questions, comments, or feature requests? [Open an issue here](https://github.com/actuallymentor/battery/issues) or [Tweet at me](https://twitter.com/actuallymentor).
 
@@ -31,7 +31,7 @@ Do you have questions, comments, or feature requests? [Open an issue here](https
 
 > If you don't know what a "command line" is, ignore this section. You don't need it.
 
-The GUI app uses a command line tool under the hood. Installing the GUI automatically installs the CLI as well, you can also separately install the CLI.
+The GUI app uses a command line tool under the hood. Installing the GUI automatically installs the CLI as well. You can also separately install the CLI.
 
 The CLI is used for managing the battery charging status for M1 Macs. Can be used to enable/disable the Macbook from charging the battery when plugged into power.
 
