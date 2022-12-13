@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PATH=/bin:/usr/bin:/usr/local/bin
+PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin
 
 ## ###############
 ## Variables
