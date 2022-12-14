@@ -1,6 +1,6 @@
 ---
-name: Issue report or question
-about: Report an issue or ask for help
+name: Report an issue or ask for help
+about: Is something broken, or are you confused about something?
 title: ''
 labels: ''
 assignees: ''
