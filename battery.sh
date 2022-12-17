@@ -1,6 +1,7 @@
 #!/bin/bash
 
-PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin
+# Path fixes for unexpected environments
+PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
 
 ## ###############
 ## Variables
@@ -233,7 +234,7 @@ fi
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
 
-	kill $(pgrep -f '^/bin/bash /usr/local/bin/battery maintain_synchronous.*') 2> /dev/null
+	pkill -f "battery maintain_synchronous.*" 2> /dev/null
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
 		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )

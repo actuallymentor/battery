@@ -3,7 +3,7 @@ const { exec } = require('node:child_process')
 const sudo = require( 'sudo-prompt' )
 const { log, alert } = require( './helpers' )
 const { USER } = process.env
-const path_fix = 'PATH=$PATH:/usr/local/bin/battery'
+const path_fix = 'PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew'
 const battery = `${ path_fix } battery`
 const shell_options = {
     shell: '/bin/bash',
