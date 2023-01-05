@@ -87,7 +87,7 @@ setting=$2
 
 function log() {
 
-	echo -e "$(date +%T) - $1"
+	echo -e "$(date +%D-%T) - $1"
 
 }
 
@@ -235,8 +235,13 @@ fi
 if [[ "$action" == "maintain_synchronous" ]]; then
 
 	pkill -f "battery maintain_synchronous.*" 2> /dev/null
+	
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
+
+		# Before doing anything, log out environment details as a debugging trail
+		log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
+
 		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
 		if [[ $maintain_percentage ]]; then
 			log "Recovering maintenance percentage $maintain_percentage"
@@ -344,6 +349,10 @@ if [[ "$action" == "create_daemon" ]]; then
 			<string>maintain_synchronous</string>
 			<string>recover</string>
 		</array>
+		<key>StandardOutPath</key>
+		<string>$logfile</string>
+		<key>StandardErrorPath</key>
+		<string>$logfile</string>
 		<key>RunAtLoad</key>
 		<true/>
 	</dict>
