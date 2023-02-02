@@ -5,4 +5,4 @@ Development notes:
     - Update version in `package.json`
     - `npm run build`
     - Create new [release](https://github.com/actuallymentor/battery/releases)
-    - Update [brew formula](https://github.com/Homebrew/homebrew-cask/blob/master/Casks/battery.rb)
+    - Update [brew formula](https://github.com/Homebrew/homebrew-cask/blob/master/Casks/battery.rb) through`brew bump-cask-pr --version`
