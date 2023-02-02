@@ -67,6 +67,14 @@ const update_or_install_battery = async () => {
 
     try {
 
+        // Check if xcode build tools are installed
+        const xcode_installed = await exec_async( `${ path_fix } which git` ).catch( () => false )
+        if( !xcode_installed ) {
+            alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation` )
+            await exec_async( `${ path_fix } xcode-select --install` )
+            alert( `Please restart the Battery app after Xcode finished installing` )
+        }
+
         // Check if battery is installed
         const is_installed = await exec_async( `${ path_fix } which battery` ).catch( () => false )
         log( 'Is installed? ', is_installed )
