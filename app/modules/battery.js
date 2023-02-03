@@ -5,6 +5,7 @@ const { log, alert } = require( './helpers' )
 const { USER } = process.env
 const path_fix = 'PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew'
 const battery = `${ path_fix } battery`
+const { app } = require( 'electron' )
 const shell_options = {
     shell: '/bin/bash',
     env: { ...process.env, PATH: `${ process.env.PATH }:/usr/local/bin` }
@@ -73,10 +74,19 @@ const update_or_install_battery = async () => {
             alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation` )
             await exec_async( `${ path_fix } xcode-select --install` )
             alert( `Please restart the Battery app after Xcode finished installing` )
+            app.exit()
         }
 
         // Check if battery is installed
-        const is_installed = await exec_async( `${ path_fix } which battery` ).catch( () => false )
+        const [
+            battery_installed,
+            smc_installed
+
+        ] = await Promise.all( [
+            exec_async( `${ path_fix } which battery` ).catch( () => false ),
+            exec_async( `${ path_fix } which smc` ).catch( () => false )
+        ] )
+        const is_installed = battery_installed && smc_installed
         log( 'Is installed? ', is_installed )
 
         // If installed, update
