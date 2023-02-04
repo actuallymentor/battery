@@ -71,10 +71,14 @@ Usage:
 visudoconfig="
 # Visudo settings for the battery utility installed from https://github.com/actuallymentor/battery
 # intended to be placed in $visudo_path on a mac
-Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02
+Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02, $binfolder/smc -k CH0B -r, $binfolder/smc -k CH0C -r
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
+Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
+Cmnd_Alias      DISCHARGEON = $binfolder/smc -k CH0I -w 01
 ALL ALL = NOPASSWD: BATTERYOFF
 ALL ALL = NOPASSWD: BATTERYON
+ALL ALL = NOPASSWD: DISCHARGEOFF
+ALL ALL = NOPASSWD: DISCHARGEON
 "
 
 # Get parameters
@@ -95,15 +99,27 @@ function log() {
 # but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
 function enable_charging() {
-	log "Enabling battery charging"
+	log "🔌🔋 Enabling battery charging"
 	sudo smc -k CH0B -w 00
 	sudo smc -k CH0C -w 00
 }
 
 function disable_charging() {
-	log "Disabling battery charging"
+	log "🔌🪫 Disabling battery charging"
 	sudo smc -k CH0B -w 02
 	sudo smc -k CH0C -w 02
+}
+
+# Re:discharging, we're using keys uncovered by @howie65: https://github.com/actuallymentor/battery/issues/20#issuecomment-1364540704
+# CH0I seems to be the "disable the adapter" key
+function enable_discharging() {
+	log "🔌🪫 Enabling battery discharging"
+	sudo smc -k CH0I -w 01
+}
+
+function disable_discharging() {
+	log "🔌🔋 Disabling battery discharging"
+	sudo smc -k CH0I -w 00
 }
 
 function get_smc_charging_status() {
@@ -180,6 +196,7 @@ if [[ "$action" == "uninstall" ]]; then
 		read
 	fi
     enable_charging
+	disable_discharging
 	battery remove_daemon
     sudo rm -v "$binfolder/smc" "$binfolder/battery"
     exit 0
@@ -204,11 +221,33 @@ if [[ "$action" == "charging" ]]; then
 
 fi
 
+# Discharge on/off controller
+if [[ "$action" == "adapter" ]]; then
+
+	log "Setting $action to $setting"
+
+	# Disable running daemon
+	battery maintain stop
+
+	# Set charging to on and off
+	if [[ "$setting" == "off" ]]; then
+		enable_discharging
+	elif [[ "$setting" == "on" ]]; then
+		disable_discharging
+	fi
+
+	exit 0
+
+fi
+
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
 
 	# Disable running daemon
 	battery maintain stop
+
+	# Disable charge blocker if enabled
+	battery adapter off
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
@@ -231,10 +270,37 @@ if [[ "$action" == "charge" ]]; then
 
 fi
 
+# Discharging on/off controller
+if [[ "$action" == "discharge" ]]; then
+
+	# Disable running daemon
+	battery maintain stop
+
+	# Start charging
+	battery_percentage=$( get_battery_percentage )
+	log "Discharging to $setting% from $battery_percentage%"
+	enable_discharging
+
+	# Loop until battery percent is exceeded
+	while [[ "$battery_percentage" -gt "$setting" ]]; do
+
+		log "Battery at $battery_percentage%"
+		caffeinate -i sleep 60
+		battery_percentage=$( get_battery_percentage )
+
+	done
+
+	disable_discharging
+	log "Discharging completed at $battery_percentage%"
+
+	exit 0
+
+fi
+
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
 
-	pkill -f "battery maintain_synchronous.*" 2> /dev/null
+	battery maintain stop
 	
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
@@ -251,6 +317,10 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 			exit 0
 		fi
 	fi
+
+	# Before we start maintaining the battery level, first discharge to the target level
+	log "Triggering discharge to $setting before enabling charging limiter"
+	battery discharge "$setting"
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
@@ -295,9 +365,14 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
+		log "Killing running maintain daemon"
 		rm $pidfile 2> /dev/null
 		rm $maintain_percentage_tracker_file 2> /dev/null
+		log "Killing any synchronous maintain processes"
+		pkill -f "battery maintain_synchronous.*" 2> /dev/null
+		log "remove battery daemon"
 		battery remove_daemon
+		log "enable charging"
 		enable_charging
 		battery status
 		exit 0

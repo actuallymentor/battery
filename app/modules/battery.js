@@ -14,6 +14,8 @@ const shell_options = {
 // Execute without sudo
 const exec_async = command => new Promise( ( resolve, reject ) => {
 
+    log( `Executing ${ command }` )
+
     exec( command, shell_options, ( error, stdout, stderr ) => {
 
         if( error ) return reject( error )
@@ -28,12 +30,12 @@ const exec_async = command => new Promise( ( resolve, reject ) => {
 const exec_sudo_async = async command => new Promise( async ( resolve, reject ) => {
 
     const options = { name: 'Battery limiting utility', ...shell_options }
-
+    log( `Sudo executing command: ${ command }` )
     sudo.exec( command, options, ( error, stdout, stderr ) => {
 
-        if( error ) return reject( error )
-        if( stderr ) return reject( stderr )
-        if( stdout ) return resolve( stdout )
+        if( error ) return reject( !!error )
+        if( stderr ) return reject( !!stderr )
+        if( stdout ) return resolve( !!stdout )
 
     } )
 
@@ -80,26 +82,31 @@ const update_or_install_battery = async () => {
         // Check if battery is installed
         const [
             battery_installed,
-            smc_installed
-
+            smc_installed,
+            charging_in_visudo,
+            discharging_in_visudo
         ] = await Promise.all( [
             exec_async( `${ path_fix } which battery` ).catch( () => false ),
-            exec_async( `${ path_fix } which smc` ).catch( () => false )
+            exec_async( `${ path_fix } which smc` ).catch( () => false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( () => false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( () => false )
         ] )
+
+        const visudo_complete = charging_in_visudo && discharging_in_visudo
         const is_installed = battery_installed && smc_installed
         log( 'Is installed? ', is_installed )
 
         // If installed, update
-        if( is_installed ) {
+        if( is_installed && visudo_complete ) {
             log( `Updating battery...` )
             const result = await exec_async( `${ battery } update silent` )
             log( `Update result: `, result )
         }
 
         // If not installed, run install script
-        if( !is_installed ) {
+        if( !is_installed || !visudo_complete ) {
             log( `Installing battery for ${ USER }...` )
-            await alert( `Welcome to the Battery limiting tool. The app needs to install some components, so it will ask for your password. This should only be needed once.` )
+            await alert( `Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.` )
             const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
             log( `Install result: `, result )
             await alert( `Battery background components installed successfully. You can find the battery limiter icon in the top right of your menu bar.` )
