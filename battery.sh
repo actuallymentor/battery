@@ -132,6 +132,15 @@ function get_smc_charging_status() {
 	fi
 }
 
+function get_smc_discharging_status() {
+	hex_status=$( smc -k CH0I -r | awk '{print $4}' | sed s:\):: )
+	if [[ "$hex_status" == "00" ]]; then
+		echo "not discharging"
+	else
+		echo "discharging"
+	fi
+}
+
 function get_battery_percentage() {
 	battery_percentage=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
 	echo "$battery_percentage"
@@ -401,6 +410,13 @@ if [[ "$action" == "status" ]]; then
 		log "Your battery is currently being maintained at $maintain_percentage%"
 	fi
 	exit 0
+
+fi
+
+# Status logger in csv format
+if [[ "$action" == "status_csv" ]]; then
+
+	echo "$( get_battery_percentage  ),$( get_remaining_time ),$( get_smc_charging_status ),$( get_smc_discharging_status ),$maintain_percentage"
 
 fi
 

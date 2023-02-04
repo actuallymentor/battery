@@ -1,5 +1,5 @@
 const { shell, app, Tray, Menu } = require( 'electron' )
-const { enable_battery_limiter, disable_battery_limiter, update_or_install_battery, is_limiter_enabled } = require('./battery')
+const { enable_battery_limiter, disable_battery_limiter, update_or_install_battery, is_limiter_enabled, get_battery_status } = require('./battery')
 const { log } = require("./helpers")
 const { get_inactive_logo, get_active_logo } = require('./theme')
 
@@ -43,6 +43,9 @@ async function set_initial_interface() {
             type: 'separator'
         },
         {
+            label: `${ await get_battery_status() }`
+        },
+        {
             label: `About v${ app.getVersion() }`,
             submenu: [
                 {
@@ -75,9 +78,15 @@ async function set_initial_interface() {
         
     ] )
 
+    // Set tray styles
     tray.setImage( limiter_on ? get_active_logo() : get_inactive_logo() )
     tray.setTitle('')
     tray.setContextMenu( app_menu )
+
+    // Set tray open listener
+    tray.on( 'click', () => {
+        log( `Tray is opening` )
+    } )
 
 }
 

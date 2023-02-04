@@ -133,9 +133,32 @@ const is_limiter_enabled = async () => {
 
 }
 
+const get_battery_status = async () => {
+
+    try {
+        const message = await exec_async( `${ battery } status_csv` )
+        let [ percentage, remaining, charging, discharging, maintain_percentage ] = message.split( '' )
+        charging = charging == 'enabled'
+        discharging = discharging == 'discharging'
+
+        let status_message = `Status: ${ percentage }% (${ remaining })`
+        if( discharging ) status_message += `, force discharging`
+        if( charging ) status_message += `, charging enabled`
+
+        log( `Battery status: `, status_message, `from`, message.split( ',' ) )
+        return status_message
+
+    } catch( e ) {
+        log( `Error getting battery status: `, e )
+        alert( `Battery limiter error: ${ e.message }` )
+    }
+
+}
+
 module.exports = {
     enable_battery_limiter,
     disable_battery_limiter,
     update_or_install_battery,
-    is_limiter_enabled
+    is_limiter_enabled,
+    get_battery_status
 }
