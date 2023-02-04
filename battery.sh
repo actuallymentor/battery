@@ -102,12 +102,12 @@ function log() {
 # Re:discharging, we're using keys uncovered by @howie65: https://github.com/actuallymentor/battery/issues/20#issuecomment-1364540704
 # CH0I seems to be the "disable the adapter" key
 function enable_discharging() {
-	log "🔌🪫 Enabling battery discharging"
+	log "🔽🪫 Enabling battery discharging"
 	sudo smc -k CH0I -w 01
 }
 
 function disable_discharging() {
-	log "🔌🔋 Disabling battery discharging"
+	log "🔼🪫 Disabling battery discharging"
 	sudo smc -k CH0I -w 00
 }
 
@@ -244,9 +244,9 @@ if [[ "$action" == "adapter" ]]; then
 	battery maintain stop
 
 	# Set charging to on and off
-	if [[ "$setting" == "off" ]]; then
+	if [[ "$setting" == "on" ]]; then
 		enable_discharging
-	elif [[ "$setting" == "on" ]]; then
+	elif [[ "$setting" == "off" ]]; then
 		disable_discharging
 	fi
 
@@ -261,7 +261,7 @@ if [[ "$action" == "charge" ]]; then
 	battery maintain stop
 
 	# Disable charge blocker if enabled
-	battery adapter off
+	battery adapter on
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
@@ -287,9 +287,6 @@ fi
 # Discharging on/off controller
 if [[ "$action" == "discharge" ]]; then
 
-	# Disable running daemon
-	battery maintain stop
-
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
 	log "Discharging to $setting% from $battery_percentage%"
@@ -298,7 +295,7 @@ if [[ "$action" == "discharge" ]]; then
 	# Loop until battery percent is exceeded
 	while [[ "$battery_percentage" -gt "$setting" ]]; do
 
-		log "Battery at $battery_percentage%"
+		log "Battery at $battery_percentage% (target $setting%)"
 		caffeinate -i sleep 60
 		battery_percentage=$( get_battery_percentage )
 
@@ -331,6 +328,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Before we start maintaining the battery level, first discharge to the target level
 	log "Triggering discharge to $setting before enabling charging limiter"
 	battery discharge "$setting"
+	log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
@@ -375,11 +373,10 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
-		log "Killing running maintain daemons"
+		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2> /dev/null
 		rm $maintain_percentage_tracker_file 2> /dev/null
 		battery remove_daemon
-		log "Enable charging after stop"
 		enable_charging
 		battery status
 		exit 0
@@ -462,4 +459,3 @@ if [[ "$action" == "remove_daemon" ]]; then
 	exit 0
 
 fi
-
