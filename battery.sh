@@ -95,21 +95,6 @@ function log() {
 
 }
 
-# Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
-# but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
-# so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
-function enable_charging() {
-	log "🔌🔋 Enabling battery charging"
-	sudo smc -k CH0B -w 00
-	sudo smc -k CH0C -w 00
-}
-
-function disable_charging() {
-	log "🔌🪫 Disabling battery charging"
-	sudo smc -k CH0B -w 02
-	sudo smc -k CH0C -w 02
-}
-
 # Re:discharging, we're using keys uncovered by @howie65: https://github.com/actuallymentor/battery/issues/20#issuecomment-1364540704
 # CH0I seems to be the "disable the adapter" key
 function enable_discharging() {
@@ -120,6 +105,22 @@ function enable_discharging() {
 function disable_discharging() {
 	log "🔌🔋 Disabling battery discharging"
 	sudo smc -k CH0I -w 00
+}
+
+# Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
+# but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
+# so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
+function enable_charging() {
+	log "🔌🔋 Enabling battery charging"
+	sudo smc -k CH0B -w 00
+	sudo smc -k CH0C -w 00
+	disable_discharging
+}
+
+function disable_charging() {
+	log "🔌🪫 Disabling battery charging"
+	sudo smc -k CH0B -w 02
+	sudo smc -k CH0C -w 02
 }
 
 function get_smc_charging_status() {
@@ -369,6 +370,7 @@ if [[ "$action" == "maintain" ]]; then
 		battery remove_daemon
 		log "Enable charging after stop"
 		enable_charging
+		disable_discharging
 		battery status
 		exit 0
 	fi
