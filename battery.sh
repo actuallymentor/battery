@@ -33,7 +33,7 @@ fi
 
 # CLI help message
 helpmessage="
-Battery CLI utility v1.0.0
+Battery CLI utility v1.0.1
 
 Usage:
 
@@ -53,6 +53,10 @@ Usage:
     charge the battery to a certain percentage, and disable charging when that percentage is reached
     eg: battery charge 90
 
+  battery discharge LEVEL[1-100]
+    block power input from the adapter until battery falls to this level
+    eg: battery discharge 90
+
   battery visudo
     instructions on how to make which utility exempt from sudo, highly recommended
 
@@ -63,7 +67,7 @@ Usage:
     reinstall the battery utility to the latest version (reruns the installation script)
 
   battery uninstall
-    enable charging and remove the smc tool and the battery script
+    enable charging, remove the smc tool, and the battery script
 
 "
 
