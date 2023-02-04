@@ -4,27 +4,24 @@ const { log } = require("./helpers")
 const { get_inactive_logo, get_active_logo } = require('./theme')
 
 /* ///////////////////////////////
-// Initialisation
+// Menu helpers
 // /////////////////////////////*/
-async function set_initial_interface() {
+let tray = undefined
 
-    log( "Starting tray app" )
-    tray = new Tray( get_inactive_logo() )
+// Set interface to usable
+const generate_app_menu = async () => {
 
-    // Set "loading" context
-    tray.setTitle( '  updating...' )
-    
-    log( "Tray app boot complete" )
-
-    log( "Triggering boot-time auto-update" )
-    await update_or_install_battery()
-    log( "Update process complete" )
+    // Get battery and daemon status
+    const [ battery_state, daemon_state ] = await get_battery_status()
 
     // Check if limiter is on
     const limiter_on = await is_limiter_enabled()
 
-    // Set interface to usable
-    const app_menu = Menu.buildFromTemplate( [
+    // Set tray icon
+    tray.setImage( limiter_on ? get_active_logo() : get_inactive_logo() )
+
+    // Build menu
+    return Menu.buildFromTemplate( [
 
         {
             label: 'Enable 80% battery limit',
@@ -43,7 +40,15 @@ async function set_initial_interface() {
             type: 'separator'
         },
         {
-            label: `${ await get_battery_status() }`
+            label: `Battery: ${ battery_state }`,
+            enabled: false
+        },
+        {
+            label: `Power: ${ daemon_state }`,
+            enabled: false
+        },
+        {
+            type: 'separator'
         },
         {
             label: `About v${ app.getVersion() }`,
@@ -78,15 +83,37 @@ async function set_initial_interface() {
         
     ] )
 
+}
+
+// Refresh tray with battery status values
+const refresh_tray = async () => tray.setContextMenu( await generate_app_menu() )
+
+
+/* ///////////////////////////////
+// Initialisation
+// /////////////////////////////*/
+async function set_initial_interface() {
+
+    log( "Starting tray app" )
+    tray = new Tray( get_inactive_logo() )
+
+    // Set "loading" context
+    tray.setTitle( '  updating...' )
+    
+    log( "Tray app boot complete" )
+
+    log( "Triggering boot-time auto-update" )
+    await update_or_install_battery()
+    log( "Update process complete" )
+
+
     // Set tray styles
-    tray.setImage( limiter_on ? get_active_logo() : get_inactive_logo() )
     tray.setTitle('')
-    tray.setContextMenu( app_menu )
+    await refresh_tray()
 
     // Set tray open listener
-    tray.on( 'click', () => {
-        log( `Tray is opening` )
-    } )
+    tray.on( 'click', refresh_tray )
+
 
 }
 
