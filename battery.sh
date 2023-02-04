@@ -299,8 +299,6 @@ fi
 
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
-
-	battery maintain stop
 	
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
@@ -365,14 +363,11 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
-		log "Killing running maintain daemon"
+		log "Killing running maintain daemons"
 		rm $pidfile 2> /dev/null
 		rm $maintain_percentage_tracker_file 2> /dev/null
-		log "Killing any synchronous maintain processes"
-		pkill -f "battery maintain_synchronous.*" 2> /dev/null
-		log "remove battery daemon"
 		battery remove_daemon
-		log "enable charging"
+		log "Enable charging after stop"
 		enable_charging
 		battery status
 		exit 0
