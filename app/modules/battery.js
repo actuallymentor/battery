@@ -140,6 +140,7 @@ const get_battery_status = async () => {
         let [ percentage, remaining, charging, discharging, maintain_percentage ] = message.split( ',' )
         charging = charging == 'enabled'
         discharging = discharging == 'discharging'
+        remaining = remaining.match( /\d{1,2}:\d{1,2}/ ) ? remaining : 'unknown'
 
         let battery_state = `${ percentage }% (${ remaining } remaining)`
         let daemon_state = ``

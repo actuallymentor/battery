@@ -307,8 +307,6 @@ if [[ "$action" == "discharge" ]]; then
 	disable_discharging
 	log "Discharging completed at $battery_percentage%"
 
-	exit 0
-
 fi
 
 # Maintain at level
