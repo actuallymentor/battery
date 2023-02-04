@@ -370,7 +370,6 @@ if [[ "$action" == "maintain" ]]; then
 		battery remove_daemon
 		log "Enable charging after stop"
 		enable_charging
-		disable_discharging
 		battery status
 		exit 0
 	fi
