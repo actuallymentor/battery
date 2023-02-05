@@ -163,6 +163,11 @@ function get_remaining_time() {
 	echo "$time_remaining"
 }
 
+function get_maintain_percentage() {
+	maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
+	echo "$maintain_percentage"
+}
+
 
 
 ## ###############
@@ -423,7 +428,7 @@ fi
 # Status logger in csv format
 if [[ "$action" == "status_csv" ]]; then
 
-	echo "$( get_battery_percentage  ),$( get_remaining_time ),$( get_smc_charging_status ),$( get_smc_discharging_status ),$maintain_percentage"
+	echo "$( get_battery_percentage  ),$( get_remaining_time ),$( get_smc_charging_status ),$( get_smc_discharging_status ),$( get_maintain_percentage )"
 
 fi
 

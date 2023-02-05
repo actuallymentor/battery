@@ -91,6 +91,13 @@ const refresh_tray = async () => {
     tray.setContextMenu( await generate_app_menu() )
 }
 
+// Refresh app logo
+const refresh_logo = async () => {
+    const is_enabled = await is_limiter_enabled()
+    if( is_enabled ) return tray.setImage( get_active_logo() )
+    return tray.setImage( get_inactive_logo() )
+}
+
 
 /* ///////////////////////////////
 // Initialisation
@@ -126,16 +133,18 @@ async function set_initial_interface() {
 async function enable_limiter() {
 
     log( 'Enable limiter' )
-    tray.setImage( get_active_logo() )
     await enable_battery_limiter()
+    await refresh_tray()
+    await refresh_logo()
 
 }
 
 async function disable_limiter() {
 
     log( 'Disable limiter' )
-    tray.setImage( get_inactive_logo() )
     await disable_battery_limiter()
+    await refresh_tray()
+    await refresh_logo()
 
 }
 
