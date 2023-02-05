@@ -16,6 +16,7 @@ This is an app for M1 Macs. It will not work on non-M1 macs. Do you have an olde
 
 The first time you open the app, it will ask for your administator password so it can install the needed components. Please note that the app:
 
+- Discharges your battery until it reaches 80%, **even when plugged in**
 - Disables charging when your battery is above 80% charged
 - Enabled charging when your battery is under 80% charged
 - Keeps the limit engaged even after rebooting
