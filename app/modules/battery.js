@@ -116,7 +116,7 @@ const update_or_install_battery = async () => {
         // Kill running instances of battery
         const processes = await exec_async( `ps aux | grep "/usr/local/bin/battery " | wc -l | grep -Eo "\\d*"` )
         log( `Found ${ `${ processes }`.replace( /\n/, '' ) } battery related processed to kill` )
-        await exec_async( `${ battery } maintain stop` )
+        if( is_installed ) await exec_async( `${ battery } maintain stop` )
         await exec_async( `pkill -f "/usr/local/bin/battery.*"` ).catch( e => log( `Error killing existing battery progesses, usually means no running processes` ) )
 
         // If installed, update
