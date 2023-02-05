@@ -23,8 +23,8 @@ A clear and concise description of what you expected to happen.
 **Screenshots (optional)**
 If applicable, add screenshots to help explain your problem. On a Mac you can click `control`+`command`+`shift`+`4` to create a screenshot that you can paste into this field with `command`+`4`.
 
-**Error logs (optional)**
-If you know how a terminal works, please paste the content of `tail -n 100 ~/.battery/battery.log` here. This allows me to see potential errors on your device.
+**Error logs**
+If you know how a terminal works, please paste the content of `battery logs` here. This allows me to see potential errors on your device.
 
 **Additional context (optional)**
 Add any other context about the problem here.
