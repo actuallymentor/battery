@@ -49,6 +49,10 @@ Usage:
     manually set the battery to (not) charge
     eg: battery charging on
 
+  battery adapter SETTING[on/off]
+    manually set the adapter to (not) charge even when plugged in
+    eg: battery adapter off
+
   battery charge LEVEL[1-100]
     charge the battery to a certain percentage, and disable charging when that percentage is reached
     eg: battery charge 90

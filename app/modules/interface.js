@@ -86,7 +86,10 @@ const generate_app_menu = async () => {
 }
 
 // Refresh tray with battery status values
-const refresh_tray = async () => tray.setContextMenu( await generate_app_menu() )
+const refresh_tray = async () => {
+    log( "Refreshing tray icon..." )
+    tray.setContextMenu( await generate_app_menu() )
+}
 
 
 /* ///////////////////////////////
@@ -112,7 +115,7 @@ async function set_initial_interface() {
     await refresh_tray()
 
     // Set tray open listener
-    tray.on( 'click', refresh_tray )
+    tray.on( 'mouse-enter', refresh_tray )
 
 
 }
