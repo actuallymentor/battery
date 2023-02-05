@@ -40,6 +40,10 @@ Usage:
   battery status
     output battery SMC status, % and time remaining
 
+  battery logs LINES[integer, optional]
+    output logs of the battery CLI and GUI
+	eg: battery logs 100
+
   battery maintain LEVEL[1-100,stop]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
     eg: battery maintain 80
@@ -460,6 +464,28 @@ fi
 if [[ "$action" == "remove_daemon" ]]; then
 
 	rm $daemon_path 2> /dev/null
+	exit 0
+
+fi
+
+# Display logs
+if [[ "$action" == "logs" ]]; then
+
+	amount="${2:-100}"
+
+	echo -e "👾 Battery CLI logs:\n"
+	tail -n $amount $logfile
+
+	echo -e "\n🖥️  Battery GUI logs:\n"
+	tail -n $amount "$configfolder/gui.log"
+
+	echo -e "\n📁 Config folder details:\n"
+	ls -lah $configfolder
+
+	echo -e "\n⚙️  Battery data:\n"
+	battery status
+	battery | grep -E "v\d.*"
+
 	exit 0
 
 fi
