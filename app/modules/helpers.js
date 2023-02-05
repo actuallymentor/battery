@@ -24,8 +24,12 @@ const log = async ( ...messages ) => {
 
 const { dialog } = require('electron')
 const alert = ( message ) => dialog.showMessageBox( { message } )
+const wait = time_in_ms => new Promise( resolve => {
+    setTimeout( resolve, time_in_ms )
+} )
 
 module.exports = {
     log,
-    alert
+    alert,
+    wait
 }
