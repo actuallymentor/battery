@@ -13,13 +13,14 @@ const generate_app_menu = async () => {
 
     try {
         // Get battery and daemon status
-        const [ battery_state, daemon_state, maintain_percentage=80 ] = await get_battery_status()
+        const { battery_state, daemon_state, maintain_percentage=80, percentage } = await get_battery_status()
 
         // Check if limiter is on
         const limiter_on = await is_limiter_enabled()
 
         // Set tray icon
-        tray.setImage( limiter_on ? get_active_logo() : get_inactive_logo() )
+        log( `Generate app menu percentage: ${ percentage }` )
+        tray.setImage( limiter_on ? get_active_logo( percentage ) : get_inactive_logo( percentage ) )
 
         // Build menu
         return Menu.buildFromTemplate( [
@@ -102,14 +103,15 @@ const refresh_tray = async ( force_interactive_refresh = false ) => {
 }
 
 // Refresh app logo
-const refresh_logo = async ( force ) => {
+const refresh_logo = async ( percent=80, force ) => {
 
-    if( force == 'active' ) return tray.setImage( get_active_logo() )
-    if( force == 'inactive' ) return tray.setImage( get_inactive_logo() )
+    log( `Refresh logo for percentage ${ percent }, force ${ force }` )
+    if( force == 'active' ) return tray.setImage( get_active_logo( percent ) )
+    if( force == 'inactive' ) return tray.setImage( get_inactive_logo( percent ) )
 
     const is_enabled = await is_limiter_enabled()
-    if( is_enabled ) return tray.setImage( get_active_logo() )
-    return tray.setImage( get_inactive_logo() )
+    if( is_enabled ) return tray.setImage( get_active_logo( percent ) )
+    return tray.setImage( get_inactive_logo( percent ) )
 }
 
 
@@ -152,8 +154,10 @@ async function enable_limiter() {
 
     try {
         log( 'Enable limiter' )
-        await refresh_logo( 'active' )
-        await enable_battery_limiter()
+        await refresh_logo( 80, 'active' )
+        const percent_left = await enable_battery_limiter()
+        log( `Interface enabled limiter, percentage remaining: ${ percent_left }` )
+        await refresh_logo( percent_left, 'active' )
         await refresh_tray()
     } catch( e ) {
         log( `Error in enable_limiter: `, e )
@@ -165,8 +169,10 @@ async function disable_limiter() {
 
     try {
         log( 'Disable limiter' )
-        await refresh_logo( 'inactive' )
-        await disable_battery_limiter()
+        await refresh_logo( 80, 'inactive' )
+        const percent_left = await disable_battery_limiter()
+        log( `Interface enabled limiter, percentage remaining: ${ percent_left }` )
+        await refresh_logo( percent_left, 'inactive' )
         await refresh_tray()
     } catch( e ) {
         log( `Error in disable_limiter: `, e )

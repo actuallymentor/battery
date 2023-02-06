@@ -58,6 +58,7 @@ const enable_battery_limiter = async () => {
         const status = await get_battery_status()
         await exec_async( `${ battery } maintain ${ status?.maintain_percentage || 80 }` )
         log( `enable_battery_limiter exec complete` )
+        return status?.percentage
     } catch( e ) {
         log( 'Error enabling battery: ', e )
         alert( e.message )
@@ -69,6 +70,8 @@ const disable_battery_limiter = async () => {
 
     try {
         await exec_async( `${ battery } maintain stop` )
+        const status = await get_battery_status()
+        return status?.percentage
     } catch( e ) {
         log( 'Error enabling battery: ', e )
         alert( e.message )
@@ -175,7 +178,9 @@ const get_battery_status = async () => {
         if( discharging ) daemon_state += `forcing discharge to 80%`
         else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
 
-        return [ battery_state, daemon_state, maintain_percentage ]
+        const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
+        log( 'Battery status: ', status_object )
+        return status_object
 
     } catch( e ) {
         log( `Error getting battery status: `, e )
