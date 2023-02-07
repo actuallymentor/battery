@@ -175,7 +175,7 @@ const get_battery_status = async () => {
 
         let battery_state = `${ percentage }% (${ remaining } remaining)`
         let daemon_state = ``
-        if( discharging ) daemon_state += `forcing discharge to 80%`
+        if( discharging ) daemon_state += `forcing discharge to ${ maintain_percentage || 80 }%`
         else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
 
         const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
