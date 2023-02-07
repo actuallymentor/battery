@@ -128,4 +128,4 @@ binfolder=/usr/local/bin
 sudo rm -v "$binfolder/smc" "$binfolder/battery"
 ```
 
-Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new) and I'll try to help you fix it.
+Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new/choose) and I'll try to help you fix it.
