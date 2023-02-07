@@ -179,7 +179,7 @@ const get_battery_status = async () => {
         else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
 
         const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
-        log( 'Battery status: ', status_object )
+        log( 'Battery status: ', JSON.stringify( status_object ) )
         return status_object
 
     } catch( e ) {

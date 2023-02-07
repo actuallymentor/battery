@@ -24,7 +24,7 @@ const get_active_logo = ( percent = 100 ) => {
     // Find which image size is the highest that is still under the current percentage
     let display_percentage = undefined
     image_percentages.map( percent_option => {
-        if( percent_option < percent ) display_percentage = percent_option
+        if( percent_option <= percent ) display_percentage = percent_option
     } )
     log( `Display percentage ${ display_percentage } based on ${ percent }` )
 
@@ -41,7 +41,7 @@ const get_inactive_logo = ( percent = 100 ) => {
     // Find which image size is the highest that is still under the current percentage
     let display_percentage = undefined
     image_percentages.map( percent_option => {
-        if( percent_option < percent ) display_percentage = percent_option
+        if( percent_option <= percent ) display_percentage = percent_option
     } )
     log( `Display percentage ${ display_percentage } based on ${ percent }` )
 

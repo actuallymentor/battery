@@ -1,4 +1,4 @@
-const { shell, app, Tray, Menu } = require( 'electron' )
+const { shell, app, Tray, Menu, powerMonitor } = require( 'electron' )
 const { enable_battery_limiter, disable_battery_limiter, update_or_install_battery, is_limiter_enabled, get_battery_status } = require('./battery')
 const { log, wait } = require("./helpers")
 const { get_inactive_logo, get_active_logo } = require('./theme')
@@ -114,6 +114,24 @@ const refresh_logo = async ( percent=80, force ) => {
     return tray.setImage( get_inactive_logo( percent ) )
 }
 
+// Periodic refreshing of icon and state
+let refresh_timer = undefined
+const set_interface_update_timer = async ( disable_only=false ) => {
+
+    if( !disable_only ) log( `Refreshing interface update timer` )
+    else log( `Disabling interface update timer due to disable_only set to `, disable_only )
+
+    // Calculate update speed
+    const { maintain_percentage=80, percentage } = await get_battery_status()
+    const percentage_delta = Math.floor( Math.abs( percentage - maintain_percentage ) )
+    const slow_refresh_interval_in_ms = 1000 * 60 * 10
+    const fast_refresh_interval_in_ms = 1000 * 60 * .5
+    const refresh_speed = ( percentage_delta < 5 || powerMonitor.onBatteryPower ) ? slow_refresh_interval_in_ms : fast_refresh_interval_in_ms
+    log( `Setting interface refresh speed to ${ refresh_speed / 1000 / 60 } minutes` )
+    if( refresh_timer ) clearInterval( refresh_timer )
+    if( !disable_only ) refresh_timer = setInterval( refresh_tray, refresh_speed )
+
+}
 
 /* ///////////////////////////////
 // Initialisation
@@ -144,6 +162,12 @@ async function set_initial_interface() {
     tray.on( 'mouse-enter', () => refresh_tray() )
     tray.on( 'click', () => refresh_tray() )
 
+    // Set refresh timer for the battery icon
+    set_interface_update_timer()
+    powerMonitor.on( 'lock-screen', () => set_interface_update_timer( true ) )
+    powerMonitor.on( 'unlock-screen', () => set_interface_update_timer() )
+    powerMonitor.on( 'suspend', () => set_interface_update_timer( true ) )
+    powerMonitor.on( 'resume', () => set_interface_update_timer() )
 
 }
 
