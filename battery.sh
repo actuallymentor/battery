@@ -107,6 +107,10 @@ function log() {
 
 }
 
+## ###############
+## Statistics
+## ###############
+
 # Re:discharging, we're using keys uncovered by @howie65: https://github.com/actuallymentor/battery/issues/20#issuecomment-1364540704
 # CH0I seems to be the "disable the adapter" key
 function enable_discharging() {

@@ -2,6 +2,9 @@ const { app } = require( 'electron' )
 const { alert } = require('./modules/helpers')
 const { set_initial_interface } = require( './modules/interface' )
 
+// Enable auto-updates
+require('update-electron-app')()
+
 /* ///////////////////////////////
 // Event listeners
 // /////////////////////////////*/

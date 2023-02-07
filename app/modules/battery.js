@@ -79,7 +79,7 @@ const disable_battery_limiter = async () => {
 
 }
 
-const update_or_install_battery = async () => {
+const initialize_battery = async () => {
 
     try {
 
@@ -140,6 +140,9 @@ const update_or_install_battery = async () => {
             await alert( `Battery background components installed successfully. You can find the battery limiter icon in the top right of your menu bar.` )
         }
 
+        // Basic user tracking on app open, run it in the background so it does not cause any delay for the user
+        if( online ) await exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )
+
 
     } catch( e ) {
         log( `Update/install error: `, e )
@@ -192,7 +195,7 @@ const get_battery_status = async () => {
 module.exports = {
     enable_battery_limiter,
     disable_battery_limiter,
-    update_or_install_battery,
+    initialize_battery,
     is_limiter_enabled,
     get_battery_status
 }

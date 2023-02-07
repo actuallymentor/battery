@@ -19,7 +19,7 @@ const get_active_logo = ( percent = 100 ) => {
     // Image sizes available in /assets/
     log( `Get active logo for ${ percent }` )
     percent = Number( percent )
-    const image_percentages = [ 20, 50, 80 ].sort()
+    const image_percentages = [ 20, 50, 80, 95 ].sort()
 
     // Find which image size is the highest that is still under the current percentage
     let display_percentage = undefined
@@ -36,7 +36,7 @@ const get_inactive_logo = ( percent = 100 ) => {
     // Image sizes available in /assets/
     log( `Get inactive logo for ${ percent }` )
     percent = Number( percent )
-    const image_percentages = [ 20, 50, 80 ].sort()
+    const image_percentages = [ 20, 50, 80, 95 ].sort()
 
     // Find which image size is the highest that is still under the current percentage
     let display_percentage = undefined
