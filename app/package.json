@@ -24,7 +24,7 @@
   "scripts": {
     "start": "development=true electron .",
     "build": "rm -rf ./dist/* && electron-builder build --mac --arm64",
-    "prepare": "husky install",
+    "prepare": "cd .. && husky install ./app/.husky",
     "lint": "eslint --fix modules main.js"
   },
   "repository": "https://github.com/actuallymentor/battery",

@@ -5,7 +5,7 @@ echo "\n🤖 [ precommit hook ] linting before committing..."
 
 
 # If errors, make it clear they cannot commit
-if ! lint_outcome=$( npm run lint ); then
+if ! lint_outcome=$( cd app && npm run lint ); then
     echo "🚨 [ precommit hook ] lint encountered blocking issues, fix them before committing\n"
     echo "$lint_outcome"
     exit 1
@@ -18,4 +18,4 @@ if echo $lint_outcome | grep -q "warning"; then
     exit 0
 fi
 
-echo "✅ [ precommit hook ] lint encountered no blocking issues\n"undefined
+echo "✅ [ precommit hook ] lint encountered no blocking issues\n"
