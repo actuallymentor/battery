@@ -1,5 +1,5 @@
 // Command line interactors
-const { exec } = require('node:child_process')
+const { exec } = require( 'node:child_process' )
 const sudo = require( 'sudo-prompt' )
 const { log, alert, wait } = require( './helpers' )
 const { USER } = process.env
@@ -34,7 +34,7 @@ const exec_async = ( command, timeout_in_ms=2000, throw_on_timeout=false ) => Pr
 ] )
 
 // Execute with sudo
-const exec_sudo_async = async command => new Promise( async ( resolve, reject ) => {
+const exec_sudo_async = async command => new Promise( ( resolve, reject ) => {
 
     const options = { name: 'Battery limiting utility', ...shell_options }
     log( `Sudo executing command: ${ command }` )
@@ -48,6 +48,33 @@ const exec_sudo_async = async command => new Promise( async ( resolve, reject ) 
 
 } )
 
+const get_battery_status = async () => {
+
+    try {
+        const message = await exec_async( `${ battery } status_csv` )
+        let [ percentage, remaining, charging, discharging, maintain_percentage ] = message.split( ',' )
+        maintain_percentage = maintain_percentage.trim()
+        maintain_percentage = maintain_percentage.length ? maintain_percentage : undefined
+        charging = charging == 'enabled'
+        discharging = discharging == 'discharging'
+        remaining = remaining.match( /\d{1,2}:\d{1,2}/ ) ? remaining : 'unknown'
+
+        let battery_state = `${ percentage }% (${ remaining } remaining)`
+        let daemon_state = ``
+        if( discharging ) daemon_state += `forcing discharge to ${ maintain_percentage || 80 }%`
+        else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
+
+        const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
+        log( 'Battery status: ', JSON.stringify( status_object ) )
+        return status_object
+
+    } catch ( e ) {
+        log( `Error getting battery status: `, e )
+        alert( `Battery limiter error: ${ e.message }` )
+    }
+
+}
+
 /* ///////////////////////////////
 // Battery cli functions
 // /////////////////////////////*/
@@ -59,7 +86,7 @@ const enable_battery_limiter = async () => {
         await exec_async( `${ battery } maintain ${ status?.maintain_percentage || 80 }` )
         log( `enable_battery_limiter exec complete` )
         return status?.percentage
-    } catch( e ) {
+    } catch ( e ) {
         log( 'Error enabling battery: ', e )
         alert( e.message )
     }
@@ -72,7 +99,7 @@ const disable_battery_limiter = async () => {
         await exec_async( `${ battery } maintain stop` )
         const status = await get_battery_status()
         return status?.percentage
-    } catch( e ) {
+    } catch ( e ) {
         log( 'Error enabling battery: ', e )
         alert( e.message )
     }
@@ -144,7 +171,7 @@ const initialize_battery = async () => {
         if( online ) await exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )
 
 
-    } catch( e ) {
+    } catch ( e ) {
         log( `Update/install error: `, e )
         alert( `Error installing battery limiter: ${ e.message }` )
     }
@@ -158,39 +185,13 @@ const is_limiter_enabled = async () => {
         const message = await exec_async( `${ battery } status` )
         log( `Limiter status message: `, message )
         return message.includes( 'being maintained at' )
-    } catch( e ) {
+    } catch ( e ) {
         log( `Error getting battery status: `, e )
         alert( `Battery limiter error: ${ e.message }` )
     }
 
 }
 
-const get_battery_status = async () => {
-
-    try {
-        const message = await exec_async( `${ battery } status_csv` )
-        let [ percentage, remaining, charging, discharging, maintain_percentage ] = message.split( ',' )
-        maintain_percentage = maintain_percentage.trim()
-        maintain_percentage = maintain_percentage.length ? maintain_percentage : undefined
-        charging = charging == 'enabled'
-        discharging = discharging == 'discharging'
-        remaining = remaining.match( /\d{1,2}:\d{1,2}/ ) ? remaining : 'unknown'
-
-        let battery_state = `${ percentage }% (${ remaining } remaining)`
-        let daemon_state = ``
-        if( discharging ) daemon_state += `forcing discharge to ${ maintain_percentage || 80 }%`
-        else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
-
-        const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
-        log( 'Battery status: ', JSON.stringify( status_object ) )
-        return status_object
-
-    } catch( e ) {
-        log( `Error getting battery status: `, e )
-        alert( `Battery limiter error: ${ e.message }` )
-    }
-
-}
 
 module.exports = {
     enable_battery_limiter,

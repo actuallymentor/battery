@@ -1,6 +1,6 @@
 {
   "name": "battery",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A battery charge limiter for M1/2 Mac devices",
   "main": "main.js",
   "build": {
@@ -23,7 +23,9 @@
   },
   "scripts": {
     "start": "development=true electron .",
-    "build": "rm -rf ./dist/* && electron-builder build --mac --arm64"
+    "build": "rm -rf ./dist/* && electron-builder build --mac --arm64",
+    "prepare": "husky install",
+    "lint": "eslint --fix modules main.js"
   },
   "repository": "https://github.com/actuallymentor/battery",
   "keywords": [
@@ -34,10 +36,15 @@
   "author": "actuallymentor",
   "license": "MIT",
   "devDependencies": {
+    "@babel/eslint-parser": "^7.19.1",
+    "@poap/skunk-linter": "^0.0.1",
     "dotenv": "^16.0.2",
     "electron": "^20.1.4",
     "electron-builder": "^23.3.3",
-    "electron-notarize": "^1.2.1"
+    "electron-notarize": "^1.2.1",
+    "eslint": "^8.33.0",
+    "eslint-plugin-react": "^7.32.2",
+    "husky": "^8.0.3"
   },
   "dependencies": {
     "sudo-prompt": "^9.2.1",

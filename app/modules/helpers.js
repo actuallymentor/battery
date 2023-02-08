@@ -2,6 +2,12 @@ const { promises: fs } = require( 'fs' )
 const { HOME } = process.env
 let has_alerted_user_no_home = false
 
+const { dialog } = require( 'electron' )
+const alert = ( message ) => dialog.showMessageBox( { message } )
+const wait = time_in_ms => new Promise( resolve => {
+    setTimeout( resolve, time_in_ms )
+} )
+
 const log = async ( ...messages ) => {
 
     // Log to console
@@ -12,21 +18,14 @@ const log = async ( ...messages ) => {
         if( HOME ) {
             await fs.mkdir( `${ HOME }/.battery/`, { recursive: true } )
             await fs.appendFile( `${ HOME }/.battery/gui.log`, `${ messages.join( '\n' ) }\n`, 'utf8' )
-        }
-        else if( !has_alerted_user_no_home ) {
+        } else if( !has_alerted_user_no_home ) {
             alert( `No HOME variable set, this should never happen` )
             has_alerted_user_no_home = true
         }
-    } catch( e ) {
+    } catch ( e ) {
         console.log( `Unable to write logs to file: `, e )
     }
 }
-
-const { dialog } = require('electron')
-const alert = ( message ) => dialog.showMessageBox( { message } )
-const wait = time_in_ms => new Promise( resolve => {
-    setTimeout( resolve, time_in_ms )
-} )
 
 module.exports = {
     log,

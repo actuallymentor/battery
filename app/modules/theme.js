@@ -1,7 +1,6 @@
-const { ipcMain, nativeTheme, nativeImage, app } = require('electron')
-const path = require('path')
-const { log } = require('./helpers')
-const { development } = process.env
+const { ipcMain, nativeTheme, nativeImage, app } = require( 'electron' )
+const path = require( 'path' )
+const { log } = require( './helpers' )
 const { resourcesPath } = process
 
 // Logo assets
@@ -51,9 +50,9 @@ const get_inactive_logo = ( percent = 100 ) => {
 /* ///////////////////////////////
 // Handle dark theme switching
 // /////////////////////////////*/
-ipcMain.handle('dark-mode:toggle', () => {
+ipcMain.handle( 'dark-mode:toggle', () => {
 
-    if ( nativeTheme.shouldUseDarkColors ) {
+    if( nativeTheme.shouldUseDarkColors ) {
         nativeTheme.themeSource = 'light'
     } else {
         nativeTheme.themeSource = 'dark'

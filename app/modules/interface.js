@@ -1,7 +1,7 @@
-const { shell, app, Tray, Menu, powerMonitor } = require( 'electron' )
-const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status } = require('./battery')
-const { log, wait } = require("./helpers")
-const { get_inactive_logo, get_active_logo } = require('./theme')
+const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
+const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status } = require( './battery' )
+const { log } = require( "./helpers" )
+const { get_inactive_logo, get_active_logo } = require( './theme' )
 
 /* ///////////////////////////////
 // Menu helpers
@@ -84,9 +84,30 @@ const generate_app_menu = async () => {
             }
             
         ] )
-    } catch( e ) {
+    } catch ( e ) {
         log( `Error generating menu: `, e )
     }
+
+}
+
+// Periodic refreshing of icon and state
+let refresh_timer = undefined
+const set_interface_update_timer = async ( disable_only=false ) => {
+
+    if( !disable_only ) log( `Refreshing interface update timer` )
+    else log( `Disabling interface update timer due to disable_only set to `, disable_only )
+
+    // Calculate update speed
+    const { maintain_percentage=80, percentage, charging } = await get_battery_status()
+    const percentage_delta = Math.floor( Math.abs( percentage - maintain_percentage ) )
+    const slow_refresh_interval_in_ms = 1000 * 60 * 10
+    const fast_refresh_interval_in_ms = 1000 * 60 * .5
+    const battery_full_and_charging = charging && percentage == 100
+    const refresh_speed =  percentage_delta < 5 || powerMonitor.onBatteryPower || battery_full_and_charging  ? slow_refresh_interval_in_ms : fast_refresh_interval_in_ms
+    log( `Setting interface refresh speed to ${ refresh_speed / 1000 / 60 } minutes` )
+    if( refresh_timer ) clearInterval( refresh_timer )
+    // eslint-disable-next-line no-use-before-define
+    if( !disable_only ) refresh_timer = setInterval( refresh_tray, refresh_speed )
 
 }
 
@@ -120,25 +141,6 @@ const refresh_logo = async ( percent=80, force ) => {
     return tray.setImage( get_inactive_logo( percent ) )
 }
 
-// Periodic refreshing of icon and state
-let refresh_timer = undefined
-const set_interface_update_timer = async ( disable_only=false ) => {
-
-    if( !disable_only ) log( `Refreshing interface update timer` )
-    else log( `Disabling interface update timer due to disable_only set to `, disable_only )
-
-    // Calculate update speed
-    const { maintain_percentage=80, percentage, charging } = await get_battery_status()
-    const percentage_delta = Math.floor( Math.abs( percentage - maintain_percentage ) )
-    const slow_refresh_interval_in_ms = 1000 * 60 * 10
-    const fast_refresh_interval_in_ms = 1000 * 60 * .5
-    const battery_full_and_charging = charging && percentage == 100
-    const refresh_speed = ( percentage_delta < 5 || powerMonitor.onBatteryPower || battery_full_and_charging ) ? slow_refresh_interval_in_ms : fast_refresh_interval_in_ms
-    log( `Setting interface refresh speed to ${ refresh_speed / 1000 / 60 } minutes` )
-    if( refresh_timer ) clearInterval( refresh_timer )
-    if( !disable_only ) refresh_timer = setInterval( refresh_tray, refresh_speed )
-
-}
 
 /* ///////////////////////////////
 // Initialisation
@@ -161,12 +163,13 @@ async function set_initial_interface() {
     await enable_battery_limiter()
 
     // Set tray styles
-    tray.setTitle('')
+    tray.setTitle( '' )
     await refresh_tray()
 
     // Set tray open listener
     tray.on( 'mouse-enter', () => refresh_tray() )
     tray.on( 'click', () => refresh_tray() )
+    nativeTheme.on( 'change', () => refresh_tray() )
 
     // Set refresh timer for the battery icon
     set_interface_update_timer()
@@ -189,7 +192,7 @@ async function enable_limiter() {
         log( `Interface enabled limiter, percentage remaining: ${ percent_left }` )
         await refresh_logo( percent_left, 'active' )
         await refresh_tray()
-    } catch( e ) {
+    } catch ( e ) {
         log( `Error in enable_limiter: `, e )
     }
 
@@ -204,7 +207,7 @@ async function disable_limiter() {
         log( `Interface enabled limiter, percentage remaining: ${ percent_left }` )
         await refresh_logo( percent_left, 'inactive' )
         await refresh_tray()
-    } catch( e ) {
+    } catch ( e ) {
         log( `Error in disable_limiter: `, e )
     }
 
