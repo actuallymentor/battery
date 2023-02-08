@@ -169,7 +169,7 @@ async function set_initial_interface() {
     // Set tray open listener
     tray.on( 'mouse-enter', () => refresh_tray() )
     tray.on( 'click', () => refresh_tray() )
-    nativeTheme.on( 'change', () => refresh_tray() )
+    nativeTheme.on( 'updated', () => refresh_tray() )
 
     // Set refresh timer for the battery icon
     set_interface_update_timer()
