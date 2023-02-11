@@ -34,13 +34,28 @@ const exec_async = ( command, timeout_in_ms=2000, throw_on_timeout=false ) => Pr
 ] )
 
 // Execute with sudo
-const exec_sudo_async = async command => new Promise( ( resolve, reject ) => {
+// const exec_sudo_async = async command => new Promise( ( resolve, reject ) => {
 
-    const options = { name: 'Battery limiting utility', ...shell_options }
-    log( `Sudo executing command: ${ command }` )
-    sudo.exec( command, options, ( error, stdout, stderr ) => {
+//     const options = { name: 'Battery limiting utility', ...shell_options }
+//     log( `Sudo executing command: ${ command }` )
+//     sudo.exec( command, options, ( error, stdout, stderr ) => {
 
-        if( error ) return reject( error )
+//         if( error ) return reject( error )
+//         if( stderr ) return reject( stderr )
+//         if( stdout ) return resolve( stdout )
+
+//     } )
+
+// } )
+
+const exec_sudo_async = command => new Promise( ( resolve, reject ) => {
+
+    log( `Executing ${ command } by running:` )
+    log( `osascript -e "do shell script \\"${ command }\\" with administrator privileges"` )
+
+    exec( `osascript -e "do shell script \\"${ command }\\" with administrator privileges"`, shell_options, ( error, stdout, stderr ) => {
+
+        if( error ) return reject( error, stderr, stdout )
         if( stderr ) return reject( stderr )
         if( stdout ) return resolve( stdout )
 
