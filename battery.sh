@@ -33,7 +33,7 @@ fi
 
 # CLI help message
 helpmessage="
-Battery CLI utility v1.0.1
+Battery CLI utility v1.0.7
 
 Usage:
 
