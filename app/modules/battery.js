@@ -1,6 +1,5 @@
 // Command line interactors
 const { exec } = require( 'node:child_process' )
-const sudo = require( 'sudo-prompt' )
 const { log, alert, wait } = require( './helpers' )
 const { USER } = process.env
 const path_fix = 'PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew:/usr/bin/'
@@ -34,20 +33,6 @@ const exec_async = ( command, timeout_in_ms=2000, throw_on_timeout=false ) => Pr
 ] )
 
 // Execute with sudo
-// const exec_sudo_async = async command => new Promise( ( resolve, reject ) => {
-
-//     const options = { name: 'Battery limiting utility', ...shell_options }
-//     log( `Sudo executing command: ${ command }` )
-//     sudo.exec( command, options, ( error, stdout, stderr ) => {
-
-//         if( error ) return reject( error )
-//         if( stderr ) return reject( stderr )
-//         if( stdout ) return resolve( stdout )
-
-//     } )
-
-// } )
-
 const exec_sudo_async = command => new Promise( ( resolve, reject ) => {
 
     log( `Executing ${ command } by running:` )
@@ -125,6 +110,10 @@ const initialize_battery = async () => {
 
     try {
 
+        // Check if dev mode
+        const { development, skipupdate } = process.env
+        if( development ) log( `Dev mode on, skip updates: ${ skipupdate }` )
+
         // Check for network
         const online = await Promise.race( [
             exec_async( `${ path_fix } curl icanhasip.com &> /dev/null` ).then( () => true ).catch( () => false ),
@@ -167,6 +156,7 @@ const initialize_battery = async () => {
         // If installed, update
         if( is_installed && visudo_complete ) {
             if( !online ) return log( `Skipping battery update because we are offline` )
+            if( skipupdate ) return log( `Skipping update due to environment variable` )
             log( `Updating battery...` )
             const result = await exec_async( `${ battery } update silent` )
             log( `Update result: `, result )

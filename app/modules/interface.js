@@ -32,7 +32,6 @@ const generate_app_menu = async () => {
                 click: enable_limiter
             },
             {
-                sublabel: 'thing',
                 label: `Disable ${ maintain_percentage }% battery limit`,
                 type: 'radio',
                 checked: !limiter_on,

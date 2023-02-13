@@ -12,7 +12,6 @@
         "**/*"
       ]
     },
-    "afterPack": "./build_hooks/afterPack.js",
     "afterSign": "./build_hooks/afterSign.js",
     "mac": {
       "hardenedRuntime": true,
@@ -23,6 +22,7 @@
   },
   "scripts": {
     "start": "development=true electron .",
+    "start:watch": "nodemon --watch . --exec 'skipupdate=true development=true electron .'",
     "build": "rm -rf ./dist/* && electron-builder build --mac --arm64",
     "prepare": "cd .. && husky install ./app/.husky",
     "lint": "eslint --fix modules main.js"
@@ -38,16 +38,16 @@
   "devDependencies": {
     "@babel/eslint-parser": "^7.19.1",
     "@poap/skunk-linter": "^0.0.1",
-    "dotenv": "^16.0.2",
-    "electron": "^20.1.4",
-    "electron-builder": "^23.3.3",
+    "dotenv": "^16.0.3",
+    "electron": "^23.0.0",
+    "electron-builder": "^23.6.0",
     "electron-notarize": "^1.2.1",
-    "eslint": "^8.33.0",
+    "eslint": "^8.34.0",
     "eslint-plugin-react": "^7.32.2",
-    "husky": "^8.0.3"
+    "husky": "^8.0.3",
+    "nodemon": "^2.0.20"
   },
   "dependencies": {
-    "sudo-prompt": "^9.2.1",
     "update-electron-app": "^2.0.1"
   }
 }
