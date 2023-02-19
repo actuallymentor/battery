@@ -1,5 +1,5 @@
 // Command line interactors
-const { app } = require('electron')
+const { app } = require( 'electron' )
 const { exec } = require( 'node:child_process' )
 const { log, alert, wait } = require( './helpers' )
 const { USER } = process.env
