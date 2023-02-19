@@ -48,6 +48,7 @@ const exec_sudo_async = command => new Promise( ( resolve, reject ) => {
 
 } )
 
+// Battery status checker
 const get_battery_status = async () => {
 
     try {
@@ -74,6 +75,9 @@ const get_battery_status = async () => {
     }
 
 }
+
+// Dependency checkers
+const git_installed = async () => exec_async( `${ path_fix } git | grep -q "usage: git"` ).then( () => true ).catch( () => false )
 
 /* ///////////////////////////////
 // Battery cli functions
@@ -122,12 +126,20 @@ const initialize_battery = async () => {
         log( `Internet online: ${ online }` )
 
         // Check if xcode build tools are installed
-        const xcode_installed = await exec_async( `${ path_fix } git | grep -q "usage: git"` ).catch( () => false )
+        const xcode_installed = await git_installed()
         if( !xcode_installed ) {
             alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation` )
             await exec_async( `${ path_fix } xcode-select --install` )
             alert( `Please restart the Battery app after Xcode finished installing` )
-            app.exit()
+
+            // Loop-check whether git is installed
+            let git_works = false
+            while( !git_works ) {
+                git_works = await git_installed()
+                await wait( 10 * 1000 )
+                log( `Git is ${ git_works ? `installed, continuing` : `not installed, waiting for git` }` )
+            }
+
         }
 
         // Check if battery is installed
