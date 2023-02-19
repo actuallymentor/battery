@@ -122,7 +122,7 @@ const initialize_battery = async () => {
         log( `Internet online: ${ online }` )
 
         // Check if xcode build tools are installed
-        const xcode_installed = await exec_async( `${ path_fix } which git` ).catch( () => false )
+        const xcode_installed = await exec_async( `${ path_fix } git | grep -q "usage: git"` ).catch( () => false )
         if( !xcode_installed ) {
             alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation` )
             await exec_async( `${ path_fix } xcode-select --install` )

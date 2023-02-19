@@ -1,9 +1,13 @@
 const { app } = require( 'electron' )
-const { alert } = require( './modules/helpers' )
+const { alert, log } = require( './modules/helpers' )
 const { set_initial_interface } = require( './modules/interface' )
 
 // Enable auto-updates
-require( 'update-electron-app' )()
+require( 'update-electron-app' )( {
+    logger: {
+        log: ( ...data ) => log( `[ update-electron-app ] `, ...data )
+    }
+} )
 
 /* ///////////////////////////////
 // Event listeners
