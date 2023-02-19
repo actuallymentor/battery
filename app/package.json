@@ -1,7 +1,7 @@
 {
   "name": "battery",
   "version": "1.0.9",
-  "description": "A battery charge limiter for M1/2 Mac devices",
+  "description": "A battery charge limiter for Apple silicon Mac devices",
   "main": "main.js",
   "build": {
     "appId": "co.palokaj.battery",

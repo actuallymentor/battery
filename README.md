@@ -131,4 +131,13 @@ sudo rm -v "$binfolder/smc" "$binfolder/battery"
 
 Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new/choose) and I'll try to help you fix it.
 
-![Privacy friendly user statistics pixel](https://unidentifiedanalytics.web.app/touch/?namespace=github-actuallymentor-battery)
+## A note to Little Snitch users
+
+This tool calls a number of urls, blocking all of them will only break auto-updates.
+
+1. `unidentifiedanalytics.web.app` is a self-made app that tracks app installations, I use it to see if enough people use the app to justify spending time on it.
+1. `icanhasip.com` is used to see if there is an internet connection
+1. `github.com` is used both as a liveness check and as the source of updates for the underlying command-line utility
+1. `electronjs.org` hosts the update server for the GUI
+
+All urls are called over `https` and so not leak data. Unidentified Analytics keeps track of unique ip addresses that open the app, but nothing else.
