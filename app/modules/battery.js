@@ -231,6 +231,7 @@ const initialize_battery = async () => {
         log( `Update/install error: `, e )
         alert( `Error installing battery limiter: ${ e.message }` )
         app.quit()
+        app.exit()
     }
 
 }
