@@ -1,4 +1,5 @@
 // Command line interactors
+const { app } = require('electron')
 const { exec } = require( 'node:child_process' )
 const { log, alert, wait } = require( './helpers' )
 const { USER } = process.env
@@ -76,31 +77,45 @@ const get_battery_status = async () => {
 }
 
 // Dependency checkers
-const git_installed = async () => exec_async( `${ path_fix } git | grep -q "usage: git"` ).then( () => true ).catch( () => false )
+// const git_installed = async () => exec_async( `${ path_fix } git | grep -q "usage: git"` ).then( () => true ).catch( () => false )
+const is_xcode_installed = async () => {
+
+    const cli_only = await exec_async( `${ path_fix } pkgutil --pkg-info=com.apple.pkg.CLTools_Executables | grep -q version` ).then( () => true ).catch( () => false )
+    const full_xcode = await exec_async( `${ path_fix } xcodebuild -version | grep -q version` ).then( () => true ).catch( () => false )
+
+    return cli_only || full_xcode
+
+}
+
 const install_xcode = async () => {
 
-    const wait_tries_until_timeout = 6 * 30
+    // Time to wait between checks for git
     const wait_time = 1000 * 10
+
+    // How many times to check before erroring out
+    // wait_time=10s * 6 * 60 = 1 hour 
+    const wait_tries_until_timeout = 6 * 60
 
     try {
 
-        await exec_async( `${ path_fix } xcode-select --install` ).then( () => true ).catch( e => {
-
+        exec_async( `${ path_fix } xcode-select --install` ).catch( e => {
+            log( `Xcode seems to have failed to install: `, e )
         } )
 
         // Loop-check whether git is installed
+        // there are too many edge cases to rely on awaiting the above exec_async
         let tries
-        let git_available = false
-        while( !git_available ) {
+        let xcode_available = false
+        while( !xcode_available ) {
 
             // Check whether to continue
             if( tries > wait_tries_until_timeout ) throw new Error( `installation timed out` )
             tries++
 
             // Check for git again and wait
-            git_available = await git_installed()
+            xcode_available = await is_xcode_installed()
             await wait( wait_time )
-            log( `Git is ${ git_available ? `installed, continuing` : `not installed, waiting for git` }` )
+            log( `Xcode is ${ xcode_available ? `installed, continuing` : `not installed, waiting for installation` }` )
 
         }
 
@@ -158,7 +173,8 @@ const initialize_battery = async () => {
         log( `Internet online: ${ online }` )
 
         // Check if xcode build tools are installed
-        const xcode_installed = await git_installed()
+        const xcode_installed = await is_xcode_installed()
+        if( xcode_installed ) log( `Xcode is installed` )
         if( !xcode_installed ) {
             alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation` )
             await install_xcode()
@@ -214,6 +230,7 @@ const initialize_battery = async () => {
     } catch ( e ) {
         log( `Update/install error: `, e )
         alert( `Error installing battery limiter: ${ e.message }` )
+        app.quit()
     }
 
 }
