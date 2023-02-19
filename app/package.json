@@ -1,6 +1,6 @@
 {
   "name": "battery",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "A battery charge limiter for M1/2 Mac devices",
   "main": "main.js",
   "build": {
@@ -39,7 +39,7 @@
     "@babel/eslint-parser": "^7.19.1",
     "@poap/skunk-linter": "^0.0.1",
     "dotenv": "^16.0.3",
-    "electron": "^23.0.0",
+    "electron": "^23.1.0",
     "electron-builder": "^23.6.0",
     "electron-notarize": "^1.2.1",
     "eslint": "^8.34.0",
