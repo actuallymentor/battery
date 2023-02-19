@@ -4,7 +4,6 @@ const { log, alert, wait } = require( './helpers' )
 const { USER } = process.env
 const path_fix = 'PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew:/usr/bin/'
 const battery = `${ path_fix } battery`
-const { app } = require( 'electron' )
 const shell_options = {
     shell: '/bin/bash',
     env: { ...process.env, PATH: `${ process.env.PATH }:/usr/local/bin` }
@@ -78,6 +77,39 @@ const get_battery_status = async () => {
 
 // Dependency checkers
 const git_installed = async () => exec_async( `${ path_fix } git | grep -q "usage: git"` ).then( () => true ).catch( () => false )
+const install_xcode = async () => {
+
+    const wait_tries_until_timeout = 6 * 30
+    const wait_time = 1000 * 10
+
+    try {
+
+        await exec_async( `${ path_fix } xcode-select --install` ).then( () => true ).catch( e => {
+
+        } )
+
+        // Loop-check whether git is installed
+        let tries
+        let git_available = false
+        while( !git_available ) {
+
+            // Check whether to continue
+            if( tries > wait_tries_until_timeout ) throw new Error( `installation timed out` )
+            tries++
+
+            // Check for git again and wait
+            git_available = await git_installed()
+            await wait( wait_time )
+            log( `Git is ${ git_available ? `installed, continuing` : `not installed, waiting for git` }` )
+
+        }
+
+    } catch ( e ) {
+        log( `Error installing xcode: `, e )
+        throw new Error( `Error installing xcode: ${ e.message }, please try again` )
+    }
+
+}
 
 /* ///////////////////////////////
 // Battery cli functions
@@ -129,16 +161,7 @@ const initialize_battery = async () => {
         const xcode_installed = await git_installed()
         if( !xcode_installed ) {
             alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation` )
-            await exec_async( `${ path_fix } xcode-select --install` )
-            alert( `Please restart the Battery app after Xcode finished installing` )
-
-            // Loop-check whether git is installed
-            let git_works = false
-            while( !git_works ) {
-                git_works = await git_installed()
-                await wait( 10 * 1000 )
-                log( `Git is ${ git_works ? `installed, continuing` : `not installed, waiting for git` }` )
-            }
+            await install_xcode()
 
         }
 
