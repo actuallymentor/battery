@@ -53,7 +53,7 @@ const get_battery_status = async () => {
 
     try {
         const message = await exec_async( `${ battery } status_csv` )
-        let [ percentage, remaining, charging, discharging, maintain_percentage ] = message.split( ',' )
+        let [ percentage='??', remaining='', charging='', discharging='', maintain_percentage='' ] = message?.split( ',' ) || []
         maintain_percentage = maintain_percentage.trim()
         maintain_percentage = maintain_percentage.length ? maintain_percentage : undefined
         charging = charging == 'enabled'
