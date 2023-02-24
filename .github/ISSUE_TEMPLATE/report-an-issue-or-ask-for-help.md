@@ -26,5 +26,7 @@ If applicable, add screenshots to help explain your problem. On a Mac you can cl
 **Error logs**
 If you know how a terminal works, please paste the content of `battery logs` here. This allows me to see potential errors on your device.
 
+Did `battery` fail to install? Use `tail -n 1000 ~/.battery/*/log` instead.
+
 **Additional context (optional)**
 Add any other context about the problem here.
