@@ -5,6 +5,8 @@
   "main": "main.js",
   "build": {
     "appId": "co.palokaj.battery",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "compression": "maximum",
     "extraFiles": {
       "from": "./assets",
       "to": "resources",
