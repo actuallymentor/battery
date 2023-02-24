@@ -6,6 +6,9 @@
   "build": {
     "appId": "co.palokaj.battery",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "dmg": {
+			"writeUpdateInfo": false
+		},
     "compression": "maximum",
     "extraFiles": {
       "from": "./assets",

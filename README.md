@@ -113,13 +113,15 @@ Usage:
     enable charging, remove the smc tool, and the battery script
 ```
 
-## Why does this exist?
+## FAQ & Troubleshooting
+
+### Why does this exist?
 
 I was looking at the Al Dente software package for battery limiting, but I found the [license too limiting](https://github.com/davidwernhart/AlDente/discussions/558) for a poweruser like myself.
 
 I would actually have preferred using Al Dente, but decided to create a command-line utility to replace it as a side-project on holiday. A colleague mentioned they would like a GUI, so I spend a few evenings setting up an Electron app. And voila, here we are.
 
-## "It's not working"
+### "It's not working"
 
 If you used one of the earlier versions of the `battery` utility, you may run into [path/permission issues](https://github.com/actuallymentor/battery/issues/8). This is not your fault but mine. To fix it:
 
@@ -131,7 +133,7 @@ sudo rm -v "$binfolder/smc" "$binfolder/battery"
 
 Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new/choose) and I'll try to help you fix it.
 
-## A note to Little Snitch users
+### A note to Little Snitch users
 
 This tool calls a number of urls, blocking all of them will only break auto-updates.
 
@@ -141,3 +143,11 @@ This tool calls a number of urls, blocking all of them will only break auto-upda
 1. `electronjs.org` hosts the update server for the GUI
 
 All urls are called over `https` and so not leak data. Unidentified Analytics keeps track of unique ip addresses that open the app, but nothing else.
+
+### How do I support this project?
+
+Do you know how to code? Open a pull-request for a feature with the label [help wanted (PR welcome)](https://github.com/actuallymentor/battery/labels/help%20wanted%20%28PR%20welcome%29).
+
+Do you have an awesome feature idea? [Add a feature request](https://github.com/actuallymentor/battery/issues/new/choose)
+
+Do you just want to keep me motivated to update the app? [Tweet at me](https://twitter.com/actuallymentor)
