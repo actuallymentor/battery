@@ -89,38 +89,13 @@ const is_xcode_installed = async () => {
 
 const install_xcode = async () => {
 
-    // Time to wait between checks for git
-    const wait_time = 1000 * 10
-
-    // How many times to check before erroring out
-    // wait_time=10s * 6 * 60 = 1 hour 
-    const wait_tries_until_timeout = 6 * 60
 
     try {
 
-        exec_async( `${ path_fix } xcode-select --install` ).catch( e => {
-            log( `Xcode seems to have failed to install: `, e )
-        } )
-
-        // Loop-check whether git is installed
-        // there are too many edge cases to rely on awaiting the above exec_async
-        let tries
-        let xcode_available = false
-        while( !xcode_available ) {
-
-            // Check whether to continue
-            if( tries > wait_tries_until_timeout ) throw new Error( `installation timed out` )
-            tries++
-
-            // Check for git again and wait
-            xcode_available = await is_xcode_installed()
-            await wait( wait_time )
-            log( `Xcode is ${ xcode_available ? `installed, continuing` : `not installed, waiting for installation` }` )
-
-        }
+        await exec_async( `${ path_fix } xcode-select --install` )
 
     } catch ( e ) {
-        log( `Error installing xcode: `, e )
+        log( `Error triggering xcode installation: `, e )
         throw new Error( `Error installing xcode: ${ e.message }, please try again` )
     }
 
@@ -176,9 +151,10 @@ const initialize_battery = async () => {
         const xcode_installed = await is_xcode_installed()
         if( xcode_installed ) log( `Xcode is installed` )
         if( !xcode_installed ) {
-            alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation` )
-            await install_xcode()
 
+            alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation.` )
+            
+            await install_xcode()
         }
 
         // Check if battery is installed
@@ -229,7 +205,7 @@ const initialize_battery = async () => {
 
     } catch ( e ) {
         log( `Update/install error: `, e )
-        alert( `Error installing battery limiter: ${ e.message }` )
+        await alert( `Error installing battery limiter: ${ e.message }` )
         app.quit()
         app.exit()
     }
