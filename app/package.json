@@ -9,7 +9,7 @@
     "dmg": {
 			"writeUpdateInfo": false
 		},
-    "compression": "maximum",
+    "compression": "normal",
     "extraFiles": {
       "from": "./assets",
       "to": "resources",

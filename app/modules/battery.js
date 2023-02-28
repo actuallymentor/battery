@@ -76,31 +76,6 @@ const get_battery_status = async () => {
 
 }
 
-// Dependency checkers
-// const git_installed = async () => exec_async( `${ path_fix } git | grep -q "usage: git"` ).then( () => true ).catch( () => false )
-const is_xcode_installed = async () => {
-
-    const cli_only = await exec_async( `${ path_fix } pkgutil --pkg-info=com.apple.pkg.CLTools_Executables | grep -q version` ).then( () => true ).catch( () => false )
-    const full_xcode = await exec_async( `${ path_fix } xcodebuild -version | grep -q version` ).then( () => true ).catch( () => false )
-
-    return cli_only || full_xcode
-
-}
-
-const install_xcode = async () => {
-
-
-    try {
-
-        await exec_async( `${ path_fix } xcode-select --install` )
-
-    } catch ( e ) {
-        log( `Error triggering xcode installation: `, e )
-        throw new Error( `Error installing xcode: ${ e.message }, please try again` )
-    }
-
-}
-
 /* ///////////////////////////////
 // Battery cli functions
 // /////////////////////////////*/
@@ -146,16 +121,6 @@ const initialize_battery = async () => {
             exec_async( `${ path_fix } curl github.com &> /dev/null` ).then( () => true ).catch( () => false )
         ] )
         log( `Internet online: ${ online }` )
-
-        // Check if xcode build tools are installed
-        const xcode_installed = await is_xcode_installed()
-        if( xcode_installed ) log( `Xcode is installed` )
-        if( !xcode_installed ) {
-
-            alert( `The Battery tool needs Xcode to be installed, please accept the terms and conditions for installation.` )
-            
-            await install_xcode()
-        }
 
         // Check if battery is installed
         const [
