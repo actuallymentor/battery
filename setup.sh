@@ -22,31 +22,22 @@ logfile=$configfolder/battery.log
 sudo echo "🔋 Starting battery installation"
 echo -e "[ 1 ] Superuser permissions acquired."
 
+# Note: github names zips by <reponame>-<branchname>.replace( '/', '-' )
+update_branch="main"
+in_zip_folder_name="battery-$update_branch"
 batteryfolder="$tempfolder/battery"
 echo "[ 2 ] Downloading latest version of battery CLI"
 rm -rf $batteryfolder
 mkdir -p $batteryfolder
-curl -sSL -o $batteryfolder/main.zip https://github.com/actuallymentor/battery/archive/refs/heads/main.zip
-unzip $batteryfolder/main.zip -d $batteryfolder
-cp -r $batteryfolder/battery-main/* $batteryfolder
-rm $batteryfolder/main.zip
-
-## ###############
-## OLD APPROACH
-## ###############
-# # Get smc source and build it
-# smcfolder="$tempfolder/smc"
-# echo "[ 3/10 ] Cloning fan control version of smc"
-# rm -rf $smcfolder
-# git clone --depth 1 https://github.com/hholtmann/smcFanControl.git $smcfolder &> /dev/null
-# cd $smcfolder/smc-command
-# echo "[ 4/10 ] Building smc from source"
-# make &> /dev/null
+curl -sSL -o $batteryfolder/repo.zip "https://github.com/actuallymentor/battery/archive/refs/heads/$update_branch.zip"
+unzip -qq $batteryfolder/repo.zip -d $batteryfolder
+cp -r $batteryfolder/$in_zip_folder_name/* $batteryfolder
+rm $batteryfolder/repo.zip
 
 # Move built file to bin folder
 echo "[ 3 ] Move smc to executable folder"
 sudo mkdir -p $binfolder
-sudo mv dist/smc $binfolder
+sudo mv $batteryfolder/dist/smc $binfolder
 sudo chmod u+x $binfolder/smc
 
 echo "[ 4 ] Writing script to $binfolder/battery for user $calling_user"
