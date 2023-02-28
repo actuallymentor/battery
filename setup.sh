@@ -38,6 +38,7 @@ rm $batteryfolder/repo.zip
 echo "[ 3 ] Move smc to executable folder"
 sudo mkdir -p $binfolder
 sudo mv $batteryfolder/dist/smc $binfolder
+sudo chown $calling_user $binfolder/smc
 sudo chmod 755 $binfolder/smc
 sudo chmod u+x $binfolder/smc
 
