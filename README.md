@@ -47,7 +47,7 @@ curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh |
 
 This will:
 
-1. Compile the `smc` tool from the [hholtmann/smcFanControl]( https://github.com/hholtmann/smcFanControl.git ) repository
+1. Download the precompiled `smc` tool in this repo (built from the [hholtmann/smcFanControl]( https://github.com/hholtmann/smcFanControl.git ) repository)
 2. Install `smc` to `/usr/local/bin`
 3. Install `battery` to `/usr/local/bin`
 
