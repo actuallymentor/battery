@@ -412,6 +412,16 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
+	if ! [[ "$setting" =~ ^-?[0-9]+$ ]]; then
+		echo -e "Error: $setting is not a valid setting for battery maintain. Perhaps you meant 'stop'?"
+		exit 1
+	fi
+
+	if ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
+		echo -e "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+		exit 1
+	fi
+
 	# Start maintenance script
 	log "Starting battery maintenance at $setting%"
 	nohup battery maintain_synchronous $setting >> $logfile &
