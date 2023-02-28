@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.1"
+BATTERY_CLI_VERSION="v1.0.2"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -215,16 +215,16 @@ fi
 
 # Update helper
 if [[ "$action" == "update" ]]; then
-	echo "This will run curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash"
-	if [[ ! "$setting" == "silent" ]]; then
-		echo "Press any key to continue"
-		read
-	fi
 	
 	# Check if we have the most recent version
 	if curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/battery.sh | grep -q "$BATTERY_CLI_VERSION"; then
 		echo "No need to update, offline version number matches remote version number"
 	else
+		echo "This will run curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash"
+		if [[ ! "$setting" == "silent" ]]; then
+			echo "Press any key to continue"
+			read
+		fi
 		curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash
 	fi
 	exit 0
