@@ -37,10 +37,10 @@ rm $batteryfolder/repo.zip
 # Move built file to bin folder
 echo "[ 3 ] Move smc to executable folder"
 sudo mkdir -p $binfolder
-sudo mv $batteryfolder/dist/smc $binfolder
+sudo cp $batteryfolder/dist/smc $binfolder
 sudo chown $calling_user $binfolder/smc
 sudo chmod 755 $binfolder/smc
-sudo chmod u+x $binfolder/smc
+sudo chmod +x $binfolder/smc
 
 echo "[ 4 ] Writing script to $binfolder/battery for user $calling_user"
 sudo cp $batteryfolder/battery.sh $binfolder/battery
@@ -49,7 +49,7 @@ echo "[ 5 ] Setting correct file permissions"
 # Set permissions for battery executables
 sudo chown $calling_user $binfolder/battery
 sudo chmod 755 $binfolder/battery
-sudo chmod u+x $binfolder/battery
+sudo chmod +x $binfolder/battery
 
 # Set permissions for logfiles
 mkdir -p $configfolder
