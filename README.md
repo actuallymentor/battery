@@ -101,7 +101,8 @@ Usage:
     eg: battery discharge 90
 
   battery visudo
-    instructions on how to make which utility exempt from sudo, highly recommended
+    ensure you don't need to call battery with sudo
+    This is already used in the setup script, so you should't need it.
 
   battery update
     update the battery utility to the latest version
