@@ -1,14 +1,14 @@
 {
   "name": "battery",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A battery charge limiter for Apple silicon Mac devices",
   "main": "main.js",
   "build": {
     "appId": "co.palokaj.battery",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "dmg": {
-			"writeUpdateInfo": false
-		},
+      "writeUpdateInfo": false
+    },
     "compression": "normal",
     "extraFiles": {
       "from": "./assets",

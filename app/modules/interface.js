@@ -1,7 +1,7 @@
 const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status } = require( './battery' )
 const { log } = require( "./helpers" )
-const { get_inactive_logo, get_active_logo } = require( './theme' )
+const { get_logo_template } = require( './theme' )
 
 /* ///////////////////////////////
 // Menu helpers
@@ -20,7 +20,7 @@ const generate_app_menu = async () => {
 
         // Set tray icon
         log( `Generate app menu percentage: ${ percentage }` )
-        tray.setImage( limiter_on ? get_active_logo( percentage ) : get_inactive_logo( percentage ) )
+        tray.setImage( get_logo_template( percentage, limiter_on ) )
 
         // Build menu
         return Menu.buildFromTemplate( [
@@ -132,12 +132,11 @@ const refresh_tray = async ( force_interactive_refresh = false ) => {
 const refresh_logo = async ( percent=80, force ) => {
 
     log( `Refresh logo for percentage ${ percent }, force ${ force }` )
-    if( force == 'active' ) return tray.setImage( get_active_logo( percent ) )
-    if( force == 'inactive' ) return tray.setImage( get_inactive_logo( percent ) )
+    if( force == 'active' ) return tray.setImage( get_logo_template( percent, true ) )
+    if( force == 'inactive' ) return tray.setImage( get_logo_template( percent, false ) )
 
     const is_enabled = await is_limiter_enabled()
-    if( is_enabled ) return tray.setImage( get_active_logo( percent ) )
-    return tray.setImage( get_inactive_logo( percent ) )
+    return tray.setImage( get_logo_template( percent, is_enabled ) )
 }
 
 
@@ -147,7 +146,7 @@ const refresh_logo = async ( percent=80, force ) => {
 async function set_initial_interface() {
 
     log( "Starting tray app" )
-    tray = new Tray( get_inactive_logo() )
+    tray = new Tray( get_logo_template( 100, true ) )
 
     // Set "loading" context
     tray.setTitle( '  updating...' )
