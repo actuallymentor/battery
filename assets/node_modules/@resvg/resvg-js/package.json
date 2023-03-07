@@ -1,0 +1,151 @@
+{
+  "name": "@resvg/resvg-js",
+  "version": "2.4.1",
+  "description": "A high-performance SVG renderer and toolkit, powered by Rust based resvg and napi-rs",
+  "main": "index.js",
+  "repository": "git@github.com:yisibl/resvg-js.git",
+  "license": "MPL-2.0",
+  "keywords": [
+    "resvg",
+    "svg",
+    "node-resvg",
+    "resvg-js",
+    "resvg-node",
+    "rust",
+    "svg2png",
+    "svg2img",
+    "svg to png"
+  ],
+  "files": [
+    "index.d.ts",
+    "index.js",
+    "js-binding.js",
+    "js-binding.d.ts"
+  ],
+  "napi": {
+    "name": "resvgjs",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-gnu",
+        "i686-pc-windows-msvc",
+        "armv7-unknown-linux-gnueabihf",
+        "aarch64-apple-darwin",
+        "aarch64-linux-android",
+        "arm-linux-androideabi",
+        "aarch64-unknown-linux-musl",
+        "aarch64-pc-windows-msvc"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "bench": "node -r @swc-node/register benchmark/bench.ts",
+    "bundle": "run-p 'bundle:*'",
+    "bundle:js": "node bundle.js",
+    "bundle:dts": "dts-bundle-generator --external-types -o wasm/index.d.ts wasm-binding.ts",
+    "build": "napi build --platform --release --js js-binding.js --dts js-binding.d.ts",
+    "build:debug": "napi build --platform --js js-binding.js --dts js-binding.d.ts",
+    "build:wasm": "run-s build:wasm-web copy-wasm bundle",
+    "build:wasm-web": "wasm-pack build --target web --out-name index --out-dir wasm/dist --release",
+    "copy-wasm": "copyfiles -f wasm/dist/index_bg.wasm ./wasm",
+    "playground": "copyfiles -f playground/index.html ./wasm",
+    "format": "run-p format:md format:json format:yaml format:source format:rs",
+    "format:md": "prettier --parser markdown --write './**/*.md'",
+    "format:json": "prettier --parser json --write './**/*.json'",
+    "format:svg": "prettier --parser html --write './**/*.svg'",
+    "format:rs": "cargo fmt",
+    "format:source": "prettier --config ./package.json --write './**/*.{js,ts,mjs}'",
+    "format:yaml": "prettier --parser yaml --write './**/*.{yml,yaml}'",
+    "lint": "eslint . -c ./.eslintrc.yml './**/*.{ts,tsx,js}'",
+    "lint:fix": "eslint . -c ./.eslintrc.yml './**/*.{ts,tsx,js}' --fix",
+    "prepublishOnly": "napi prepublish -t npm && esbuild js-binding.js --minify --allow-overwrite --outfile=js-binding.js",
+    "test": "ava __test__/**/index*.*",
+    "test:wasm": "ava __test__/**/wasm*.*",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.14.6",
+    "@swc-node/register": "^1.5.1",
+    "@types/node": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.30.3",
+    "@typescript-eslint/parser": "^5.30.3",
+    "ava": "^5.0.0",
+    "copyfiles": "^2.4.1",
+    "dts-bundle-generator": "^6.12.0",
+    "esbuild": "^0.17.0",
+    "eslint": "^8.19.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "eslint-plugin-sonarjs": "^0.18.0",
+    "husky": "^8.0.0",
+    "jimp-compact": "^0.16.1-2",
+    "lint-staged": "^12.5.0",
+    "node-fetch": "2.x",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^2.7.1",
+    "typescript": "^4.7.4"
+  },
+  "lint-staged": {
+    "*.@(js|ts|tsx)": [
+      "prettier --write",
+      "eslint -c .eslintrc.yml --fix"
+    ],
+    "*.@(yml|yaml)": [
+      "prettier --parser yaml --write"
+    ],
+    "*.md": [
+      "prettier --parser markdown --write"
+    ],
+    "*.json": [
+      "prettier --parser json --write"
+    ],
+    "*.svg": [
+      "prettier --parser html --write"
+    ]
+  },
+  "ava": {
+    "require": [
+      "@swc-node/register"
+    ],
+    "extensions": [
+      "ts"
+    ],
+    "timeout": "3m",
+    "environmentVariables": {
+      "TS_NODE_PROJECT": "./tsconfig.json"
+    }
+  },
+  "prettier": {
+    "printWidth": 120,
+    "semi": false,
+    "trailingComma": "all",
+    "singleQuote": true,
+    "arrowParens": "always",
+    "parser": "typescript"
+  },
+  "packageManager": "yarn@3.4.1",
+  "optionalDependencies": {
+    "@resvg/resvg-js-win32-x64-msvc": "2.4.1",
+    "@resvg/resvg-js-darwin-x64": "2.4.1",
+    "@resvg/resvg-js-linux-x64-gnu": "2.4.1",
+    "@resvg/resvg-js-linux-x64-musl": "2.4.1",
+    "@resvg/resvg-js-linux-arm64-gnu": "2.4.1",
+    "@resvg/resvg-js-win32-ia32-msvc": "2.4.1",
+    "@resvg/resvg-js-linux-arm-gnueabihf": "2.4.1",
+    "@resvg/resvg-js-darwin-arm64": "2.4.1",
+    "@resvg/resvg-js-android-arm64": "2.4.1",
+    "@resvg/resvg-js-android-arm-eabi": "2.4.1",
+    "@resvg/resvg-js-linux-arm64-musl": "2.4.1",
+    "@resvg/resvg-js-win32-arm64-msvc": "2.4.1"
+  }
+}

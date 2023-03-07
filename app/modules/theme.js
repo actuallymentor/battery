@@ -15,16 +15,24 @@ const get_logo_template = ( percent = 100, active ) => {
     // Image sizes available in /assets/
     log( `Get active logo for ${ percent }` )
     percent = Number( percent )
-    const image_percentages = [ 20, 50, 60, 70, 80, 95 ].sort()
+
+    // Image sizes available
+    // see assets/modules/compile-images.je for values
+    const percentage_increment_to_render = 5
+    const image_percentages = []
+    for ( let percentage = 0; percentage <= 100; percentage+=percentage_increment_to_render ) {
+        image_percentages.push( percentage )
+    }
+    image_percentages.sort()
 
     // Find which image size is the highest that is still under the current percentage
-    let display_percentage = undefined
+    let display_percentage = 20
     image_percentages.map( percent_option => {
         if( percent_option <= percent ) display_percentage = percent_option
     } )
     log( `Display percentage ${ display_percentage } based on ${ percent }` )
 
-    const image_path = path.join( asset_path, `/battery-${ active ? 'active' : 'inactive' }-${ display_percentage }Template.png` )
+    const image_path = path.join( asset_path, `/battery-${ active ? 'active' : 'inactive' }-${ display_percentage }-Template.png` )
     const exists = existsSync( image_path )
     log( `${ exists ? 'Found' : '🚨 Missing' } image: ${ image_path }` )
     return nativeImage.createFromPath( image_path )
