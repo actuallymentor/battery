@@ -20,7 +20,7 @@ const get_logo_template = ( percent = 100, active ) => {
     // see assets/modules/compile-images.je for values
     const percentage_increment_to_render = 5
     const image_percentages = []
-    for ( let percentage = 0; percentage <= 100; percentage+=percentage_increment_to_render ) {
+    for( let percentage = 0; percentage <= 100; percentage+=percentage_increment_to_render ) {
         image_percentages.push( percentage )
     }
     image_percentages.sort()
