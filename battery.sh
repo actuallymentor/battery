@@ -487,7 +487,17 @@ if [[ "$action" == "create_daemon" ]]; then
 "
 
 	mkdir -p "${daemon_path%/*}"
-	echo "$daemon_definition" > "$daemon_path"
+	# check if daemon already exists
+	if test -f "$daemon_path"; then
+		daemon_definition_difference=$(diff --brief --ignore-space-change --strip-trailing-cr --ignore-blank-lines  <( cat "$daemon_path" 2> /dev/null ) <(echo "$daemon_definition"))
+		if [[ "$daemon_definition_difference" != "" ]]; then
+			# daemon_definition changed: replace with new definitions
+			echo "$daemon_definition" > "$daemon_path"
+		fi
+	else
+		# daemon not available, create new launch deamon
+		echo "$daemon_definition" > "$daemon_path"
+	fi
 
 	exit 0
 
