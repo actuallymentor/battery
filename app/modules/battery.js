@@ -1,9 +1,9 @@
 // Command line interactors
 const { app } = require( 'electron' )
 const { exec } = require( 'node:child_process' )
-const { log, alert, wait } = require( './helpers' )
+const { log, alert, wait, confirm } = require( './helpers' )
 const { USER } = process.env
-const path_fix = 'PATH=$PATH:/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew:/usr/bin/'
+const path_fix = 'PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew'
 const battery = `${ path_fix } battery`
 const shell_options = {
     shell: '/bin/bash',
@@ -177,6 +177,22 @@ const initialize_battery = async () => {
 
 }
 
+const uninstall_battery = async () => {
+
+    try {
+        const confirmed = await confirm( `Are you sure you want to uninstall Battery?` )
+        if( !confirmed ) return false
+        await exec_sudo_async( `${ path_fix } sudo battery uninstall silent` )
+        await alert( `Battery is now uninstalled!` )
+        return true
+    } catch ( e ) {
+        log( 'Error uninstalling battery: ', e )
+        alert( `Error uninstalling battery: ${ e.message }` )
+        return false
+    }
+
+}
+
 
 const is_limiter_enabled = async () => {
 
@@ -197,5 +213,6 @@ module.exports = {
     disable_battery_limiter,
     initialize_battery,
     is_limiter_enabled,
-    get_battery_status
+    get_battery_status,
+    uninstall_battery
 }

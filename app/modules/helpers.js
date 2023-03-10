@@ -4,6 +4,10 @@ let has_alerted_user_no_home = false
 
 const { dialog } = require( 'electron' )
 const alert = ( message ) => dialog.showMessageBox( { message } )
+const confirm = ( message ) => dialog.showMessageBox( { message, buttons: [ "Confirm", "Cancel" ] } ).then( ( { response } ) => {
+    if( response == 0 ) return true
+    return false
+} )
 const wait = time_in_ms => new Promise( resolve => {
     setTimeout( resolve, time_in_ms )
 } )
@@ -30,5 +34,6 @@ const log = async ( ...messages ) => {
 module.exports = {
     log,
     alert,
-    wait
+    wait,
+    confirm
 }

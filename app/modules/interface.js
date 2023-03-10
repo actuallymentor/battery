@@ -1,5 +1,5 @@
 const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
-const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status } = require( './battery' )
+const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
 const { log } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
 
@@ -57,6 +57,19 @@ const generate_app_menu = async () => {
                     {
                         label: `Check for updates`,
                         click: () => shell.openExternal( `https://github.com/actuallymentor/battery/releases` )
+                    },
+                    {
+                        type: 'normal',
+                        label: `Uninstall Battery ${ app.getVersion() }`,
+                        click: async () => {
+                            const uninstalled = await uninstall_battery()
+                            if( !uninstalled ) return
+                            tray.destroy()
+                            app.quit()
+                        }
+                    },
+                    {
+                        type: 'separator'
                     },
                     {
                         label: `User manual`,
