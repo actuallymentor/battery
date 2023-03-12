@@ -487,19 +487,29 @@ if [[ "$action" == "create_daemon" ]]; then
 "
 
 	mkdir -p "${daemon_path%/*}"
+
 	# check if daemon already exists
 	if test -f "$daemon_path"; then
+
+		log "Daemon already exists, checking for differences"
 		daemon_definition_difference=$(diff --brief --ignore-space-change --strip-trailing-cr --ignore-blank-lines  <( cat "$daemon_path" 2> /dev/null ) <(echo "$daemon_definition"))
+		
 		# remove leading and trailing whitespaces
 		daemon_definition_difference=$(echo "$daemon_definition_difference" | xargs)
 		if [[ "$daemon_definition_difference" != "" ]]; then
-			# daemon_definition changed: replace with new definitions
+
+			log "daemon_definition changed: replace with new definitions"
 			echo "$daemon_definition" > "$daemon_path"
+
 		fi
 	else
+
 		# daemon not available, create new launch deamon
+		log "Daemon does not yet exist, creating daemon file at $daemon_path"
 		echo "$daemon_definition" > "$daemon_path"
+
 	fi
+
 	# enable daemon
 	launchctl enable "gui/$(id -u $USER)/com.battery.app"
 	exit 0
@@ -509,6 +519,7 @@ fi
 # Disable daemon
 if [[ "$action" == "disable_daemon" ]]; then
 
+	log "Disabling daemon at gui/$(id -u $USER)/com.battery.app"
 	launchctl disable "gui/$(id -u $USER)/com.battery.app"
 	exit 0
 
