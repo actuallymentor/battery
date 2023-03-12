@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.4"
+BATTERY_CLI_VERSION="v1.0.5"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -303,7 +303,7 @@ if [[ "$action" == "charge" ]]; then
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
 		log "Battery at $battery_percentage%"
-		caffeinate -i sleep 60
+		caffeinate -isu sleep 60
 		battery_percentage=$( get_battery_percentage )
 
 	done
@@ -327,7 +327,7 @@ if [[ "$action" == "discharge" ]]; then
 	while [[ "$battery_percentage" -gt "$setting" ]]; do
 
 		log "Battery at $battery_percentage% (target $setting%)"
-		caffeinate -disu sleep 60
+		caffeinate -isu sleep 60
 		battery_percentage=$( get_battery_percentage )
 
 	done
