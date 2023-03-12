@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.2"
+BATTERY_CLI_VERSION="v1.0.3"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -407,7 +407,7 @@ if [[ "$action" == "maintain" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2> /dev/null
 		rm $maintain_percentage_tracker_file 2> /dev/null
-		battery remove_daemon
+		battery disable_daemon
 		enable_charging
 		battery status
 		exit 0
@@ -487,8 +487,29 @@ if [[ "$action" == "create_daemon" ]]; then
 "
 
 	mkdir -p "${daemon_path%/*}"
-	echo "$daemon_definition" > "$daemon_path"
+	# check if daemon already exists
+	if test -f "$daemon_path"; then
+		daemon_definition_difference=$(diff --brief --ignore-space-change --strip-trailing-cr --ignore-blank-lines  <( cat "$daemon_path" 2> /dev/null ) <(echo "$daemon_definition"))
+		# remove leading and trailing whitespaces
+		daemon_definition_difference=$(echo "$daemon_definition_difference" | xargs)
+		if [[ "$daemon_definition_difference" != "" ]]; then
+			# daemon_definition changed: replace with new definitions
+			echo "$daemon_definition" > "$daemon_path"
+		fi
+	else
+		# daemon not available, create new launch deamon
+		echo "$daemon_definition" > "$daemon_path"
+	fi
+	# enable daemon
+	launchctl enable "gui/$(id -u $USER)/com.battery.app"
+	exit 0
 
+fi
+
+# Disable daemon
+if [[ "$action" == "disable_daemon" ]]; then
+
+	launchctl disable "gui/$(id -u $USER)/com.battery.app"
 	exit 0
 
 fi
