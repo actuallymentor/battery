@@ -165,7 +165,7 @@ const initialize_battery = async () => {
         }
 
         // Basic user tracking on app open, run it in the background so it does not cause any delay for the user
-        if( online ) await exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )
+        if( online ) exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )
 
 
     } catch ( e ) {
