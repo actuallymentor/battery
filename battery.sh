@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.6"
+BATTERY_CLI_VERSION="v1.0.7"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -358,7 +358,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	fi
 
 	# Check if the user requested that the battery maintenance first discharge to the desired level
-	if [[ "$subsetting" == "force_discharge" ]]; then
+	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
 		log "Triggering discharge to $setting before enabling charging limiter"
 		battery discharge "$setting"
