@@ -52,6 +52,7 @@ Usage:
 
   battery maintain LEVEL[1-100,stop]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
+	it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
     eg: battery maintain 80
     eg: battery maintain stop
 
