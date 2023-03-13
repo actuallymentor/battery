@@ -2,6 +2,7 @@
 const { app } = require( 'electron' )
 const { exec } = require( 'node:child_process' )
 const { log, alert, wait, confirm } = require( './helpers' )
+const { get_force_discharge_setting } = require( './settings' )
 const { USER } = process.env
 const path_fix = 'PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew'
 const battery = `${ path_fix } battery`
@@ -79,12 +80,14 @@ const get_battery_status = async () => {
 /* ///////////////////////////////
 // Battery cli functions
 // /////////////////////////////*/
-const enable_battery_limiter = async ( force_discharge=false ) => {
+const enable_battery_limiter = async () => {
+
 
     try {
         // Start battery maintainer
         const status = await get_battery_status()
-        await exec_async( `${ battery } maintain ${ status?.maintain_percentage || 80 }${ force_discharge ? ' --force-discharge' : '' }` )
+        const allow_force_discharge = get_force_discharge_setting()
+        await exec_async( `${ battery } maintain ${ status?.maintain_percentage || 80 }${ allow_force_discharge ? ' --force-discharge' : '' }` )
         log( `enable_battery_limiter exec complete` )
         return status?.percentage
     } catch ( e ) {

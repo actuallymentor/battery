@@ -1,12 +1,14 @@
 const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
-const { log } = require( "./helpers" )
+const { log, wait, confirm } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
+const { get_force_discharge_setting, toggle_force_discharge, update_force_discharge_setting } = require( './settings' )
 
 /* ///////////////////////////////
 // Menu helpers
 // /////////////////////////////*/
 let tray = undefined
+
 
 // Set interface to usable
 const generate_app_menu = async () => {
@@ -18,8 +20,11 @@ const generate_app_menu = async () => {
         // Check if limiter is on
         const limiter_on = await is_limiter_enabled()
 
+        // Check force discharge setting
+        const allow_discharge = get_force_discharge_setting()
+
         // Set tray icon
-        log( `Generate app menu percentage: ${ percentage }` )
+        log( `Generate app menu percentage: ${ percentage } (discharge ${ allow_discharge ? 'allowed' : 'disallowed' }, limited ${ limiter_on ? 'on' : 'off' })` )
         tray.setImage( get_logo_template( percentage, limiter_on ) )
 
         // Build menu
@@ -47,6 +52,12 @@ const generate_app_menu = async () => {
             {
                 label: `Power: ${ daemon_state }`,
                 enabled: false
+            },
+            {
+                label: `Allow force-discharging`,
+                type: 'checkbox',
+                checked: allow_discharge,
+                click: update_force_discharge_setting
             },
             {
                 type: 'separator'
@@ -224,6 +235,8 @@ async function disable_limiter() {
 
 }
 
+
 module.exports = {
-    set_initial_interface
+    set_initial_interface,
+    refresh_tray
 }

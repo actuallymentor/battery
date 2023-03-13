@@ -433,8 +433,8 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	# Start maintenance script
-	log "Starting battery maintenance at $setting%"
-	nohup battery maintain_synchronous $setting >> $logfile &
+	log "Starting battery maintenance at $setting% $subsetting"
+	nohup battery maintain_synchronous $setting $subsetting >> $logfile &
 
 	# Store pid of maintenance process and setting
 	echo $! > $pidfile
