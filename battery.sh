@@ -221,7 +221,7 @@ if [[ "$action" == "update" ]]; then
 	
 	# Check if we have the most recent version
 	if curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/battery.sh | grep -q "$BATTERY_CLI_VERSION"; then
-		echo "No need to update, offline version number matches remote version number"
+		echo "No need to update, offline version number $BATTERY_CLI_VERSION matches remote version number"
 	else
 		echo "This will run curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash"
 		if [[ ! "$setting" == "silent" ]]; then

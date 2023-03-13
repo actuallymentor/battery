@@ -9,7 +9,7 @@ const store = new Store( {
 const get_force_discharge_setting = () => {
     // Check if force discharge is on
     const force_discharge_if_needed = store.get( 'force_discharge_if_needed' )
-    log( `🔥 Force discharge setting: ${ typeof force_discharge_if_needed } ${ force_discharge_if_needed }` )
+    log( `Force discharge setting: ${ typeof force_discharge_if_needed } ${ force_discharge_if_needed }` )
     return force_discharge_if_needed === true
 }
 

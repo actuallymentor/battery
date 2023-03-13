@@ -54,16 +54,21 @@ const generate_app_menu = async () => {
                 enabled: false
             },
             {
-                label: `Allow force-discharging`,
-                type: 'checkbox',
-                checked: allow_discharge,
-                click: async () => {
-                    const success = await update_force_discharge_setting()
-                    if( limiter_on && success ) await restart_limiter()
-                }
+                type: 'separator'
             },
             {
-                type: 'separator'
+                label: `Advanced settings`,
+                submenu: [
+                    {
+                        label: `Allow force-discharging`,
+                        type: 'checkbox',
+                        checked: allow_discharge,
+                        click: async () => {
+                            const success = await update_force_discharge_setting()
+                            if( limiter_on && success ) await restart_limiter()
+                        }
+                    }
+                ]
             },
             {
                 label: `About v${ app.getVersion() }`,
