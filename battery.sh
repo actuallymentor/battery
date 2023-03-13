@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.5"
+BATTERY_CLI_VERSION="v1.0.6"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -103,6 +103,7 @@ ALL ALL = NOPASSWD: DISCHARGEON
 # Get parameters
 action=$1
 setting=$2
+subsetting=$3
 
 ## ###############
 ## Helpers
@@ -356,10 +357,15 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		fi
 	fi
 
-	# Before we start maintaining the battery level, first discharge to the target level
-	log "Triggering discharge to $setting before enabling charging limiter"
-	battery discharge "$setting"
-	log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
+	# Check if the user requested that the battery maintenance first discharge to the desired level
+	if [[ "$subsetting" == "force_discharge" ]]; then
+		# Before we start maintaining the battery level, first discharge to the target level
+		log "Triggering discharge to $setting before enabling charging limiter"
+		battery discharge "$setting"
+		log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
+	else
+		log "Not triggering discharge as it is not requested"
+	fi
 
 	# Start charging
 	battery_percentage=$( get_battery_percentage )
