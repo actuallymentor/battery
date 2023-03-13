@@ -79,12 +79,12 @@ const get_battery_status = async () => {
 /* ///////////////////////////////
 // Battery cli functions
 // /////////////////////////////*/
-const enable_battery_limiter = async () => {
+const enable_battery_limiter = async ( force_discharge=false ) => {
 
     try {
         // Start battery maintainer
         const status = await get_battery_status()
-        await exec_async( `${ battery } maintain ${ status?.maintain_percentage || 80 }` )
+        await exec_async( `${ battery } maintain ${ status?.maintain_percentage || 80 }${ force_discharge ? ' --force-discharge' : '' }` )
         log( `enable_battery_limiter exec complete` )
         return status?.percentage
     } catch ( e ) {
@@ -163,6 +163,9 @@ const initialize_battery = async () => {
             log( `Install result success `, result )
             await alert( `Battery background components installed successfully. You can find the battery limiter icon in the top right of your menu bar.` )
         }
+
+        // Recover old battery setting on boot (as we killed all old processes above)
+        await exec_async( `${ battery } maintain recover` )
 
         // Basic user tracking on app open, run it in the background so it does not cause any delay for the user
         if( online ) exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )

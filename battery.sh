@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.7"
+BATTERY_CLI_VERSION="v1.0.8"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -420,14 +420,16 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
-	if ! [[ "$setting" =~ ^-?[0-9]+$ ]]; then
-		echo -e "Error: $setting is not a valid setting for battery maintain. Perhaps you meant 'stop'?"
-		exit 1
-	fi
-
+	# Check if setting is value between 0 and 100
 	if ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
-		echo -e "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
-		exit 1
+
+		log "Called with $setting $action"
+		# If non 0-100 setting is not a special keyword, exit with an error.
+		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
+			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100, or an action keyword like 'stop' or 'recover'."
+			exit 1
+		fi
+
 	fi
 
 	# Start maintenance script
@@ -437,8 +439,12 @@ if [[ "$action" == "maintain" ]]; then
 	# Store pid of maintenance process and setting
 	echo $! > $pidfile
 	pid=$( cat "$pidfile" 2> /dev/null )
-	echo $setting > $maintain_percentage_tracker_file
-	log "Maintaining battery at $setting%"
+
+	if ! [[ "$setting" == "recover" ]]; then
+		log "Writing new setting $setting to $maintain_percentage_tracker_file"
+		echo $setting > $maintain_percentage_tracker_file
+		log "Maintaining battery at $setting%"
+	fi
 
 	# Enable the daemon that continues maintaining after reboot
 	battery create_daemon
