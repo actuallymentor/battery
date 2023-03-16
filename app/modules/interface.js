@@ -1,6 +1,6 @@
 const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
-const { log } = require( "./helpers" )
+const { log } = require( './helpers' )
 const { get_logo_template } = require( './theme' )
 const { get_force_discharge_setting, update_force_discharge_setting } = require( './settings' )
 
@@ -8,14 +8,15 @@ const { get_force_discharge_setting, update_force_discharge_setting } = require(
 // Menu helpers
 // /////////////////////////////*/
 let tray = undefined
+let maintain_percentage = 80
 
 
 // Set interface to usable
 const generate_app_menu = async () => {
 
     try {
-        // Get battery and daemon status
-        const { battery_state, daemon_state, maintain_percentage=80, percentage } = await get_battery_status()
+    // Get battery and daemon status
+        const { battery_state, daemon_state, percentage } = await get_battery_status()
 
         // Check if limiter is on
         const limiter_on = await is_limiter_enabled()
@@ -57,15 +58,79 @@ const generate_app_menu = async () => {
                 type: 'separator'
             },
             {
-                label: `Advanced settings`,
+                label: 'Advanced settings',
                 submenu: [
                     {
-                        label: `Allow force-discharging`,
+                        label: 'Allow force-discharging',
                         type: 'checkbox',
                         checked: allow_discharge,
                         click: async () => {
                             const success = await update_force_discharge_setting()
-                            if( limiter_on && success ) await restart_limiter()
+                            if( limiter_on && success ) {
+                                await restart_limiter()
+                            }
+                        }
+                    },
+                    {
+                        type: 'separator'
+                    },
+                    {
+                        label: `Charge level: ${ maintain_percentage }`,
+                        enabled: false
+                    },
+                    {
+                        label: 'Set 80%',
+                        type: 'checkbox',
+                        checked: maintain_percentage == 80,
+                        click: async () => {
+                            maintain_percentage = 80
+                            if( limiter_on ) {
+                                await restart_limiter()
+                            }
+                        }
+                    },
+                    {
+                        label: 'Set 60%',
+                        type: 'checkbox',
+                        checked: maintain_percentage == 60,
+                        click: async () => {
+                            maintain_percentage = 60
+                            if( limiter_on ) {
+                                await restart_limiter()
+                            }
+                        }
+                    },
+                    {
+                        label: 'Set 50%',
+                        type: 'checkbox',
+                        checked: maintain_percentage == 50,
+                        click: async () => {
+                            maintain_percentage = 50
+                            if( limiter_on ) {
+                                await restart_limiter()
+                            }
+                        }
+                    },
+                    {
+                        label: 'Set 40%',
+                        type: 'checkbox',
+                        checked: maintain_percentage == 40,
+                        click: async () => {
+                            maintain_percentage = 40
+                            if( limiter_on ) {
+                                await restart_limiter()
+                            }
+                        }
+                    },
+                    {
+                        label: 'Set 20%',
+                        type: 'checkbox',
+                        checked: maintain_percentage == 20,
+                        click: async () => {
+                            maintain_percentage = 20
+                            if( limiter_on ) {
+                                await restart_limiter()
+                            }
                         }
                     }
                 ]
@@ -74,15 +139,17 @@ const generate_app_menu = async () => {
                 label: `About v${ app.getVersion() }`,
                 submenu: [
                     {
-                        label: `Check for updates`,
-                        click: () => shell.openExternal( `https://github.com/actuallymentor/battery/releases` )
+                        label: 'Check for updates',
+                        click: () => shell.openExternal( 'https://github.com/actuallymentor/battery/releases' )
                     },
                     {
                         type: 'normal',
                         label: `Uninstall Battery ${ app.getVersion() }`,
                         click: async () => {
                             const uninstalled = await uninstall_battery()
-                            if( !uninstalled ) return
+                            if( !uninstalled ) {
+                                return
+                            }
                             tray.destroy()
                             app.quit()
                         }
@@ -91,18 +158,18 @@ const generate_app_menu = async () => {
                         type: 'separator'
                     },
                     {
-                        label: `User manual`,
-                        click: () => shell.openExternal( `https://github.com/actuallymentor/battery#readme` )
+                        label: 'User manual',
+                        click: () => shell.openExternal( 'https://github.com/actuallymentor/battery#readme' )
                     },
                     {
                         type: 'normal',
                         label: 'Command-line usage',
-                        click: () => shell.openExternal( `https://github.com/actuallymentor/battery#-command-line-version` )
+                        click: () => shell.openExternal( 'https://github.com/actuallymentor/battery#-command-line-version' )
                     },
                     {
                         type: 'normal',
                         label: 'Help and feature requests',
-                        click: () => shell.openExternal( `https://github.com/actuallymentor/battery/issues` )
+                        click: () => shell.openExternal( 'https://github.com/actuallymentor/battery/issues' )
                     }
                 ]
             },
@@ -113,39 +180,46 @@ const generate_app_menu = async () => {
                     app.quit()
                 }
             }
-            
+
         ] )
     } catch ( e ) {
-        log( `Error generating menu: `, e )
+        log( 'Error generating menu: ', e )
     }
 
 }
 
 // Periodic refreshing of icon and state
 let refresh_timer = undefined
-const set_interface_update_timer = async ( disable_only=false ) => {
+const set_interface_update_timer = async ( disable_only = false ) => {
 
-    if( !disable_only ) log( `Refreshing interface update timer` )
-    else log( `Disabling interface update timer due to disable_only set to `, disable_only )
+    if( !disable_only ) {
+        log( 'Refreshing interface update timer' )
+    } else {
+        log( 'Disabling interface update timer due to disable_only set to ', disable_only )
+    }
 
     // Calculate update speed
-    const { maintain_percentage=80, percentage, charging } = await get_battery_status()
+    const { percentage, charging } = await get_battery_status()
     const percentage_delta = Math.floor( Math.abs( percentage - maintain_percentage ) )
     const slow_refresh_interval_in_ms = 1000 * 60 * 10
     const fast_refresh_interval_in_ms = 1000 * 60 * .5
     const battery_full_and_charging = charging && percentage == 100
-    const refresh_speed =  percentage_delta < 5 || powerMonitor.onBatteryPower || battery_full_and_charging  ? slow_refresh_interval_in_ms : fast_refresh_interval_in_ms
+    const refresh_speed = percentage_delta < 5 || powerMonitor.onBatteryPower || battery_full_and_charging ? slow_refresh_interval_in_ms : fast_refresh_interval_in_ms
     log( `Setting interface refresh speed to ${ refresh_speed / 1000 / 60 } minutes` )
-    if( refresh_timer ) clearInterval( refresh_timer )
+    if( refresh_timer ) {
+        clearInterval( refresh_timer )
+    }
     // eslint-disable-next-line no-use-before-define
-    if( !disable_only ) refresh_timer = setInterval( refresh_tray, refresh_speed )
+    if( !disable_only ) {
+        refresh_timer = setInterval( refresh_tray, refresh_speed )
+    }
 
 }
 
 // Refresh tray with battery status values
 const refresh_tray = async ( force_interactive_refresh = false ) => {
 
-    log( "Refreshing tray icon..." )
+    log( 'Refreshing tray icon...' )
     const new_menu = await generate_app_menu()
     if( force_interactive_refresh ) {
         log( `Forcing interactive refresh ${ force_interactive_refresh }` )
@@ -154,18 +228,22 @@ const refresh_tray = async ( force_interactive_refresh = false ) => {
     }
     tray.setContextMenu( new_menu )
 
-    // Refresh timer 
-    log( `Resetting interface timer speed` )
+    // Refresh timer
+    log( 'Resetting interface timer speed' )
     set_interface_update_timer()
 
 }
 
 // Refresh app logo
-const refresh_logo = async ( percent=80, force ) => {
+const refresh_logo = async ( percent = 80, force ) => {
 
     log( `Refresh logo for percentage ${ percent }, force ${ force }` )
-    if( force == 'active' ) return tray.setImage( get_logo_template( percent, true ) )
-    if( force == 'inactive' ) return tray.setImage( get_logo_template( percent, false ) )
+    if( force == 'active' ) {
+        return tray.setImage( get_logo_template( percent, true ) )
+    }
+    if( force == 'inactive' ) {
+        return tray.setImage( get_logo_template( percent, false ) )
+    }
 
     const is_enabled = await is_limiter_enabled()
     return tray.setImage( get_logo_template( percent, is_enabled ) )
@@ -177,17 +255,17 @@ const refresh_logo = async ( percent=80, force ) => {
 // /////////////////////////////*/
 async function set_initial_interface() {
 
-    log( "Starting tray app" )
+    log( 'Starting tray app' )
     tray = new Tray( get_logo_template( 100, true ) )
 
     // Set "loading" context
     tray.setTitle( '  updating...' )
-    
-    log( "Tray app boot complete" )
 
-    log( "Triggering boot-time auto-update" )
+    log( 'Tray app boot complete' )
+
+    log( 'Triggering boot-time auto-update' )
     await initialize_battery()
-    log( "App initialisation process complete" )
+    log( 'App initialisation process complete' )
 
     // Start battery handler
     await enable_battery_limiter()
@@ -223,7 +301,7 @@ async function enable_limiter() {
         await refresh_logo( percent_left, 'active' )
         await refresh_tray()
     } catch ( e ) {
-        log( `Error in enable_limiter: `, e )
+        log( 'Error in enable_limiter: ', e )
     }
 
 }
@@ -238,7 +316,7 @@ async function disable_limiter() {
         await refresh_logo( percent_left, 'inactive' )
         await refresh_tray()
     } catch ( e ) {
-        log( `Error in disable_limiter: `, e )
+        log( 'Error in disable_limiter: ', e )
     }
 
 }
@@ -252,7 +330,7 @@ async function restart_limiter() {
         await refresh_logo( percent_left, 'active' )
         await refresh_tray()
     } catch ( e ) {
-        log( `Error in restart_limiter: `, e )
+        log( 'Error in restart_limiter: ', e )
     }
 
 }
