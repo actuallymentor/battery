@@ -188,7 +188,7 @@ function get_maintain_percentage() {
 ## ###############
 
 # Help message
-if [ -z "$action" ]; then
+if [ -z "$action" ] || [[ "$action" == "help" ]]; then
 	echo -e "$helpmessage"
 	exit 0
 fi
