@@ -26,11 +26,8 @@ const get_logo_template = ( percent = 100, active ) => {
     image_percentages.sort((a, b) => a - b)
 
     // Find which image size is the highest that is still under the current percentage
-    let display_percentage = 20
-    image_percentages.map( percent_option => {
-        if( percent_option <= percent ) display_percentage = percent_option
-    } )
-    log( `Display percentage ${ display_percentage } based on ${ percent }` )
+    let display_percentage = image_percentages.findLast((p) => p < percent)
+    log(`Display percentage ${display_percentage} based on ${percent}`)
 
     const image_path = path.join( asset_path, `/battery-${ active ? 'active' : 'inactive' }-${ display_percentage }-Template.png` )
     const exists = existsSync( image_path )
