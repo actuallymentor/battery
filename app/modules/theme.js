@@ -23,7 +23,7 @@ const get_logo_template = ( percent = 100, active ) => {
     for( let percentage = 0; percentage <= 100; percentage+=percentage_increment_to_render ) {
         image_percentages.push( percentage )
     }
-    image_percentages.sort()
+    image_percentages.sort((a, b) => a - b)
 
     // Find which image size is the highest that is still under the current percentage
     let display_percentage = 20
