@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.10"
+BATTERY_CLI_VERSION="v1.0.11"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -188,7 +188,7 @@ function get_maintain_percentage() {
 ## ###############
 
 # Help message
-if [ -z "$action" ]; then
+if [ -z "$action" ] || [[ "$action" == "help" ]]; then
 	echo -e "$helpmessage"
 	exit 0
 fi
