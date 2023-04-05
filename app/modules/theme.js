@@ -19,15 +19,8 @@ const get_logo_template = ( percent = 100, active ) => {
     // Image sizes available
     // see assets/modules/compile-images.je for values
     const percentage_increment_to_render = 5
-    const image_percentages = []
-    for( let percentage = 0; percentage <= 100; percentage+=percentage_increment_to_render ) {
-        image_percentages.push( percentage )
-    }
-    image_percentages.sort((a, b) => a - b)
-
-    // Find which image size is the highest that is still under the current percentage
-    let display_percentage = image_percentages.findLast((p) => p < percent)
-    log(`Display percentage ${display_percentage} based on ${percent}`)
+    const display_percentage = Math.floor( percent / percentage_increment_to_render ) * percentage_increment_to_render
+    log( `Display percentage ${ display_percentage } based on ${ percent }` )
 
     const image_path = path.join( asset_path, `/battery-${ active ? 'active' : 'inactive' }-${ display_percentage }-Template.png` )
     const exists = existsSync( image_path )
