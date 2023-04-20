@@ -352,6 +352,8 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		if [[ $maintain_percentage ]]; then
 			log "Recovering maintenance percentage $maintain_percentage"
 			setting=$( echo $maintain_percentage)
+			battery maintain $setting
+			read 
 		else
 			log "No setting to recover, exiting"
 			exit 0
@@ -531,7 +533,6 @@ fi
 
 # Disable daemon
 if [[ "$action" == "disable_daemon" ]]; then
-
 	log "Disabling daemon at gui/$(id -u $USER)/com.battery.app"
 	launchctl disable "gui/$(id -u $USER)/com.battery.app"
 	exit 0
@@ -540,7 +541,6 @@ fi
 
 # Remove daemon
 if [[ "$action" == "remove_daemon" ]]; then
-
 	rm $daemon_path 2> /dev/null
 	exit 0
 
