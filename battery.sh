@@ -13,7 +13,8 @@ PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
 ## Variables
 ## ###############
 binfolder=/usr/local/bin
-visudo_path=/private/etc/sudoers.d/battery
+visudo_folder=/private/etc/sudoers.d
+visudo_file=${visudo_folder}/battery
 configfolder=$HOME/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
@@ -90,7 +91,7 @@ Usage:
 # Visudo instructions
 visudoconfig="
 # Visudo settings for the battery utility installed from https://github.com/actuallymentor/battery
-# intended to be placed in $visudo_path on a mac
+# intended to be placed in $visudo_file on a mac
 Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0C -w 02, $binfolder/smc -k CH0B -r, $binfolder/smc -k CH0C -r
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
 Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
@@ -198,10 +199,13 @@ if [[ "$action" == "visudo" ]]; then
 	echo -e "$visudoconfig" >> $configfolder/visudo.tmp
 	sudo visudo -c -f $configfolder/visudo.tmp &> /dev/null
 	if [ "$?" -eq "0" ]; then
-		sudo cp $configfolder/visudo.tmp $visudo_path
+		if ! test -d "$visudo_folder"; then
+			sudo mkdir -p "$visudo_folder"
+		fi
+		sudo cp $configfolder/visudo.tmp $visudo_file
 		rm $configfolder/visudo.tmp
 	fi
-	sudo chmod 440 $visudo_path
+	sudo chmod 440 $visudo_file
 	exit 0
 fi
 
