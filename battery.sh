@@ -20,6 +20,7 @@ pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 maintain_percentage_tracker_file=$configfolder/maintain.percentage
 daemon_path=$HOME/Library/LaunchAgents/battery.plist
+adapter_wattage=$(/usr/sbin/system_profiler SPPowerDataType | grep Wattage | sed 's/[^0-9]*//g')
 
 ## ###############
 ## Housekeeping
@@ -395,7 +396,12 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 		fi
 
-		sleep 60
+		# Check more often if using fast charger
+		if (($adapter_wattage > 67)); then
+  		sleep 30
+		else
+  		sleep 60
+		fi
 
 		battery_percentage=$( get_battery_percentage )
 
