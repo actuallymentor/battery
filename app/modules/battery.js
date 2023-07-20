@@ -153,7 +153,7 @@ const initialize_battery = async () => {
             if( !online ) return log( `Skipping battery update because we are offline` )
             if( skipupdate ) return log( `Skipping update due to environment variable` )
             log( `Updating battery...` )
-            const result = await exec_async( `${ battery } update silent` )
+            const result = await exec_async( `${ battery } update silent` ).catch( e => e )
             log( `Update result: `, result )
         }
 
