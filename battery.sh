@@ -96,10 +96,16 @@ Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
 Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
 Cmnd_Alias      DISCHARGEON = $binfolder/smc -k CH0I -w 01
+Cmnd_Alias      NATIVELIMITOFF = $binfolder/smc -k CHWA -w 00
+Cmnd_Alias      NATIVELIMITON = $binfolder/smc -k CHWA -w 01
+Cmnd_Alias      NATIVELIMITREAD = $binfolder/smc -k CHWA -r
 ALL ALL = NOPASSWD: BATTERYOFF
 ALL ALL = NOPASSWD: BATTERYON
 ALL ALL = NOPASSWD: DISCHARGEOFF
 ALL ALL = NOPASSWD: DISCHARGEON
+ALL ALL = NOPASSWD: NATIVELIMITOFF
+ALL ALL = NOPASSWD: NATIVELIMITON
+ALL ALL = NOPASSWD: NATIVELIMITREAD
 "
 
 # Get parameters
@@ -148,6 +154,78 @@ function disable_charging() {
 	sudo smc -k CH0B -w 02
 	sudo smc -k CH0C -w 02
 }
+
+# Apple Silicon laptops with firmware > 13.0 have a native charge threshold that
+# does not required any userspace daemon running.
+# This native limit works even when the laptop is sleeping or powered off therefore
+# it is preferable to the userspace daemon.
+# Nonetheless, it only works with fixed thresholds (80% as upper limit and 70% as
+# lower limit).
+#
+# Thanks to @marcan for the implementation details in the Asahi Linux kernel:
+# https://github.com/AsahiLinux/linux/commit/107ed86e21d1522d5d5d9d629f1d9c371e37df7f#diff-6b2c1b57b60e2829a9973ea707f596a3ff85fa787eca5d6d3b8ac79ebdd0381cR453
+# https://oftc.irclog.whitequark.org/asahi-dev/2023-04-18#32076880
+
+# CHWA key is the one used to enable/disable the native limit. 01 = 80% limit, 00 = no limit
+chwa_key="$( sudo smc -r -k CHWA | grep -q "no data" && echo "unavailable" || echo "available" )"
+
+function enable_native_limit() {
+	log " Enabling native limit at 80%"
+	sudo smc -k CHWA -w 01
+}
+
+function disable_native_limit() {
+	log " Disabling native limit"
+	sudo smc -k CHWA -w 00
+}
+
+function get_native_limit_status() {
+	if [[ "$chwa_key" == "unavailable" ]]; then
+		echo "disabled"
+	else
+		hex_status=$( smc -k CHWA -r | awk '{print $4}' | sed s:\):: )
+		if [[ "$hex_status" == "00" ]]; then
+			echo "disabled"
+		else
+			echo "enabled"
+		fi
+	fi
+}
+
+function get_native_limit() {
+	if [[ "$(get_native_limit_status)" == "enabled" ]]; then
+		echo "80"
+	else
+		echo ""
+	fi
+}
+
+# both the daemon and the native limit can be set at the same time so this function
+# returns the lowest of the two.
+# When both are set, the daemonic limit is the one that is used while the mac is awake
+# and the native limit is the one that is used when the mac is sleeping or powered off.
+function get_actual_limit() {
+	native=$( get_native_limit )
+	daemon=$( get_maintain_percentage )
+
+	# if both are set, return the lowest
+	if [[ ! -z "$native" ]] && [[ ! -z "$daemon" ]]; then
+		if [[ "$native" -lt "$daemon" ]]; then
+			echo "$native"
+		else
+			echo "$daemon"
+		fi
+	# if only one is set, return that one
+	elif [[ ! -z "$native" ]]; then
+		echo "$native"
+	elif [[ ! -z "$daemon" ]]; then
+		echo "$daemon"
+	else
+		# if neither is set, return nothing
+		echo ""
+	fi
+}
+
 
 function get_smc_charging_status() {
 	hex_status=$( smc -k CH0B -r | awk '{print $4}' | sed s:\):: )
@@ -362,6 +440,41 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		fi
 	fi
 
+	# if maintain percentage is 80 and CHWA is available, exit. This daemon is not needed.
+	# This condition could happen in some rare cases, for example when the daemon is started before
+	# updating the tool or before CHWA is available.
+	if [[ "$chwa_key" == "available" ]]; then 
+		if [[ "$setting" == "80" ]]; then
+			log "Skipping daemon start as CHWA is available and maintain percentage is $setting"
+			# Disable daemon
+			battery maintain stop
+			battery disable_daemon
+			# Activate the native limit in case this is the first restart after the update of MacOs
+			# or of this tool
+			if [[ "$( get_native_limit_status )" == "disabled" ]]; then
+				enable_native_limit
+			fi
+			exit 0
+		else
+			# If $setting is below 80 activate the native charging limiter as a mixed strategy. At
+			# least during sleep it will get as high as 80%, closer to the desired $setting than 100%.
+			if [[ "$setting" -lt "80" ]]; then
+				log "Using mixed limiter (daemon: $setting% / native: 80%)"
+				if [[ "$( get_native_limit_status )" == "disabled" ]]; then
+					enable_native_limit
+				fi
+			else
+				# Disabling native charging limiter if the limit > 80% as it would interfere with
+				# the daemon.
+				if [[ "$( get_native_limit_status )" == "enabled" ]]; then
+					disable_native_limit
+				fi
+			fi
+			
+			
+		fi
+	fi
+
 	# Check if the user requested that the battery maintenance first discharge to the desired level
 	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
@@ -405,21 +518,30 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 fi
 
+function kill_daemon() {
+	pid=$( cat "$pidfile" 2> /dev/null )
+	kill $pid &> /dev/null
+	rm $pidfile 2> /dev/null
+	rm $maintain_percentage_tracker_file 2> /dev/null
+}
+
 # Asynchronous battery level maintenance
 if [[ "$action" == "maintain" ]]; then
 
-	# Kill old process silently
-	if test -f "$pidfile"; then
-		pid=$( cat "$pidfile" 2> /dev/null )
-		kill $pid &> /dev/null
-	fi
+	if [[ "$setting" == "stop" || "$setting" == "100" ]]; then
+		if test -f "$pidfile"; then
+			log "Killing running maintain daemons & enabling charging as default state"
+			kill_daemon
+			battery disable_daemon
+		fi
 
-	if [[ "$setting" == "stop" ]]; then
-		log "Killing running maintain daemons & enabling charging as default state"
-		rm $pidfile 2> /dev/null
-		rm $maintain_percentage_tracker_file 2> /dev/null
-		battery disable_daemon
 		enable_charging
+
+		if [[ "$( get_native_limit_status )" == "enabled" ]]; then
+			log "Native charging limiter is enabled, disabling"
+			disable_native_limit
+		fi
+
 		battery status
 		exit 0
 	fi
@@ -436,8 +558,25 @@ if [[ "$action" == "maintain" ]]; then
 
 	fi
 
+	# Use CHWA method if available an 80% is used (it's the only level supported by CHWA)
+	if [[ "$chwa_key" == "available" ]]; then 
+		if [[ "$setting" == "80" ]]; then
+			if test -f "$pidfile"; then
+				kill_daemon
+				battery disable_daemon
+				log "Killing and disabling daemon as native limiter is available"
+			fi
+			enable_native_limit
+			exit 0
+		else
+			log "Native charging limiter is available but only supports 80% limit. Consider using 80% because it works even during sleep."
+		fi
+	fi
+
+	kill_daemon
+
 	# Start maintenance script
-	log "Starting battery maintenance at $setting% $subsetting"
+	log "Starting daemonic battery maintenance at $setting% $subsetting"
 	nohup battery maintain_synchronous $setting $subsetting >> $logfile &
 
 	# Store pid of maintenance process and setting
@@ -460,11 +599,37 @@ fi
 
 # Status logger
 if [[ "$action" == "status" ]]; then
+	daemon_limit=$( get_maintain_percentage )
+	native_limit=$( get_native_limit )
+	actual_limit=$( get_actual_limit )
 
 	log "Battery at $( get_battery_percentage  )% ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
-	if test -f $pidfile; then
-		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
-		log "Your battery is currently being maintained at $maintain_percentage%"
+
+	if [[ ! -z "$actual_limit" ]]; then
+		limit_status="Battery maintenance is set to $actual_limit%"
+		# if both daemon and native limiters are enabled, show both as: " using mixed daemon/native limiter. While your mac is awake the limit will be $setting% and during sleep it will be $native_limit%."
+		if [[ ! -z "$daemon_limit" ]] && [[ ! -z "$native_limit" ]]; then
+			limit_status="$limit_status using mixed daemon/native limiter ($daemon_limit% while your mac is awake / $native_limit% during sleep)."
+		elif [[ ! -z "$native_limit" ]]; then
+			limit_status="$limit_status using native limiter."
+		elif [[ ! -z "$daemon_limit" ]]; then
+			limit_status="$limit_status using daemon limiter (only works while your mac is awake)."
+		else
+			limit_status="$limit_status."
+		fi
+
+		
+		if [[ "$chwa_key" == "available" ]] && [[ ! -z "$daemon_limit" ]]; then
+			limit_status="$limit_status Consider using native limit of 80% instead of $daemon_limit% to improve battery health."
+		fi
+	fi
+
+	if [[ "$chwa_key" != "available" ]]; then
+		limit_status="$limit_status Consider upgrading to macOS to enable native battery limiter. It works even during sleep."
+	fi
+
+	if [[ ! -z "$limit_status" ]]; then
+		log "$limit_status"
 	fi
 	exit 0
 
