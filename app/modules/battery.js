@@ -120,8 +120,8 @@ const initialize_battery = async () => {
 
         // Check for network
         const online = await Promise.race( [
-            exec_async( `${ path_fix } curl -k https://icanhazip.com &> /dev/null` ).then( () => true ).catch( () => false ),
-            exec_async( `${ path_fix } curl -k https://github.com &> /dev/null` ).then( () => true ).catch( () => false )
+            exec_async( `${ path_fix } curl -I https://icanhazip.com &> /dev/null` ).then( () => true ).catch( () => false ),
+            exec_async( `${ path_fix } curl -I https://github.com &> /dev/null` ).then( () => true ).catch( () => false )
         ] )
         log( `Internet online: ${ online }` )
 
