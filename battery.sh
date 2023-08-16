@@ -248,7 +248,7 @@ if [[ "$action" == "uninstall" ]]; then
     enable_charging
 	disable_discharging
 	battery remove_daemon
-    sudo rm -v "$binfolder/smc" "$binfolder/battery"
+    sudo rm -v "$binfolder/smc" "$binfolder/battery" $visudo_file
 	pkill -f "/usr/local/bin/battery.*"
     exit 0
 fi
