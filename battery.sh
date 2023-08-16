@@ -417,7 +417,6 @@ if [[ "$action" == "maintain" ]]; then
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2> /dev/null
-		rm $maintain_percentage_tracker_file 2> /dev/null
 		battery disable_daemon
 		enable_charging
 		battery status
