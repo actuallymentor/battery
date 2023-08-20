@@ -245,13 +245,13 @@ if [[ "$action" == "uninstall" ]]; then
 		echo "Press any key to continue"
 		read
 	fi
-    enable_charging
+  enable_charging
 	disable_discharging
 	battery remove_daemon
-    sudo rm -v "$binfolder/smc" "$binfolder/battery" 
+  sudo rm -v "$binfolder/smc" "$binfolder/battery" $visudo_file
 	sudo rm -v -r "$configfolder"
 	pkill -f "/usr/local/bin/battery.*"
-    exit 0
+  exit 0
 fi
 
 # Charging on/off controller
