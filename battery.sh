@@ -248,7 +248,8 @@ if [[ "$action" == "uninstall" ]]; then
     enable_charging
 	disable_discharging
 	battery remove_daemon
-    sudo rm -v "$binfolder/smc" "$binfolder/battery"
+    sudo rm -v "$binfolder/smc" "$binfolder/battery" 
+	sudo rm -v -r "$configfolder"
 	pkill -f "/usr/local/bin/battery.*"
     exit 0
 fi
@@ -417,7 +418,6 @@ if [[ "$action" == "maintain" ]]; then
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2> /dev/null
-		rm $maintain_percentage_tracker_file 2> /dev/null
 		battery disable_daemon
 		enable_charging
 		battery status
