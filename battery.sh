@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.12"
+BATTERY_CLI_VERSION="v1.0.13"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -34,8 +34,8 @@ touch $logfile
 # Trim logfile if needed
 logsize=$(stat -f%z "$logfile")
 max_logsize_bytes=5000000
-if (( logsize > max_logsize_bytes )); then
-	tail -n 100 $logfile > $logfile
+if ((logsize > max_logsize_bytes)); then
+	tail -n 100 $logfile >$logfile
 fi
 
 # CLI help message
@@ -150,7 +150,7 @@ function disable_charging() {
 }
 
 function get_smc_charging_status() {
-	hex_status=$( smc -k CH0B -r | awk '{print $4}' | sed s:\):: )
+	hex_status=$(smc -k CH0B -r | awk '{print $4}' | sed s:\)::)
 	if [[ "$hex_status" == "00" ]]; then
 		echo "enabled"
 	else
@@ -159,7 +159,7 @@ function get_smc_charging_status() {
 }
 
 function get_smc_discharging_status() {
-	hex_status=$( smc -k CH0I -r | awk '{print $4}' | sed s:\):: )
+	hex_status=$(smc -k CH0I -r | awk '{print $4}' | sed s:\)::)
 	if [[ "$hex_status" == "0" ]]; then
 		echo "not discharging"
 	else
@@ -168,21 +168,19 @@ function get_smc_discharging_status() {
 }
 
 function get_battery_percentage() {
-	battery_percentage=`pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::`
+	battery_percentage=$(pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::)
 	echo "$battery_percentage"
 }
 
 function get_remaining_time() {
-	time_remaining=`pmset -g batt | tail -n1 | awk '{print $5}'`
+	time_remaining=$(pmset -g batt | tail -n1 | awk '{print $5}')
 	echo "$time_remaining"
 }
 
 function get_maintain_percentage() {
-	maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
+	maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 	echo "$maintain_percentage"
 }
-
-
 
 ## ###############
 ## Actions
@@ -196,8 +194,8 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
-	echo -e "$visudoconfig" >> $configfolder/visudo.tmp
-	sudo visudo -c -f $configfolder/visudo.tmp &> /dev/null
+	echo -e "$visudoconfig" >>$configfolder/visudo.tmp
+	sudo visudo -c -f $configfolder/visudo.tmp &>/dev/null
 	if [ "$?" -eq "0" ]; then
 		if ! test -d "$visudo_folder"; then
 			sudo mkdir -p "$visudo_folder"
@@ -222,7 +220,7 @@ fi
 
 # Update helper
 if [[ "$action" == "update" ]]; then
-	
+
 	# Check if we have the most recent version
 	if curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/battery.sh | grep -q "$BATTERY_CLI_VERSION"; then
 		echo "No need to update, offline version number $BATTERY_CLI_VERSION matches remote version number"
@@ -245,13 +243,13 @@ if [[ "$action" == "uninstall" ]]; then
 		echo "Press any key to continue"
 		read
 	fi
-  enable_charging
+	enable_charging
 	disable_discharging
 	battery remove_daemon
-  sudo rm -v "$binfolder/smc" "$binfolder/battery" $visudo_file
+	sudo rm -v "$binfolder/smc" "$binfolder/battery" $visudo_file
 	sudo rm -v -r "$configfolder"
 	pkill -f "/usr/local/bin/battery.*"
-  exit 0
+	exit 0
 fi
 
 # Charging on/off controller
@@ -302,7 +300,7 @@ if [[ "$action" == "charge" ]]; then
 	battery adapter on
 
 	# Start charging
-	battery_percentage=$( get_battery_percentage )
+	battery_percentage=$(get_battery_percentage)
 	log "Charging to $setting% from $battery_percentage%"
 	enable_charging
 
@@ -311,7 +309,7 @@ if [[ "$action" == "charge" ]]; then
 
 		log "Battery at $battery_percentage%"
 		caffeinate -is sleep 60
-		battery_percentage=$( get_battery_percentage )
+		battery_percentage=$(get_battery_percentage)
 
 	done
 
@@ -326,7 +324,7 @@ fi
 if [[ "$action" == "discharge" ]]; then
 
 	# Start charging
-	battery_percentage=$( get_battery_percentage )
+	battery_percentage=$(get_battery_percentage)
 	log "Discharging to $setting% from $battery_percentage%"
 	enable_discharging
 
@@ -335,7 +333,7 @@ if [[ "$action" == "discharge" ]]; then
 
 		log "Battery at $battery_percentage% (target $setting%)"
 		caffeinate -is sleep 60
-		battery_percentage=$( get_battery_percentage )
+		battery_percentage=$(get_battery_percentage)
 
 	done
 
@@ -346,17 +344,17 @@ fi
 
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
-	
+
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
 
 		# Before doing anything, log out environment details as a debugging trail
 		log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
 
-		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
+		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
 			log "Recovering maintenance percentage $maintain_percentage"
-			setting=$( echo $maintain_percentage)
+			setting=$(echo $maintain_percentage)
 		else
 			log "No setting to recover, exiting"
 			exit 0
@@ -374,7 +372,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	fi
 
 	# Start charging
-	battery_percentage=$( get_battery_percentage )
+	battery_percentage=$(get_battery_percentage)
 
 	log "Charging to and maintaining at $setting% from $battery_percentage%"
 
@@ -382,7 +380,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	while true; do
 
 		# Keep track of status
-		is_charging=$( get_smc_charging_status )
+		is_charging=$(get_smc_charging_status)
 
 		if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
 
@@ -398,7 +396,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 		sleep 60
 
-		battery_percentage=$( get_battery_percentage )
+		battery_percentage=$(get_battery_percentage)
 
 	done
 
@@ -411,13 +409,13 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Kill old process silently
 	if test -f "$pidfile"; then
-		pid=$( cat "$pidfile" 2> /dev/null )
-		kill $pid &> /dev/null
+		pid=$(cat "$pidfile" 2>/dev/null)
+		kill $pid &>/dev/null
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
-		rm $pidfile 2> /dev/null
+		rm $pidfile 2>/dev/null
 		battery disable_daemon
 		enable_charging
 		battery status
@@ -438,15 +436,15 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Start maintenance script
 	log "Starting battery maintenance at $setting% $subsetting"
-	nohup battery maintain_synchronous $setting $subsetting >> $logfile &
+	nohup battery maintain_synchronous $setting $subsetting >>$logfile &
 
 	# Store pid of maintenance process and setting
-	echo $! > $pidfile
-	pid=$( cat "$pidfile" 2> /dev/null )
+	echo $! >$pidfile
+	pid=$(cat "$pidfile" 2>/dev/null)
 
 	if ! [[ "$setting" == "recover" ]]; then
 		log "Writing new setting $setting to $maintain_percentage_tracker_file"
-		echo $setting > $maintain_percentage_tracker_file
+		echo $setting >$maintain_percentage_tracker_file
 		log "Maintaining battery at $setting%"
 	fi
 
@@ -457,13 +455,12 @@ if [[ "$action" == "maintain" ]]; then
 
 fi
 
-
 # Status logger
 if [[ "$action" == "status" ]]; then
 
-	log "Battery at $( get_battery_percentage  )% ($( get_remaining_time ) remaining), smc charging $( get_smc_charging_status )"
+	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), smc charging $(get_smc_charging_status)"
 	if test -f $pidfile; then
-		maintain_percentage=$( cat $maintain_percentage_tracker_file 2> /dev/null )
+		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		log "Your battery is currently being maintained at $maintain_percentage%"
 	fi
 	exit 0
@@ -473,7 +470,7 @@ fi
 # Status logger in csv format
 if [[ "$action" == "status_csv" ]]; then
 
-	echo "$( get_battery_percentage  ),$( get_remaining_time ),$( get_smc_charging_status ),$( get_smc_discharging_status ),$( get_maintain_percentage )"
+	echo "$(get_battery_percentage),$(get_remaining_time),$(get_smc_charging_status),$(get_smc_discharging_status),$(get_maintain_percentage)"
 
 fi
 
@@ -509,21 +506,21 @@ if [[ "$action" == "create_daemon" ]]; then
 	if test -f "$daemon_path"; then
 
 		log "Daemon already exists, checking for differences"
-		daemon_definition_difference=$(diff --brief --ignore-space-change --strip-trailing-cr --ignore-blank-lines  <( cat "$daemon_path" 2> /dev/null ) <(echo "$daemon_definition"))
-		
+		daemon_definition_difference=$(diff --brief --ignore-space-change --strip-trailing-cr --ignore-blank-lines <(cat "$daemon_path" 2>/dev/null) <(echo "$daemon_definition"))
+
 		# remove leading and trailing whitespaces
 		daemon_definition_difference=$(echo "$daemon_definition_difference" | xargs)
 		if [[ "$daemon_definition_difference" != "" ]]; then
 
 			log "daemon_definition changed: replace with new definitions"
-			echo "$daemon_definition" > "$daemon_path"
+			echo "$daemon_definition" >"$daemon_path"
 
 		fi
 	else
 
 		# daemon not available, create new launch deamon
 		log "Daemon does not yet exist, creating daemon file at $daemon_path"
-		echo "$daemon_definition" > "$daemon_path"
+		echo "$daemon_definition" >"$daemon_path"
 
 	fi
 
@@ -545,7 +542,7 @@ fi
 # Remove daemon
 if [[ "$action" == "remove_daemon" ]]; then
 
-	rm $daemon_path 2> /dev/null
+	rm $daemon_path 2>/dev/null
 	exit 0
 
 fi
