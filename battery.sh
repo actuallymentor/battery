@@ -65,6 +65,9 @@ Usage:
     manually set the adapter to (not) charge even when plugged in
     eg: battery adapter off
 
+  battery calibrate 
+    battery calibration
+
   battery charge LEVEL[1-100]
     charge the battery to a certain percentage, and disable charging when that percentage is reached
     eg: battery charge 90
@@ -567,4 +570,37 @@ if [[ "$action" == "logs" ]]; then
 
 	exit 0
 
+fi
+
+# Battery calibration
+if [[ "$action" == "calibrate" ]]; then
+	log "Starting calibration"
+
+	# Stop the maintaining
+	battery maintain stop
+
+	# Discharge battery to 15%
+	battery discharge 15
+
+	while true; do
+		log "checking if at 100%"
+		# Check if battery level has reached 100%
+		if battery status | head -n 1 | grep -q "Battery at 100%"; then
+			break
+			else
+			sleep 300
+			continue
+		fi
+	done
+
+	# Wait before discharging to target level
+	log  "reached 100%, maintaining for 1 hour"
+	sleep 3600
+
+	# Discharge battery to 80%
+	battery discharge 80
+
+	# Maintain battery to 80%
+	battery maintain 80
+	exit 0
 fi
