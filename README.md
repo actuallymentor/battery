@@ -2,7 +2,6 @@
 
 <img width="300px" align="right" src="./screenshots/tray.png"/>This tool makes it possible to keep a chronically plugged in Apple Silicon Macbook at `80%` battery, since that will prolong the longevity of the battery. It is free and open-source and will remain that way.
 
-
 > Want to know if this tool does anything or is just a placebo? Read [this excellent article](https://batteryuniversity.com/article/bu-808-how-to-prolong-lithium-based-batteries). TL;DR: keep your battery cool, keep it at 80% when plugged in, and discharge it as shallowly as feasible.
 
 ### Requirements
@@ -12,7 +11,7 @@ This is an app for Apple Silicon Macs. It will not work on Intel macs. Do you ha
 ### Installation
 
 - Option 1: install through brew with `brew install battery`
-- Option 2: [You can download the latest app dmg version here]( https://github.com/actuallymentor/battery/releases/ ).
+- Option 2: [You can download the latest app dmg version here](https://github.com/actuallymentor/battery/releases/).
 - Option 3: command-line only installation (see section below)
 
 The first time you open the app, it will ask for your administator password so it can install the needed components. Please note that the app:
@@ -27,7 +26,6 @@ The first time you open the app, it will ask for your administator password so i
 Do you have questions, comments, or feature requests? [Open an issue here](https://github.com/actuallymentor/battery/issues) or [Tweet at me](https://twitter.com/actuallymentor).
 
 ---
-
 
 ## 🖥 Command-line version
 
@@ -47,7 +45,7 @@ curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh |
 
 This will:
 
-1. Download the precompiled `smc` tool in this repo (built from the [hholtmann/smcFanControl]( https://github.com/hholtmann/smcFanControl.git ) repository)
+1. Download the precompiled `smc` tool in this repo (built from the [hholtmann/smcFanControl](https://github.com/hholtmann/smcFanControl.git) repository)
 2. Install `smc` to `/usr/local/bin`
 3. Install `battery` to `/usr/local/bin`
 
@@ -67,7 +65,6 @@ After running a command like `battery charging off` you can verify the change vi
 After running `battery charging on` you will see it change to this:
 
 ![Battery charging](./screenshots/charging-screenshot.png)
-
 
 For help, run `battery` without parameters:
 
@@ -144,6 +141,14 @@ This tool calls a number of urls, blocking all of them will only break auto-upda
 1. `electronjs.org` hosts the update server for the GUI
 
 All urls are called over `https` and so not leak data. Unidentified Analytics keeps track of unique ip addresses that open the app, but nothing else.
+
+### What distinguishes this project from Optimized Charging?
+
+Optimized Charging, a feature that is built into MacOS, aims to ensure the longevity and health of your battery. It does so by "delaying charging the battery past 80% when it predicts that you’ll be plugged in for an extended period of time, and aims to charge the battery before you unplug," as explained in Apple's user guide.
+
+Additionally, Optimized Charging uses machine learning to decide when the battery should be held at 80%, and when it should become fully charged. If your Mac is not plugged in on a regular schedule, optimized charging will not work as intended.
+
+This app is a similar alternative to Optimized Charging, giving the user control over when it is activated, what percentage the battery should be held at, and more.
 
 ### How do I support this project?
 
