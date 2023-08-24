@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.1.2"
+BATTERY_CLI_VERSION="v1.1.3"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -225,7 +225,7 @@ if [[ "$action" == "visudo" ]]; then
 
 	# Write the visudo file to a tempfile
 	visudo_tmpfile="$configfolder/visudo.tmp"
-	echo -e "$visudoconfig" >>$visudo_tmpfile
+	echo -e "$visudoconfig" >$visudo_tmpfile
 
 	# If the visudo file is the same (no error, exit code 0), set the permissions just
 	if sudo cmp $visudo_file $visudo_tmpfile &>/dev/null; then
@@ -261,7 +261,8 @@ if [[ "$action" == "visudo" ]]; then
 		sudo chmod 440 $visudo_file
 
 	else
-		echo "Error validating visudo file, this should never happen"
+		echo "Error validating visudo file, this should never happen:"
+		sudo visudo -c -f $visudo_tmpfile
 	fi
 
 	exit 0
