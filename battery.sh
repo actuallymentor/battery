@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.1.3"
+BATTERY_CLI_VERSION="v1.1.4"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -127,7 +127,7 @@ function change_magsafe_led_color() {
 	color=$1
 
 	# Check whether user can run color changes without password (required for backwards compatibility)
-	if sudo -n smc -k ACLC -r; then
+	if sudo -n smc -k ACLC -r &>/dev/null; then
 		log "💡 Setting magsafe color to $color"
 	else
 		log "🚨 Your version of battery is using an old visudo file"
@@ -259,6 +259,8 @@ if [[ "$action" == "visudo" ]]; then
 
 		# Set correct permissions on visudo file
 		sudo chmod 440 $visudo_file
+
+		echo "Visudo file updated successfully"
 
 	else
 		echo "Error validating visudo file, this should never happen:"
