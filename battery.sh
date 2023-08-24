@@ -127,7 +127,7 @@ function change_magsafe_led_color() {
 	color=$1
 
 	# Check whether user can run color changes without password (required for backwards compatibility)
-	if sudo -n smc -k ACLC -w 00; then
+	if sudo -n smc -k ACLC -r; then
 		log "💡 Setting magsafe color to $color"
 	else
 		log "🚨 Your version of battery is using an old visudo file"
