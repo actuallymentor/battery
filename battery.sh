@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.0.13"
+BATTERY_CLI_VERSION="v1.1.0"
 
 # Path fixes for unexpected environments
 PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
@@ -96,10 +96,12 @@ Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
 Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
 Cmnd_Alias      DISCHARGEON = $binfolder/smc -k CH0I -w 01
+Cmnd_Alias      LEDCONTROL = $binfolder/smc -k ACLC -w 04, $binfolder/smc -k ACLC -w 03, $binfolder/smc -k ACLC -w 00, $binfolder/smc -k ACLC -r
 ALL ALL = NOPASSWD: BATTERYOFF
 ALL ALL = NOPASSWD: BATTERYON
 ALL ALL = NOPASSWD: DISCHARGEOFF
 ALL ALL = NOPASSWD: DISCHARGEON
+ALL ALL = NOPASSWD: LEDCONTROL
 "
 
 # Get parameters
@@ -112,14 +114,36 @@ subsetting=$3
 ## ###############
 
 function log() {
-
 	echo -e "$(date +%D-%T) - $1"
-
 }
 
-## ###############
-## Statistics
-## ###############
+## #################
+## SMC Manipulation
+## #################
+
+# Change magsafe color
+# see community sleuthing: https://github.com/actuallymentor/battery/issues/71
+function change_magsafe_led_color() {
+	color=$1
+
+	# Check whether user can run color changes without password (required for backwards compatibility)
+	if sudo -n smc -k ACLC -w 00; then
+		log "💡 Setting magsafe color to $color"
+	else
+		log "🚨 Your version of battery is using an old visudo file"
+		log "please run 'battery visudo' to fix this, until you do battery cannot change magsafe led colors"
+		return
+	fi
+
+	if [[ "$color" == "green" ]]; then
+		sudo smc -k ACLC -w 03
+	elif [[ "$color" == "orange" ]]; then
+		sudo smc -k ACLC -w 04
+	else
+		# Default action: reset. Value 00 is a guess and needs confirmation
+		sudo smc -k ACLC -w 00
+	fi
+}
 
 # Re:discharging, we're using keys uncovered by @howie65: https://github.com/actuallymentor/battery/issues/20#issuecomment-1364540704
 # CH0I seems to be the "disable the adapter" key
@@ -167,6 +191,10 @@ function get_smc_discharging_status() {
 	fi
 }
 
+## ###############
+## Statistics
+## ###############
+
 function get_battery_percentage() {
 	battery_percentage=$(pmset -g batt | tail -n1 | awk '{print $3}' | sed s:\%\;::)
 	echo "$battery_percentage"
@@ -194,16 +222,51 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
-	echo -e "$visudoconfig" >>$configfolder/visudo.tmp
-	sudo visudo -c -f $configfolder/visudo.tmp &>/dev/null
+
+	# Write the visudo file to a tempfile
+	visudo_tmpfile="$configfolder/visudo.tmp"
+	echo -e "$visudoconfig" >>$visudo_tmpfile
+
+	# If the visudo file is the same, set the permissions just
+	if sudo cmp $visudo_file $visudo_tmpfile; then
+
+		echo "The existing battery visudo file is what it should be for version $BATTERY_CLI_VERSION"
+
+		# Check if file permissions are correct, if not, set them
+		current_visudo_file_permissions=$(stat -f "%Lp" $visudo_file)
+		if [[ "$current_visudo_file_permissions" != "440" ]]; then
+			sudo chmod 440 $visudo_file
+		fi
+
+		# exit because no changes are needed
+		exit 0
+
+	fi
+
+	# Validate that the visudo tempfile is valid
+	sudo visudo -c -f $visudo_tmpfile &>/dev/null
+
+	# If there was no error (exit code 0), continue
 	if [ "$?" -eq "0" ]; then
+
+		# If the visudo folder does not exist, make it
 		if ! test -d "$visudo_folder"; then
 			sudo mkdir -p "$visudo_folder"
 		fi
-		sudo cp $configfolder/visudo.tmp $visudo_file
-		rm $configfolder/visudo.tmp
+
+		# Copy the visudo file from tempfile to live location
+		sudo cp $visudo_tmpfile $visudo_file
+
+		# Delete tempfile
+		rm $visudo_tmpfile
+
+		# Set correct permissions on visudo file
+		sudo chmod 440 $visudo_file
+
+	else
+		echo "Error validating visudo file, this should never happen"
 	fi
-	sudo chmod 440 $visudo_file
+
 	exit 0
 fi
 
@@ -386,11 +449,13 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 			log "Charge above $setting"
 			disable_charging
+			change_magsafe_led_color "green"
 
 		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
 			log "Charge below $setting"
 			enable_charging
+			change_magsafe_led_color "orange"
 
 		fi
 
@@ -418,6 +483,7 @@ if [[ "$action" == "maintain" ]]; then
 		rm $pidfile 2>/dev/null
 		battery disable_daemon
 		enable_charging
+		change_magsafe_led_color
 		battery status
 		exit 0
 	fi
