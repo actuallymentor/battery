@@ -130,15 +130,17 @@ const initialize_battery = async () => {
             battery_installed,
             smc_installed,
             charging_in_visudo,
-            discharging_in_visudo
+            discharging_in_visudo,
+            magsafe_led_in_visudo
         ] = await Promise.all( [
             exec_async( `${ path_fix } which battery` ).catch( () => false ),
             exec_async( `${ path_fix } which smc` ).catch( () => false ),
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( () => false )
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( () => false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( () => false )
         ] )
 
-        const visudo_complete = charging_in_visudo && discharging_in_visudo
+        const visudo_complete = charging_in_visudo && discharging_in_visudo && magsafe_led_in_visudo
         const is_installed = battery_installed && smc_installed
         log( 'Is installed? ', is_installed )
 
@@ -161,7 +163,8 @@ const initialize_battery = async () => {
         if( !is_installed || !visudo_complete ) {
             log( `Installing battery for ${ USER }...` )
             if( !online ) return alert( `Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.` )
-            await alert( `Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.` )
+            if( !is_installed ) await alert( `Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.` )
+            if( !visudo_complete ) await alert( `Battery needs to apply a backwards incompatible update, to do this it will ask for your password. This should not happen frequently.` )
             const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
             log( `Install result success `, result )
             await alert( `Battery background components installed successfully. You can find the battery limiter icon in the top right of your menu bar.` )
