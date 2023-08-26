@@ -410,6 +410,12 @@ fi
 
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
+	
+	# Checking if the calibration process is running
+	if test -f "$calibrate_pidfile"; then
+		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
+		log "🚨 Calibration is running, please run 'battery calibrate stop' or wait for it to finish"
+	fi
 
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
@@ -580,7 +586,7 @@ if [[ "$action" == "calibrate" ]]; then
 
 	# Start calibration script
 	log "Starting calibration script"
-	nohup ./battery.sh calibrate_synchronous >>$logfile &
+	nohup battery calibrate_synchronous >>$logfile &
 
 	# Store pid of calibration process and setting
 	echo $! >$calibrate_pidfile
