@@ -563,7 +563,7 @@ if [[ "$action" == "calibrate_synchronous" ]]; then
 	# Discharge battery to 80%
 	battery discharge 80
 
-	# Maintain battery to 80%
+	# Recover old maintain status
 	battery maintain recover
 	exit 0
 fi
