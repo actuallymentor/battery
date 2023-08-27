@@ -560,7 +560,10 @@ if [[ "$action" == "calibrate_synchronous" ]]; then
 	log  "reached 100%, maintaining for 1 hour"
 	sleep 3600
 
-	# Recover old maintain status 
+	# Discharge battery to 80%
+	battery discharge 80
+
+	# Maintain battery to 80%
 	battery maintain recover
 	exit 0
 fi
