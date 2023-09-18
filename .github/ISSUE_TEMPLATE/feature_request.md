@@ -18,3 +18,6 @@ A clear and concise description of any alternative solutions or features you've 
 
 **Additional context**
 Add any other context or screenshots about the feature request here.
+
+**Please note**
+This tool is meant to be very minimalist, so don't ask for any significant GUI changes, neither things already present in the integrated battery icon or aren't strictly necessary. If you think that your request is still needed, feel free to make this issue. 
