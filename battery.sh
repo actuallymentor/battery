@@ -453,7 +453,9 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		if [[ "$battery_percentage" -ge "$setting" && ( "$is_charging" == "enabled" || "$ac_attached" == "1" ) ]]; then
 
 			log "Charge above $setting"
-			disable_charging
+			if [[ "$is_charging" == "enabled" ]]; then
+				disable_charging
+			fi
 			change_magsafe_led_color "green"
 
 		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
