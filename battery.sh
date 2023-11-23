@@ -190,6 +190,15 @@ function get_smc_discharging_status() {
 	fi
 }
 
+function get_smc_magsafe_color() {
+	 hex_status=$(smc -k ACLC -r | awk '{print $4}' | sed s:\)::)
+	if [[ "$hex_status" == "4" ]]; then
+		echo "orange"
+	else
+		echo "green"
+	fi
+}
+
 ## ###############
 ## Statistics
 ## ###############
@@ -455,6 +464,15 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 			log "Charge below $setting"
 			enable_charging
 			change_magsafe_led_color "orange"
+
+		else
+
+			# Check magsafe matches current, if we re-plug it while charging disabled it will reset back
+			# to orange, so put it back to green in that case.
+			magsafe_color=$(get_smc_magsafe_color)
+			if [[ "$magsafe_color" == "orange" && "$is_charging" == "disabled" ]]; then
+				change_magsafe_led_color "green"
+			fi
 
 		fi
 
