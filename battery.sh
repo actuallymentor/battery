@@ -7,7 +7,7 @@
 BATTERY_CLI_VERSION="v1.1.5"
 
 # Path fixes for unexpected environments
-PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
+PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew/bin
 
 ## ###############
 ## Variables
