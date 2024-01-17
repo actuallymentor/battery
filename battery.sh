@@ -491,7 +491,8 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		log "🚨 Calibration is running, please run 'battery calibrate stop' or wait for it to finish"
+		battery calibrate stop
+		log "🚨 Calibration was running, now the calibration process have been Stopped"
 	fi
 
 	# Recover old maintain status if old setting is found
@@ -601,7 +602,8 @@ if [[ "$action" == "maintain" ]]; then
 
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		log "🚨 Calibration is running, please run 'battery calibrate stop' or wait for it to finish"
+		battery calibrate stop
+		log "🚨 Calibration was running, now the calibration process have been Stopped"
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
