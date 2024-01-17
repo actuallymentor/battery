@@ -446,10 +446,10 @@ if [[ "$action" == "voltage" ]]; then
 
 		log "Battery at ${voltage}V"
 		
-		if (( $(echo "$voltage < $setting" | bc -l) && "$is_charging" == "disabled" )); then
+		if (( $(echo "$voltage < $setting" | bc -l) )) && [[ "$is_charging" == "disabled" ]]; then
 			enable_charging
 		fi
-		if (( $(echo "$voltage >= $subsetting" | bc -l) && "$is_charging" == "enabled" )); then
+		if (( $(echo "$voltage >= $subsetting" | bc -l) )) && [[ "$is_charging" == "enabled" ]]; then
 			disable_charging
 		fi
 		
