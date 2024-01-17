@@ -228,6 +228,11 @@ function get_maintain_percentage() {
 	echo "$maintain_percentage"
 }
 
+function get_voltage() {
+	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }')
+	echo "$voltage"
+}
+
 ## ###############
 ## Actions
 ## ###############
@@ -429,6 +434,34 @@ if [[ "$action" == "discharge" ]]; then
 
 fi
 
+# Voltage min/max controller
+if [[ "$action" == "voltage" ]]; then
+
+	voltage=$(get_voltage)
+	log "Keeping voltage between ${setting}V and ${subsetting}V"
+
+	# Loop
+	while true; do
+		is_charging=$(get_smc_charging_status)
+
+		log "Battery at ${voltage}V"
+		
+		if (( $(echo "$voltage < $setting" | bc -l) && "$is_charging" == "disabled" )); then
+			enable_charging
+		fi
+		if (( $(echo "$voltage >= $subsetting" | bc -l) && "$is_charging" == "enabled" )); then
+			disable_charging
+		fi
+		
+		caffeinate -is sleep 60
+		voltage=$(get_voltage)
+
+	done
+
+	exit 0
+
+fi
+
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
 
@@ -548,7 +581,7 @@ fi
 # Status logger
 if [[ "$action" == "status" ]]; then
 
-	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), smc charging $(get_smc_charging_status)"
+	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, smc charging $(get_smc_charging_status)"
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		log "Your battery is currently being maintained at $maintain_percentage%"
