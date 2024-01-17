@@ -4,10 +4,10 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.1.5"
+BATTERY_CLI_VERSION="v1.1.6"
 
 # Path fixes for unexpected environments
-PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew
+PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/homebrew
 
 ## ###############
 ## Variables
@@ -424,9 +424,9 @@ if [[ "$action" == "adapter" ]]; then
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
-		enable_discharging
-	elif [[ "$setting" == "off" ]]; then
 		disable_discharging
+	elif [[ "$setting" == "off" ]]; then
+		enable_discharging
 	fi
 
 	exit 0
