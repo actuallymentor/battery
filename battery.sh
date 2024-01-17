@@ -343,9 +343,9 @@ if [[ "$action" == "adapter" ]]; then
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
-		enable_discharging
-	elif [[ "$setting" == "off" ]]; then
 		disable_discharging
+	elif [[ "$setting" == "off" ]]; then
+		enable_discharging
 	fi
 
 	exit 0
