@@ -67,7 +67,7 @@ Usage:
     eg: battery adapter off
 
   battery calibrate 
-    calibrate the battery by discharding it to 15%, then recharging it to 100%, and keeping it there for 1 hour
+    calibrate the battery by discharging it to 15%, then recharging it to 100%, and keeping it there for 1 hour
 
   battery charge LEVEL[1-100]
     charge the battery to a certain percentage, and disable charging when that percentage is reached
@@ -414,7 +414,8 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		log "🚨 Calibration is running, please run 'battery calibrate stop' or wait for it to finish"
+		kill $calibrate_pidfile &>/dev/null
+		log "🚨 Calibration process have been stopped"
 	fi
 
 	# Recover old maintain status if old setting is found
@@ -489,7 +490,8 @@ if [[ "$action" == "maintain" ]]; then
 
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		log "🚨 Calibration is running, please run 'battery calibrate stop' or wait for it to finish"
+		kill $calibrate_pidfile &>/dev/null
+		log "🚨 Calibration process have been stopped"
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
