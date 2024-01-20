@@ -550,7 +550,7 @@ if [[ "$action" == "calibrate_synchronous" ]]; then
 		# Check if battery level has reached 100%
 		if battery status | head -n 1 | grep -q "Battery at 100%"; then
 			break
-			else
+		else
 			sleep 300
 			continue
 		fi
