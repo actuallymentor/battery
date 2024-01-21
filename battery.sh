@@ -51,17 +51,16 @@ Usage:
     output logs of the battery CLI and GUI
 	eg: battery logs 100
 
-  battery maintain LEVEL[1-100,stop]
-  battery maintain RANGE[min-max]
-    reboot-persistent battery level maintenance:
-      Threshold Mode:
+  battery maintain LEVEL[value/minvalue-maxvalue/stop]
+  reboot-persistent battery level maintenance:
+      Threshold mode:
         turn off charging above, and on below a certain value.
-      Range Mode:
+      Range mode:
         turn off charging above the maximum value, and on below the minimum value.
     it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
-    eg: battery maintain 80
+    eg: battery maintain 80           // Threshold mode
+    eg: battery maintain 20-80        // Range mode
     eg: battery maintain stop
-    eg: battery maintain 20-70
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
