@@ -52,10 +52,16 @@ Usage:
 	eg: battery logs 100
 
   battery maintain LEVEL[1-100,stop]
-    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
-	it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
+  battery maintain RANGE[min-max]
+    reboot-persistent battery level maintenance:
+      Threshold Mode:
+        turn off charging above, and on below a certain value.
+      Range Mode:
+        turn off charging above the maximum value, and on below the minimum value.
+    it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
     eg: battery maintain 80
     eg: battery maintain stop
+    eg: battery maintain 20-70
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
@@ -436,7 +442,15 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 
-	log "Charging to and maintaining at $setting% from $battery_percentage%"
+  IFS=- read lower_threshold upper_threshold <<<"$setting"
+  if [ -z "$upper_threshold" ];then
+    upper_threshold=$lower_threshold
+  fi
+  if [ "$lower_threshold" -eq "$upper_threshold" ];then
+	  log "Charging to and maintaining at $lower_threshold% from $battery_percentage%"
+  else
+	  log "Charging to and maintaining in range of $lower_threshold% to $upper_threshold% from $battery_percentage%"
+	fi
 
 	# Loop until battery percent is exceeded
 	while true; do
@@ -444,15 +458,15 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		# Keep track of status
 		is_charging=$(get_smc_charging_status)
 
-		if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+		if [[ "$battery_percentage" -ge "$upper_threshold" && "$is_charging" == "enabled" ]]; then
 
-			log "Charge above $setting"
+			log "Charge above $upper_threshold"
 			disable_charging
 			change_magsafe_led_color "green"
 
-		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
+		elif [[ "$battery_percentage" -lt "$lower_threshold" && "$is_charging" == "disabled" ]]; then
 
-			log "Charge below $setting"
+			log "Charge below $lower_threshold"
 			enable_charging
 			change_magsafe_led_color "orange"
 
@@ -487,8 +501,15 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
+  if [[ "$setting" =~ ^[0-9]{1,3}-[0-9]{1,3}$ ]];then
+    IFS=- read lower_threshold upper_threshold <<<"$setting"
+    if [ "$lower_threshold" -lt 0 ] || [ "$lower_threshold" -gt 100 ] ||
+      [ "$upper_threshold" -lt 0 ] || [ "$upper_threshold" -gt 100 ] ||
+      [ "$lower_threshold" -gt "$upper_threshold" ];then
+			log "Error: $setting is not a valid range setting for battery maintain. Please use a range just like 30-80, or an action keyword like 'stop' or 'recover'."
+    fi
 	# Check if setting is value between 0 and 100
-	if ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
+	elif ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
 
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
