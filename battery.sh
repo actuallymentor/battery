@@ -52,15 +52,15 @@ Usage:
 	eg: battery logs 100
 
   battery maintain LEVEL[value/minvalue-maxvalue/stop]
-  reboot-persistent battery level maintenance:
-      Threshold mode:
+    reboot-persistent battery level maintenance. There are two modes:
+      threshold mode:
         turn off charging above, and on below a certain value.
-      Range mode:
+      range mode:
         turn off charging above the maximum value, and on below the minimum value.
     it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
-    eg: battery maintain 80           // Threshold mode
-    eg: battery maintain 20-80        // Range mode
-    eg: battery maintain stop
+    eg: battery maintain 80           // threshold mode
+    eg: battery maintain 20-80        // range mode
+    eg: battery maintain stop         // disable maintain mode
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
@@ -441,14 +441,14 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 
-  IFS=- read lower_threshold upper_threshold <<<"$setting"
-  if [ -z "$upper_threshold" ];then
-    upper_threshold=$lower_threshold
-  fi
-  if [ "$lower_threshold" -eq "$upper_threshold" ];then
-	  log "Charging to and maintaining at $lower_threshold% from $battery_percentage%"
-  else
-	  log "Charging to and maintaining in range of $lower_threshold% to $upper_threshold% from $battery_percentage%"
+	IFS=- read lower_threshold upper_threshold <<<"$setting"
+	if [ -z "$upper_threshold" ];then
+		upper_threshold=$lower_threshold
+	fi
+	if [ "$lower_threshold" -eq "$upper_threshold" ];then
+		log "Charging to and maintaining at $lower_threshold% from $battery_percentage%"
+	else
+		log "Charging to and maintaining in range of $lower_threshold% to $upper_threshold% from $battery_percentage%"
 	fi
 
 	# Loop until battery percent is exceeded
@@ -500,13 +500,13 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
-  if [[ "$setting" =~ ^[0-9]{1,3}-[0-9]{1,3}$ ]];then
-    IFS=- read lower_threshold upper_threshold <<<"$setting"
-    if [ "$lower_threshold" -lt 0 ] || [ "$lower_threshold" -gt 100 ] ||
-      [ "$upper_threshold" -lt 0 ] || [ "$upper_threshold" -gt 100 ] ||
-      [ "$lower_threshold" -gt "$upper_threshold" ];then
-			log "Error: $setting is not a valid range setting for battery maintain. Please use a range just like 30-80, or an action keyword like 'stop' or 'recover'."
-    fi
+	if [[ "$setting" =~ ^[0-9]{1,3}-[0-9]{1,3}$ ]];then
+		IFS=- read lower_threshold upper_threshold <<<"$setting"
+		if [ "$lower_threshold" -lt 0 ] || [ "$lower_threshold" -gt 100 ] ||
+			[ "$upper_threshold" -lt 0 ] || [ "$upper_threshold" -gt 100 ] ||
+			[ "$lower_threshold" -gt "$upper_threshold" ];then
+			log "Error: $setting is not a valid range setting for battery maintain. The min/max value should between 0 and 100. A range example like 30-80"
+		fi
 	# Check if setting is value between 0 and 100
 	elif ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
 
