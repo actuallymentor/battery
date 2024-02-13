@@ -357,7 +357,7 @@ if [[ "$action" == "charge" ]]; then
 
 	# Check if percentage is an integer [1-100]
 	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
-		log "Battery percentage is not a valid percentage [1-100], exiting (battery percentage: $setting)"
+		log "Specified percentage ($setting) is not valid. Please specify an integer [1-100]."
 		exit 1
 	fi
 
