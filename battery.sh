@@ -355,6 +355,12 @@ fi
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
 
+	# Check if percentage is an integer [1-100]
+	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
+		log "Battery percentage is not a valid number, exiting (battery percentage: $setting)"
+		exit 1
+	fi
+
 	# Disable running daemon
 	battery maintain stop
 
