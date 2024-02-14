@@ -500,20 +500,23 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
-	if [[ "$setting" =~ ^[0-9]{1,3}-[0-9]{1,3}$ ]];then
+	# Check if setting is range mode
+	if [[ "$setting" =~ ^[0-9]+-[0-9]+$ ]];then
+		log "Called with range $setting $action"
 		IFS=- read lower_threshold upper_threshold <<<"$setting"
-		if [ "$lower_threshold" -lt 0 ] || [ "$lower_threshold" -gt 100 ] ||
-			[ "$upper_threshold" -lt 0 ] || [ "$upper_threshold" -gt 100 ] ||
+		if [ "$lower_threshold" -lt 1 ] || [ "$lower_threshold" -gt 100 ] ||
+			[ "$upper_threshold" -lt 1 ] || [ "$upper_threshold" -gt 100 ] ||
 			[ "$lower_threshold" -gt "$upper_threshold" ];then
-			log "Error: $setting is not a valid range setting for battery maintain. The min/max value should between 0 and 100. A range example like 30-80"
+			log "Error: $setting is not a valid range setting for battery maintain. The min/max value should between 1 and 100. A range example like 30-80"
+			exit 1
 		fi
-	# Check if setting is value between 0 and 100
-	elif ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
+	# Check if setting is value between 1 and 100
+	elif ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 1 ]] || [[ "$setting" -gt 100 ]]; then
 
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
 		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
-			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100, or an action keyword like 'stop' or 'recover'."
+			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 1 and 100, or an action keyword like 'stop' or 'recover'."
 			exit 1
 		fi
 
