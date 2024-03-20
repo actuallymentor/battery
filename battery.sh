@@ -229,7 +229,7 @@ function get_maintain_percentage() {
 }
 
 function get_voltage() {
-	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }')
+	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }' | tr ',' '.')
 	echo "$voltage"
 }
 
