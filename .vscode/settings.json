@@ -10,7 +10,7 @@
 		"typescriptreact"
 	],
 	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": true
+		"source.fixAll.eslint": "explicit"
 	},
 	"editor.renderWhitespace": "all",
 	"editor.formatOnSave": true,
