@@ -487,7 +487,6 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 				sleep 60
 
 			fi
-		fi
 
 		battery_percentage=$(get_battery_percentage)
 
