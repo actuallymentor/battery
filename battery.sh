@@ -149,11 +149,30 @@ function change_magsafe_led_color() {
 function enable_discharging() {
 	log "🔽🪫 Enabling battery discharging"
 	sudo smc -k CH0I -w 01
+	sudo smc -k ACLC -w 01
 }
 
 function disable_discharging() {
 	log "🔼🪫 Disabling battery discharging"
 	sudo smc -k CH0I -w 00
+	# Keep track of status
+	is_charging=$(get_smc_charging_status)
+
+	if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+
+		log "Charge above $setting"
+		disable_charging
+		change_magsafe_led_color "green"
+
+	elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
+
+		log "Charge below $setting"
+		enable_charging
+		change_magsafe_led_color "orange"
+
+	fi
+
+	battery_percentage=$(get_battery_percentage)
 }
 
 # Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
@@ -354,6 +373,12 @@ fi
 
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
+
+	# Check if percentage is an integer [1-100]
+	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
+		log "Specified percentage ($setting) is not valid. Please specify an integer [1-100]."
+		exit 1
+	fi
 
 	# Disable running daemon
 	battery maintain stop
