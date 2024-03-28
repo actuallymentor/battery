@@ -166,7 +166,15 @@ function disable_discharging() {
 	# Keep track of status
 	is_charging=$(get_smc_charging_status)
 
-	if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
+
+		log "No valid maintain percentage set, charging freely"
+		# use direct commands since enable_charging also calls disable_discharging, and causing an eternal loop
+		sudo smc -k CH0B -w 00
+		sudo smc -k CH0C -w 00
+		change_magsafe_led_color "orange"
+
+	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
 
 		log "Charge above $setting"
 		disable_charging
