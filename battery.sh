@@ -166,7 +166,7 @@ function disable_discharging() {
 	# Keep track of status
 	is_charging=$(get_smc_charging_status)
 
-	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
+	if ! $(validate_percentage "$setting"); then
 
 		log "No valid maintain percentage set, charging freely"
 		# use direct commands since enable_charging also calls disable_discharging, and causing an eternal loop
