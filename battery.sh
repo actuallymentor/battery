@@ -117,6 +117,14 @@ function log() {
 	echo -e "$(date +%D-%T) - $1"
 }
 
+function validate_percentage() {
+  if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 0 ]] || [[ "$1" -gt 100 ]]; then
+  	echo false
+  else
+  	echo true
+  fi
+}
+
 ## #################
 ## SMC Manipulation
 ## #################
@@ -374,6 +382,11 @@ fi
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
 
+	if ! $(validate_percentage "$setting"); then
+		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+ 		exit 1
+	fi
+
 	# Check if percentage is an integer [1-100]
 	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
 		log "Specified percentage ($setting) is not valid. Please specify an integer [1-100]."
@@ -410,6 +423,11 @@ fi
 # Discharging on/off controller
 if [[ "$action" == "discharge" ]]; then
 
+	if ! $(validate_percentage "$setting"); then
+		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+ 		exit 1
+	fi
+
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 	log "Discharging to $setting% from $battery_percentage%"
@@ -431,6 +449,11 @@ fi
 
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
+
+	if ! $(validate_percentage "$setting"); then
+		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+ 		exit 1
+	fi
 
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
@@ -513,7 +536,7 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	# Check if setting is value between 0 and 100
-	if ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
+	if ! $(validate_percentage "$setting"); then
 
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
