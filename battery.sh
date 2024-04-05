@@ -507,26 +507,23 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	while true; do
 
 		# Keep track of status
-		if [[ "$battery_percentage" -ge "$((setting - 3))" && "$battery_percentage" -lt "$setting" && "$is_charging" == "enabled" ]]; then
-				sleep 20
+		is_charging=$(get_smc_charging_status)
 
-			else
+		if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
 
-				if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
-					log "Charge above $setting"
-					disable_charging
-					change_magsafe_led_color "green"
+			log "Charge above $setting"
+			disable_charging
+			change_magsafe_led_color "green"
 
-				elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
-					log "Charge below $setting"
-					enable_charging
-					change_magsafe_led_color "orange"
+		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
-				fi
+			log "Charge below $setting"
+			enable_charging
+			change_magsafe_led_color "orange"
 
-				sleep 60
+		fi
 
-			fi
+		sleep 60
 
 		battery_percentage=$(get_battery_percentage)
 
