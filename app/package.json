@@ -1,6 +1,6 @@
 {
   "name": "battery",
-  "version": "1.2.0",
+  "version": "1.1.7",
   "description": "A battery charge limiter for Apple silicon Mac devices",
   "main": "main.js",
   "build": {
@@ -41,19 +41,19 @@
   "author": "actuallymentor",
   "license": "MIT",
   "devDependencies": {
-    "@babel/eslint-parser": "^7.19.1",
-    "@poap/skunk-linter": "^0.0.2",
-    "dotenv": "^16.0.3",
-    "electron": "^23.1.0",
-    "electron-builder": "^23.6.0",
-    "electron-notarize": "^1.2.1",
-    "eslint": "^8.34.0",
-    "eslint-plugin-react": "^7.32.2",
-    "husky": "^8.0.3",
-    "nodemon": "^2.0.20"
+    "@babel/eslint-parser": "^7.24.1",
+    "@electron/notarize": "^2.3.0",
+    "@poap/skunk-linter": "^0.0.3",
+    "dotenv": "^16.4.5",
+    "electron": "^29.2.0",
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react": "^7.34.1",
+    "husky": "^9.0.11",
+    "nodemon": "^3.1.0"
   },
   "dependencies": {
-    "electron-store": "^8.1.0",
+    "electron-store": "^8.2.0",
     "update-electron-app": "^2.0.1"
   }
 }
