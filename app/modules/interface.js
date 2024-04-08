@@ -31,16 +31,10 @@ const generate_app_menu = async () => {
         return Menu.buildFromTemplate( [
 
             {
-                label: `Enable ${ maintain_percentage }% battery limit`,
-                type: 'radio',
+                label: `${ maintain_percentage }% battery limit`,
+                type: 'checkbox',
                 checked: limiter_on,
-                click: enable_limiter
-            },
-            {
-                label: `Disable ${ maintain_percentage }% battery limit`,
-                type: 'radio',
-                checked: !limiter_on,
-                click: disable_limiter
+                click: limiter_on ? disable_battery_limiter : enable_limiter
             },
             {
                 type: 'separator'
