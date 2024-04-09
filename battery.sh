@@ -466,11 +466,11 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 
-	IFS=- read lower_threshold upper_threshold <<<"$setting"
-	if [ -z "$upper_threshold" ];then
-		upper_threshold=$lower_threshold
-	fi
-	if [ "$lower_threshold" -eq "$upper_threshold" ];then
+	# Extract values from $setting
+	lower_threshold=${setting/-*/}
+	upper_threshold=${setting/*-/}
+	if [[ "$lower_threshold" -eq "$upper_threshold" ]]; then
+		# the string had no "-", both threasholds are the same
 		log "Charging to and maintaining at $lower_threshold% from $battery_percentage%"
 	else
 		log "Charging to and maintaining in range of $lower_threshold% to $upper_threshold% from $battery_percentage%"
@@ -525,26 +525,26 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
-	# Check if setting is range mode
-	if [[ "$setting" =~ ^[0-9]+-[0-9]+$ ]];then
+	# Check if setting is a legal range
+	if [[ "$setting" =~ ^[0-9]+-?[0-9]+$ ]]; then
 		log "Called with range $setting $action"
-		IFS=- read lower_threshold upper_threshold <<<"$setting"
-		if [ "$lower_threshold" -lt 1 ] || [ "$lower_threshold" -gt 100 ] ||
-			[ "$upper_threshold" -lt 1 ] || [ "$upper_threshold" -gt 100 ] ||
-			[ "$lower_threshold" -gt "$upper_threshold" ];then
+		# Extract upper and lower if necessary and then check if values are legal
+		lower_threshold=${setting/-*/}
+		upper_threshold=${setting/*-/}
+		if [[ "$lower_threshold" -lt 1 ]] || [[ "$lower_threshold" -gt 100 ]] ||
+			[[ "$upper_threshold" -lt 1 ]] || [[ "$upper_threshold" -gt 100 ]] ||
+			[[ "$lower_threshold" -gt "$upper_threshold" ]]; then
 			log "Error: $setting is not a valid range setting for battery maintain. The min/max value should between 1 and 100. A range example like 30-80"
 			exit 1
 		fi
 	# Check if setting is value between 1 and 100
-	elif ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 1 ]] || [[ "$setting" -gt 100 ]]; then
-
+	else
 		log "Called with $setting $action"
-		# If non 0-100 setting is not a special keyword, exit with an error.
+		# If setting is not a special keyword, exit with an error.
 		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
 			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 1 and 100, or an action keyword like 'stop' or 'recover'."
 			exit 1
 		fi
-
 	fi
 
 	# Start maintenance script
