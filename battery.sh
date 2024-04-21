@@ -105,6 +105,7 @@ ALL ALL = NOPASSWD: LEDCONTROL
 "
 
 # Get parameters
+battery_binary=$0
 action=$1
 setting=$2
 subsetting=$3
@@ -117,12 +118,11 @@ function log() {
 	echo -e "$(date +%D-%T) - $1"
 }
 
-function validate_percentage() {
-	log "Validating $1"
+function valid_percentage() {
 	if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 0 ]] || [[ "$1" -gt 100 ]]; then
-		echo false
+		return 1
 	else
-		echo true
+		return 0
 	fi
 }
 
@@ -171,7 +171,7 @@ function disable_discharging() {
 	# Keep track of status
 	is_charging=$(get_smc_charging_status)
 
-	if ! validate_percentage "$setting"; then
+	if ! valid_percentage "$setting"; then
 
 		log "Disabling discharging: No valid maintain percentage set, enabling charging"
 		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
@@ -349,7 +349,7 @@ if [[ "$action" == "uninstall" ]]; then
 	fi
 	enable_charging
 	disable_discharging
-	battery remove_daemon
+	$battery_binary remove_daemon
 	sudo rm -v "$binfolder/smc" "$binfolder/battery" $visudo_file
 	sudo rm -v -r "$configfolder"
 	pkill -f "/usr/local/bin/battery.*"
@@ -362,7 +362,7 @@ if [[ "$action" == "charging" ]]; then
 	log "Setting $action to $setting"
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
@@ -384,7 +384,7 @@ if [[ "$action" == "adapter" ]]; then
 	log "Setting $action to $setting"
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
@@ -403,16 +403,16 @@ fi
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
 
-	if ! validate_percentage "$setting"; then
+	if ! valid_percentage "$setting"; then
 		log "Error: $setting is not a valid setting for battery charge. Please use a number between 0 and 100"
  		exit 1
 	fi
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Disable charge blocker if enabled
-	battery adapter on
+	$battery_binary adapter on
 
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
@@ -440,7 +440,7 @@ fi
 # Discharging on/off controller
 if [[ "$action" == "discharge" ]]; then
 
-	if ! validate_percentage "$setting"; then
+	if ! valid_percentage "$setting"; then
 		log "Error: $setting is not a valid setting for battery discharge. Please use a number between 0 and 100"
  		exit 1
 	fi
@@ -492,7 +492,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
 		log "Triggering discharge to $setting before enabling charging limiter"
-		battery discharge "$setting"
+		$battery_binary discharge "$setting"
 		log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
 	else
 		log "Not triggering discharge as it is not requested"
@@ -545,14 +545,13 @@ if [[ "$action" == "maintain" ]]; then
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2>/dev/null
-		battery disable_daemon
-		enable_charging
-		battery status
+		$battery_binary disable_daemon
+		$battery_binary status
 		exit 0
 	fi
 
 	# Check if setting is value between 0 and 100
-	if ! validate_percentage "$setting"; then
+	if ! valid_percentage "$setting"; then
 
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
@@ -565,7 +564,7 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Start maintenance script
 	log "Starting battery maintenance at $setting% $subsetting"
-	nohup battery maintain_synchronous $setting $subsetting >>$logfile &
+	nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
 
 	# Store pid of maintenance process and setting
 	echo $! >$pidfile
@@ -578,7 +577,7 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	# Enable the daemon that continues maintaining after reboot
-	battery create_daemon
+	$battery_binary create_daemon
 
 	exit 0
 
@@ -691,8 +690,8 @@ if [[ "$action" == "logs" ]]; then
 	ls -lah $configfolder
 
 	echo -e "\n⚙️  Battery data:\n"
-	battery status
-	battery | grep -E "v\d.*"
+	$battery_binary status
+	$battery_binary | grep -E "v\d.*"
 
 	exit 0
 
