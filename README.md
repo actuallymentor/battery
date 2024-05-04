@@ -11,8 +11,8 @@ This is an app for Apple Silicon Macs. It will not work on Intel macs. Do you ha
 ### Installation
 
 - Option 1: install the app through brew with `brew install battery`
-- Option 2: [download the latest app dmg version here](https://github.com/actuallymentor/battery/releases/)
-- Option 3: command-line only installation (see section below)
+- Option 2: [download the app dmg version here](https://github.com/actuallymentor/battery/releases/)
+- Option 3: install ONLY the command line interface (see section below)
 
 When installing via brew or dmg, opening the macOS app is required to complete the installation.
 
