@@ -612,8 +612,6 @@ if [[ "$action" == "maintain" ]]; then
 
 	fi
 
-	exit 1
-
 	# Start maintenance script
 	if [ "$is_voltage" = true ]; then
 	  log "Starting battery maintenance at ${setting}V ±${subsetting}V"
