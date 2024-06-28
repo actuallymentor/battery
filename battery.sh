@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.1.5"
+BATTERY_CLI_VERSION="v1.2.2"
 
 # Path fixes for unexpected environments
 PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -418,8 +418,8 @@ if [[ "$action" == "adapter" ]]; then
 		enable_discharging
 	elif [[ "$setting" == "off" ]]; then
 		disable_discharging
-  else
-    log "Error: $setting is not \"on\" or \"off\"."
+	else
+		log "Error: $setting is not \"on\" or \"off\"."
 		exit 1
 	fi
 
@@ -432,7 +432,7 @@ if [[ "$action" == "charge" ]]; then
 
 	if ! valid_percentage "$setting"; then
 		log "Error: $setting is not a valid setting for battery charge. Please use a number between 0 and 100"
- 		exit 1
+		exit 1
 	fi
 
 	# Disable running daemon
@@ -449,10 +449,10 @@ if [[ "$action" == "charge" ]]; then
 	# Loop until battery percent is exceeded
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
-		if [[ "$battery_percentage" -ge "$((setting-3))" ]]; then
+		if [[ "$battery_percentage" -ge "$((setting - 3))" ]]; then
 			sleep 20
 		else
-			caffeinate -is sleep 60 
+			caffeinate -is sleep 60
 		fi
 
 	done
@@ -469,7 +469,7 @@ if [[ "$action" == "discharge" ]]; then
 
 	if ! valid_percentage "$setting"; then
 		log "Error: $setting is not a valid setting for battery discharge. Please use a number between 0 and 100"
- 		exit 1
+		exit 1
 	fi
 
 	# Start charging
@@ -493,7 +493,7 @@ fi
 
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
-	
+
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
@@ -503,7 +503,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 	if ! validate_percentage "$setting"; then
 		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
- 		exit 1
+		exit 1
 	fi
 
 	# Recover old maintain status if old setting is found
@@ -544,7 +544,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		is_charging=$(get_smc_charging_status)
 		ac_attached=$(get_charger_state)
 
-		if [[ "$battery_percentage" -ge "$setting" && ( "$is_charging" == "enabled" || "$ac_attached" == "1" ) ]]; then
+		if [[ "$battery_percentage" -ge "$setting" && ("$is_charging" == "enabled" || "$ac_attached" == "1") ]]; then
 
 			log "Charge above $setting"
 			if [[ "$is_charging" == "enabled" ]]; then
@@ -573,22 +573,22 @@ fi
 # Maintain at voltage
 if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 
-  # Recover old maintain status if old setting is found
-  if [[ "$setting" == "recover" ]]; then
+	# Recover old maintain status if old setting is found
+	if [[ "$setting" == "recover" ]]; then
 
-    # Before doing anything, log out environment details as a debugging trail
-    log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
+		# Before doing anything, log out environment details as a debugging trail
+		log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
 
-    maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
-    if [[ $maintain_voltage ]]; then
-      log "Recovering maintenance voltage $maintain_voltage"
-      setting=$(echo $maintain_voltage | awk '{print $1}')
-      subsetting=$(echo $maintain_voltage | awk '{print $2}')
-    else
-      log "No setting to recover, exiting"
-      exit 0
-    fi
-  fi
+		maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+		if [[ $maintain_voltage ]]; then
+			log "Recovering maintenance voltage $maintain_voltage"
+			setting=$(echo $maintain_voltage | awk '{print $1}')
+			subsetting=$(echo $maintain_voltage | awk '{print $2}')
+		else
+			log "No setting to recover, exiting"
+			exit 0
+		fi
+	fi
 
 	voltage=$(get_voltage)
 	lower_voltage=$(echo "$setting - $subsetting" | bc -l)
@@ -599,12 +599,12 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 	while true; do
 		is_charging=$(get_smc_charging_status)
 
-		if (( $(echo "$voltage < $lower_voltage" | bc -l) )) && [[ "$is_charging" == "disabled" ]]; then
-		  log "Battery at ${voltage}V"
+		if (($(echo "$voltage < $lower_voltage" | bc -l))) && [[ "$is_charging" == "disabled" ]]; then
+			log "Battery at ${voltage}V"
 			enable_charging
 		fi
-		if (( $(echo "$voltage >= $upper_voltage" | bc -l) )) && [[ "$is_charging" == "enabled" ]]; then
-		  log "Battery at ${voltage}V"
+		if (($(echo "$voltage >= $upper_voltage" | bc -l))) && [[ "$is_charging" == "enabled" ]]; then
+			log "Battery at ${voltage}V"
 			disable_charging
 		fi
 
@@ -641,27 +641,28 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
-  # Check if setting is a voltage
-  is_voltage=false
-  if [[ "$setting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
-    setting="${setting//V}"
+	# Check if setting is a voltage
+	is_voltage=false
+	if [[ "$setting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+		setting="${setting//V/}"
 
-    if [[ "$subsetting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
-      subsetting="${subsetting//V}"
-    else
-      subsetting="0.1"
-    fi
+		if [[ "$subsetting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+			subsetting="${subsetting//V/}"
+		else
+			subsetting="0.1"
+		fi
 
-    if (( $(echo "$setting < $voltage_min" | bc -l) || $(echo "$setting > $voltage_max" | bc -l) )); then
-      log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
-      exit 1
-    fi
-    if (( $(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_max" | bc -l) )); then
-      log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
-      exit 1
-    fi
+		if (($(echo "$setting < $voltage_min" | bc -l) || $(echo "$setting > $voltage_max" | bc -l))); then
+			log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
+			exit 1
+		fi
+		if (($(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_max" | bc -l))); then
+			log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
+			exit 1
+		fi
 
-    is_voltage=true
+		is_voltage=true
+	fi
 
 	# Check if setting is value between 0 and 100
 	if ! valid_percentage "$setting"; then
@@ -678,11 +679,11 @@ if [[ "$action" == "maintain" ]]; then
 	log "Starting battery maintenance at $setting% $subsetting"
 	nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
 	if [ "$is_voltage" = true ]; then
-	  log "Starting battery maintenance at ${setting}V ±${subsetting}V"
-	  nohup battery maintain_voltage_synchronous $setting $subsetting >>$logfile &
+		log "Starting battery maintenance at ${setting}V ±${subsetting}V"
+		nohup battery maintain_voltage_synchronous $setting $subsetting >>$logfile &
 	else
-	  log "Starting battery maintenance at $setting% $subsetting"
-	  nohup battery maintain_synchronous $setting $subsetting >>$logfile &
+		log "Starting battery maintenance at $setting% $subsetting"
+		nohup battery maintain_synchronous $setting $subsetting >>$logfile &
 	fi
 
 	# Store pid of maintenance process and setting
@@ -691,18 +692,19 @@ if [[ "$action" == "maintain" ]]; then
 
 	if ! [[ "$setting" == "recover" ]]; then
 
-	  rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2> /dev/null
+		rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2>/dev/null
 
-    if [[ "$is_voltage" = true ]]; then
-      log "Writing new setting $setting $subsetting to $maintain_voltage_tracker_file"
-      echo "$setting $subsetting" >$maintain_voltage_tracker_file
-      log "Maintaining battery at ${setting}V ±${subsetting}V"
+		if [[ "$is_voltage" = true ]]; then
+			log "Writing new setting $setting $subsetting to $maintain_voltage_tracker_file"
+			echo "$setting $subsetting" >$maintain_voltage_tracker_file
+			log "Maintaining battery at ${setting}V ±${subsetting}V"
 
-    else
-      log "Writing new setting $setting to $maintain_percentage_tracker_file"
-      echo $setting >$maintain_percentage_tracker_file
-      log "Maintaining battery at $setting%"
-    fi
+		else
+			log "Writing new setting $setting to $maintain_percentage_tracker_file"
+			echo $setting >$maintain_percentage_tracker_file
+			log "Maintaining battery at $setting%"
+		fi
+
 	fi
 
 	# Enable the daemon that continues maintaining after reboot
@@ -734,7 +736,7 @@ if [[ "$action" == "calibrate_synchronous" ]]; then
 	done
 
 	# Wait before discharging to target level
-	log  "reached 100%, maintaining for 1 hour"
+	log "reached 100%, maintaining for 1 hour"
 	sleep 3600
 
 	# Discharge battery to 80%
@@ -757,7 +759,7 @@ if [[ "$action" == "calibrate" ]]; then
 		log "Killing running calibration daemon"
 		kill $calibrate_pidfile &>/dev/null
 		rm $calibrate_pidfile 2>/dev/null
-		
+
 		exit 0
 	fi
 
@@ -777,10 +779,10 @@ if [[ "$action" == "status" ]]; then
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
-		  maintain_level="$maintain_percentage%"
+			maintain_level="$maintain_percentage%"
 		else
-		  maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
-		  maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')
+			maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+			maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')
 		fi
 		log "Your battery is currently being maintained at $maintain_level"
 	fi
@@ -798,10 +800,10 @@ fi
 # launchd daemon creator, inspiration: https://www.launchd.info/
 if [[ "$action" == "create_daemon" ]]; then
 
-  call_action="maintain_synchronous"
-  if test -f "$maintain_voltage_tracker_file"; then
-    call_action="maintain_voltage_synchronous"
-  fi
+	call_action="maintain_synchronous"
+	if test -f "$maintain_voltage_tracker_file"; then
+		call_action="maintain_voltage_synchronous"
+	fi
 
 	daemon_definition="
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -881,13 +883,13 @@ if [[ "$action" == "logs" ]]; then
 	echo -e "👾 Battery CLI logs:\n"
 	tail -n $amount $logfile
 
-	echo -e "\n🖥️  Battery GUI logs:\n"
+	echo -e "\n🖥️	Battery GUI logs:\n"
 	tail -n $amount "$configfolder/gui.log"
 
 	echo -e "\n📁 Config folder details:\n"
 	ls -lah $configfolder
 
-	echo -e "\n⚙️  Battery data:\n"
+	echo -e "\n⚙️	Battery data:\n"
 	$battery_binary status
 	$battery_binary | grep -E "v\d.*"
 
