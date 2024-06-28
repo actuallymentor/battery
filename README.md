@@ -18,7 +18,7 @@ The first time you open the app, it will ask for your administator password so i
 
 - Discharges your battery until it reaches 80%, **even when plugged in**
 - Disables charging when your battery is above 80% charged
-- Enabled charging when your battery is under 80% charged
+- Enables charging when your battery is under 80% charged
 - Keeps the limit engaged even after rebooting
 - Keeps the limit engaged even after closing the tray app
 - Also automatically installs the `battery` command line tool. If you want a custom charging percentage, the CLI is the only way to do that.
