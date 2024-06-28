@@ -19,7 +19,14 @@ configfolder=$HOME/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 maintain_percentage_tracker_file=$configfolder/maintain.percentage
+maintain_voltage_tracker_file=$configfolder/maintain.voltage
 daemon_path=$HOME/Library/LaunchAgents/battery.plist
+
+# Voltage limits
+voltage_min="10.5"
+voltage_max="12.6"
+voltage_hyst_min="0.1"
+voltage_hyst_max="2"
 
 ## ###############
 ## Housekeeping
@@ -51,11 +58,17 @@ Usage:
     output logs of the battery CLI and GUI
 	eg: battery logs 100
 
-  battery maintain LEVEL[1-100,stop]
+  battery maintain PERCENTAGE[1-100,stop]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
 	it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
     eg: battery maintain 80
     eg: battery maintain stop
+
+  battery maintain VOLTAGE[${voltage_min}V-${voltage_max}V,stop] (HYSTERESIS[${voltage_hyst_min}V-${voltage_hyst_max}V])
+    reboot-persistent battery level maintenance: keep battery at a certain voltage
+  default hysteresis: 0.1V
+    eg: battery maintain 11.4V       # keeps battery between 11.3V and 11.5V
+    eg: battery maintain 11.4V 0.3V  # keeps battery between 11.1V and 11.7V
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
@@ -226,6 +239,11 @@ function get_remaining_time() {
 function get_maintain_percentage() {
 	maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 	echo "$maintain_percentage"
+}
+
+function get_voltage() {
+	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }' | tr ',' '.')
+	echo "$voltage"
 }
 
 ## ###############
@@ -493,6 +511,54 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 fi
 
+# Maintain at voltage
+if [[ "$action" == "maintain_voltage_synchronous" ]]; then
+
+  # Recover old maintain status if old setting is found
+  if [[ "$setting" == "recover" ]]; then
+
+    # Before doing anything, log out environment details as a debugging trail
+    log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
+
+    maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+    if [[ $maintain_voltage ]]; then
+      log "Recovering maintenance voltage $maintain_voltage"
+      setting=$(echo $maintain_voltage | awk '{print $1}')
+      subsetting=$(echo $maintain_voltage | awk '{print $2}')
+    else
+      log "No setting to recover, exiting"
+      exit 0
+    fi
+  fi
+
+	voltage=$(get_voltage)
+	lower_voltage=$(echo "$setting - $subsetting" | bc -l)
+	upper_voltage=$(echo "$setting + $subsetting" | bc -l)
+	log "Keeping voltage between ${lower_voltage}V and ${upper_voltage}V"
+
+	# Loop
+	while true; do
+		is_charging=$(get_smc_charging_status)
+
+		if (( $(echo "$voltage < $lower_voltage" | bc -l) )) && [[ "$is_charging" == "disabled" ]]; then
+		  log "Battery at ${voltage}V"
+			enable_charging
+		fi
+		if (( $(echo "$voltage >= $upper_voltage" | bc -l) )) && [[ "$is_charging" == "enabled" ]]; then
+		  log "Battery at ${voltage}V"
+			disable_charging
+		fi
+
+		sleep 60
+
+		voltage=$(get_voltage)
+
+	done
+
+	exit 0
+
+fi
+
 # Asynchronous battery level maintenance
 if [[ "$action" == "maintain" ]]; then
 
@@ -512,8 +578,30 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
+  # Check if setting is a voltage
+  is_voltage=false
+  if [[ "$setting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+    setting="${setting//V}"
+
+    if [[ "$subsetting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+      subsetting="${subsetting//V}"
+    else
+      subsetting="0.1"
+    fi
+
+    if (( $(echo "$setting < $voltage_min" | bc -l) || $(echo "$setting > $voltage_max" | bc -l) )); then
+      log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
+      exit 1
+    fi
+    if (( $(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_max" | bc -l) )); then
+      log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
+      exit 1
+    fi
+
+    is_voltage=true
+
 	# Check if setting is value between 0 and 100
-	if ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
+	elif ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
 
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
@@ -525,17 +613,32 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	# Start maintenance script
-	log "Starting battery maintenance at $setting% $subsetting"
-	nohup battery maintain_synchronous $setting $subsetting >>$logfile &
+	if [ "$is_voltage" = true ]; then
+	  log "Starting battery maintenance at ${setting}V ±${subsetting}V"
+	  nohup battery maintain_voltage_synchronous $setting $subsetting >>$logfile &
+	else
+	  log "Starting battery maintenance at $setting% $subsetting"
+	  nohup battery maintain_synchronous $setting $subsetting >>$logfile &
+	fi
 
 	# Store pid of maintenance process and setting
 	echo $! >$pidfile
 	pid=$(cat "$pidfile" 2>/dev/null)
 
 	if ! [[ "$setting" == "recover" ]]; then
-		log "Writing new setting $setting to $maintain_percentage_tracker_file"
-		echo $setting >$maintain_percentage_tracker_file
-		log "Maintaining battery at $setting%"
+
+	  rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2> /dev/null
+
+    if [[ "$is_voltage" = true ]]; then
+      log "Writing new setting $setting $subsetting to $maintain_voltage_tracker_file"
+      echo "$setting $subsetting" >$maintain_voltage_tracker_file
+      log "Maintaining battery at ${setting}V ±${subsetting}V"
+
+    else
+      log "Writing new setting $setting to $maintain_percentage_tracker_file"
+      echo $setting >$maintain_percentage_tracker_file
+      log "Maintaining battery at $setting%"
+    fi
 	fi
 
 	# Enable the daemon that continues maintaining after reboot
@@ -548,10 +651,16 @@ fi
 # Status logger
 if [[ "$action" == "status" ]]; then
 
-	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), smc charging $(get_smc_charging_status)"
+	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, smc charging $(get_smc_charging_status)"
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
-		log "Your battery is currently being maintained at $maintain_percentage%"
+		if [[ $maintain_percentage ]]; then
+		  maintain_level="$maintain_percentage%"
+		else
+		  maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+		  maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')
+		fi
+		log "Your battery is currently being maintained at $maintain_level"
 	fi
 	exit 0
 
@@ -567,6 +676,11 @@ fi
 # launchd daemon creator, inspiration: https://www.launchd.info/
 if [[ "$action" == "create_daemon" ]]; then
 
+  call_action="maintain_synchronous"
+  if test -f "$maintain_voltage_tracker_file"; then
+    call_action="maintain_voltage_synchronous"
+  fi
+
 	daemon_definition="
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -577,7 +691,7 @@ if [[ "$action" == "create_daemon" ]]; then
 		<key>ProgramArguments</key>
 		<array>
 			<string>$binfolder/battery</string>
-			<string>maintain_synchronous</string>
+			<string>$call_action</string>
 			<string>recover</string>
 		</array>
 		<key>StandardOutPath</key>
