@@ -122,6 +122,7 @@ ALL ALL = NOPASSWD: LEDCONTROL
 "
 
 # Get parameters
+battery_binary=$0
 action=$1
 setting=$2
 subsetting=$3
@@ -134,6 +135,14 @@ function log() {
 	echo -e "$(date +%D-%T) - $1"
 }
 
+function valid_percentage() {
+	if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 0 ]] || [[ "$1" -gt 100 ]]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
 ## #################
 ## SMC Manipulation
 ## #################
@@ -141,6 +150,7 @@ function log() {
 # Change magsafe color
 # see community sleuthing: https://github.com/actuallymentor/battery/issues/71
 function change_magsafe_led_color() {
+	log "MagSafe LED function invoked"
 	color=$1
 
 	# Check whether user can run color changes without password (required for backwards compatibility)
@@ -152,11 +162,14 @@ function change_magsafe_led_color() {
 	fi
 
 	if [[ "$color" == "green" ]]; then
+		log "setting LED to green"
 		sudo smc -k ACLC -w 03
 	elif [[ "$color" == "orange" ]]; then
+		log "setting LED to orange"
 		sudo smc -k ACLC -w 04
 	else
 		# Default action: reset. Value 00 is a guess and needs confirmation
+		log "resetting LED"
 		sudo smc -k ACLC -w 00
 	fi
 }
@@ -175,16 +188,26 @@ function disable_discharging() {
 	# Keep track of status
 	is_charging=$(get_smc_charging_status)
 
-	if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+	if ! valid_percentage "$setting"; then
 
-		log "Charge above $setting"
+		log "Disabling discharging: No valid maintain percentage set, enabling charging"
+		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
+		sudo smc -k CH0B -w 00
+		sudo smc -k CH0C -w 00
+		change_magsafe_led_color "orange"
+
+	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+
+		log "Disabling discharging: Charge above $setting, disabling charging"
 		disable_charging
 		change_magsafe_led_color "green"
 
 	elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
-		log "Charge below $setting"
-		enable_charging
+		log "Disabling discharging: Charge below $setting, enabling charging"
+		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
+		sudo smc -k CH0B -w 00
+		sudo smc -k CH0C -w 00
 		change_magsafe_led_color "orange"
 
 	fi
@@ -353,7 +376,7 @@ if [[ "$action" == "uninstall" ]]; then
 	fi
 	enable_charging
 	disable_discharging
-	battery remove_daemon
+	$battery_binary remove_daemon
 	sudo rm -v "$binfolder/smc" "$binfolder/battery" $visudo_file
 	sudo rm -v -r "$configfolder"
 	pkill -f "/usr/local/bin/battery.*"
@@ -366,13 +389,16 @@ if [[ "$action" == "charging" ]]; then
 	log "Setting $action to $setting"
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
 		enable_charging
 	elif [[ "$setting" == "off" ]]; then
 		disable_charging
+	else
+		log "Error: $setting is not \"on\" or \"off\"."
+		exit 1
 	fi
 
 	exit 0
@@ -385,13 +411,16 @@ if [[ "$action" == "adapter" ]]; then
 	log "Setting $action to $setting"
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
 		enable_discharging
 	elif [[ "$setting" == "off" ]]; then
 		disable_discharging
+  else
+    log "Error: $setting is not \"on\" or \"off\"."
+		exit 1
 	fi
 
 	exit 0
@@ -401,29 +430,30 @@ fi
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
 
-	# Check if percentage is an integer [1-100]
-	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
-		log "Specified percentage ($setting) is not valid. Please specify an integer [1-100]."
-		exit 1
+	if ! valid_percentage "$setting"; then
+		log "Error: $setting is not a valid setting for battery charge. Please use a number between 0 and 100"
+ 		exit 1
 	fi
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Disable charge blocker if enabled
-	battery adapter on
+	$battery_binary adapter on
 
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 	log "Charging to $setting% from $battery_percentage%"
-	enable_charging
+	enable_charging # also disables discharging
 
 	# Loop until battery percent is exceeded
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
-		log "Battery at $battery_percentage%"
-		caffeinate -is sleep 60
-		battery_percentage=$(get_battery_percentage)
+		if [[ "$battery_percentage" -ge "$((setting-3))" ]]; then
+			sleep 20
+		else
+			caffeinate -is sleep 60 
+		fi
 
 	done
 
@@ -436,6 +466,11 @@ fi
 
 # Discharging on/off controller
 if [[ "$action" == "discharge" ]]; then
+
+	if ! valid_percentage "$setting"; then
+		log "Error: $setting is not a valid setting for battery discharge. Please use a number between 0 and 100"
+ 		exit 1
+	fi
 
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
@@ -466,6 +501,11 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		log "🚨 Calibration process have been stopped"
 	fi
 
+	if ! validate_percentage "$setting"; then
+		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+ 		exit 1
+	fi
+
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
 
@@ -486,7 +526,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
 		log "Triggering discharge to $setting before enabling charging limiter"
-		battery discharge "$setting"
+		$battery_binary discharge "$setting"
 		log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
 	else
 		log "Not triggering discharge as it is not requested"
@@ -596,10 +636,8 @@ if [[ "$action" == "maintain" ]]; then
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2>/dev/null
-		battery disable_daemon
-		enable_charging
-		change_magsafe_led_color
-		battery status
+		$battery_binary disable_daemon
+		$battery_binary status
 		exit 0
 	fi
 
@@ -626,8 +664,7 @@ if [[ "$action" == "maintain" ]]; then
     is_voltage=true
 
 	# Check if setting is value between 0 and 100
-	elif ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
-
+	if ! valid_percentage "$setting"; then
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
 		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
@@ -638,6 +675,8 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	# Start maintenance script
+	log "Starting battery maintenance at $setting% $subsetting"
+	nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
 	if [ "$is_voltage" = true ]; then
 	  log "Starting battery maintenance at ${setting}V ±${subsetting}V"
 	  nohup battery maintain_voltage_synchronous $setting $subsetting >>$logfile &
@@ -667,7 +706,7 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	# Enable the daemon that continues maintaining after reboot
-	battery create_daemon
+	$battery_binary create_daemon
 
 	exit 0
 
@@ -849,8 +888,8 @@ if [[ "$action" == "logs" ]]; then
 	ls -lah $configfolder
 
 	echo -e "\n⚙️  Battery data:\n"
-	battery status
-	battery | grep -E "v\d.*"
+	$battery_binary status
+	$battery_binary | grep -E "v\d.*"
 
 	exit 0
 
