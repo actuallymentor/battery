@@ -58,6 +58,8 @@ Example usage:
 ```shell
 # This will enable charging when your battery dips under 80, and disable it when it exceeds 80
 battery maintain 80
+# This will enable charging when your battery dips under 30, and disable it when it exceeds 70
+battery maintain 30-70
 ```
 
 After running a command like `battery charging off` you can verify the change visually by looking at the battery icon:
@@ -71,17 +73,23 @@ After running `battery charging on` you will see it change to this:
 For help, run `battery` without parameters:
 
 ```
-Battery CLI utility v1.0.1
+Battery CLI utility v1.2.0
 
 Usage:
 
   battery status
     output battery SMC status, % and time remaining
 
-  battery maintain LEVEL[1-100,stop]
-    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
-    eg: battery maintain 80
-    eg: battery maintain stop
+  battery maintain LEVEL[value/minvalue-maxvalue/stop]
+    reboot-persistent battery level maintenance. There are two modes:
+      threshold mode:
+        turn off charging above, and on below a certain value.
+      range mode:
+        turn off charging above the maximum value, and on below the minimum value.
+    it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
+    eg: battery maintain 80           // threshold mode
+    eg: battery maintain 20-80        // range mode
+    eg: battery maintain stop         // disable maintain mode
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
