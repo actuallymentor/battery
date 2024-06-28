@@ -17,7 +17,6 @@ configfolder=/Users/$calling_user/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 
-
 # Ask for sudo once, in most systems this will cache the permissions for a bit
 sudo echo "🔋 Starting battery installation"
 echo -e "[ 1 ] Superuser permissions acquired."
@@ -45,15 +44,15 @@ sudo chmod +x $binfolder/smc
 echo "[ 4 ] Writing script to $binfolder/battery for user $calling_user"
 sudo cp $batteryfolder/battery.sh $binfolder/battery
 
-echo "[ 5 ] Setting correct file permissions"
+echo "[ 5 ] Setting correct file permissions for $calling_user"
 # Set permissions for battery executables
-sudo chown $calling_user $binfolder/battery
+sudo chown -R $calling_user $binfolder/battery
 sudo chmod 755 $binfolder/battery
 sudo chmod +x $binfolder/battery
 
 # Set permissions for logfiles
 mkdir -p $configfolder
-sudo chown $calling_user $configfolder
+sudo chown -R $calling_user $configfolder
 
 touch $logfile
 sudo chown $calling_user $logfile
@@ -66,7 +65,8 @@ sudo chmod 755 $pidfile
 sudo chown $calling_user $binfolder/battery
 
 echo "[ 6 ] Setting up visudo declarations"
-sudo bash $batteryfolder/battery.sh visudo
+sudo $batteryfolder/battery.sh visudo $USER
+sudo chown -R $calling_user $configfolder
 
 # Remove tempfiles
 cd ../..

@@ -139,7 +139,7 @@ const initialize_battery = async () => {
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( () => false ),
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( () => false ),
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 01` ).catch( () => false )
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 02` ).catch( () => false )
         ] )
 
         const visudo_complete = charging_in_visudo && discharging_in_visudo && magsafe_led_in_visudo && additional_magsafe_led_in_visudo

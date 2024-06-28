@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.2.3"
+BATTERY_CLI_VERSION="v1.2.4"
 
 # Path fixes for unexpected environments
 PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -113,7 +113,7 @@ Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
 Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
 Cmnd_Alias      DISCHARGEON = $binfolder/smc -k CH0I -w 01
-Cmnd_Alias      LEDCONTROL = $binfolder/smc -k ACLC -w 04, $binfolder/smc -k ACLC -w 03, $binfolder/smc -k ACLC -w 01, $binfolder/smc -k ACLC -w 00, $binfolder/smc -k ACLC -r
+Cmnd_Alias      LEDCONTROL = $binfolder/smc -k ACLC -w 04, $binfolder/smc -k ACLC -w 03, $binfolder/smc -k ACLC -w 02, $binfolder/smc -k ACLC -w 01, $binfolder/smc -k ACLC -w 00, $binfolder/smc -k ACLC -r
 ALL ALL = NOPASSWD: BATTERYOFF
 ALL ALL = NOPASSWD: BATTERYON
 ALL ALL = NOPASSWD: DISCHARGEOFF
@@ -291,12 +291,18 @@ fi
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
 
+	# User to set folder ownership to is $setting if it is defined and $USER otherwise
+	if [[ -z "$setting" ]]; then
+		setting=$USER
+	fi
+
 	# Set visudo tempfile ownership to current user
-	log "Setting visudo file permissions to $USER"
-	sudo chown -R $USER $configfolder
+	log "Setting visudo file permissions to $setting"
+	sudo chown -R $setting $configfolder
 
 	# Write the visudo file to a tempfile
 	visudo_tmpfile="$configfolder/visudo.tmp"
+	sudo rm visudo_tmpfile 2>/dev/null
 	echo -e "$visudoconfig" >$visudo_tmpfile
 
 	# If the visudo file is the same (no error, exit code 0), set the permissions just
