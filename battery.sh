@@ -236,6 +236,11 @@ function get_remaining_time() {
 	echo "$time_remaining"
 }
 
+function get_charger_state() {
+	ac_attached=$(pmset -g batt | tail -n1 | awk '{ x=match($0, /AC attached/) > 0; print x }')
+	echo "$ac_attached"
+}
+
 function get_maintain_percentage() {
 	maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 	echo "$maintain_percentage"
@@ -486,11 +491,14 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 		# Keep track of status
 		is_charging=$(get_smc_charging_status)
+		ac_attached=$(get_charger_state)
 
-		if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+		if [[ "$battery_percentage" -ge "$setting" && ( "$is_charging" == "enabled" || "$ac_attached" == "1" ) ]]; then
 
 			log "Charge above $setting"
-			disable_charging
+			if [[ "$is_charging" == "enabled" ]]; then
+				disable_charging
+			fi
 			change_magsafe_led_color "green"
 
 		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
