@@ -4,7 +4,7 @@ const { exec } = require( 'node:child_process' )
 const { log, alert, wait, confirm } = require( './helpers' )
 const { get_force_discharge_setting } = require( './settings' )
 const { USER } = process.env
-const path_fix = 'PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/homebrew'
+const path_fix = 'PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
 const battery = `${ path_fix } battery`
 const shell_options = {
     shell: '/bin/bash',
@@ -125,22 +125,24 @@ const initialize_battery = async () => {
         ] )
         log( `Internet online: ${ online }` )
 
-        // Check if battery is installed
+        // Check if battery is installed and visudo entries are complete. New visudo entries are added when we do new `sudo` stuff in battery.sh
         const [
             battery_installed,
             smc_installed,
             charging_in_visudo,
             discharging_in_visudo,
-            magsafe_led_in_visudo
+            magsafe_led_in_visudo,
+            additional_magsafe_led_in_visudo
         ] = await Promise.all( [
             exec_async( `${ path_fix } which battery` ).catch( () => false ),
             exec_async( `${ path_fix } which smc` ).catch( () => false ),
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( () => false ),
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( () => false )
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( () => false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 02` ).catch( () => false )
         ] )
 
-        const visudo_complete = charging_in_visudo && discharging_in_visudo && magsafe_led_in_visudo
+        const visudo_complete = charging_in_visudo && discharging_in_visudo && magsafe_led_in_visudo && additional_magsafe_led_in_visudo
         const is_installed = battery_installed && smc_installed
         log( 'Is installed? ', is_installed )
 
