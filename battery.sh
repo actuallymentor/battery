@@ -113,7 +113,7 @@ Cmnd_Alias      BATTERYOFF = $binfolder/smc -k CH0B -w 02, $binfolder/smc -k CH0
 Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C -w 00
 Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
 Cmnd_Alias      DISCHARGEON = $binfolder/smc -k CH0I -w 01
-Cmnd_Alias      LEDCONTROL = $binfolder/smc -k ACLC -w 04, $binfolder/smc -k ACLC -w 03, $binfolder/smc -k ACLC -w 00, $binfolder/smc -k ACLC -r
+Cmnd_Alias      LEDCONTROL = $binfolder/smc -k ACLC -w 04, $binfolder/smc -k ACLC -w 03, $binfolder/smc -k ACLC -w 01, $binfolder/smc -k ACLC -w 00, $binfolder/smc -k ACLC -r
 ALL ALL = NOPASSWD: BATTERYOFF
 ALL ALL = NOPASSWD: BATTERYON
 ALL ALL = NOPASSWD: DISCHARGEOFF
@@ -290,6 +290,10 @@ fi
 
 # Visudo message
 if [[ "$action" == "visudo" ]]; then
+
+	# Set visudo tempfile ownership to current user
+	log "Setting visudo file permissions to $USER"
+	sudo chown -R $USER $configfolder
 
 	# Write the visudo file to a tempfile
 	visudo_tmpfile="$configfolder/visudo.tmp"

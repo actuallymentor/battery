@@ -3,7 +3,7 @@
 // See https://kilianvalkhof.com/2019/electron/notarizing-your-electron-application/
 // /////////////////////////////*/
 require( 'dotenv' ).config()
-const { notarize } = require( 'electron-notarize' )
+const { notarize } = require( '@electron/notarize' )
 const log = ( ...messages ) => console.log( ...messages )
 
 exports.default = async function notarizing( context ) {
