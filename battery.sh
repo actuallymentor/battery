@@ -4,10 +4,10 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.1.7"
+BATTERY_CLI_VERSION="v1.2.2"
 
 # Path fixes for unexpected environments
-PATH=/bin:/usr/bin:/usr/local/bin:/usr/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/homebrew
+PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 ## ###############
 ## Variables
@@ -19,7 +19,15 @@ configfolder=$HOME/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 maintain_percentage_tracker_file=$configfolder/maintain.percentage
+maintain_voltage_tracker_file=$configfolder/maintain.voltage
 daemon_path=$HOME/Library/LaunchAgents/battery.plist
+calibrate_pidfile=$configfolder/calibrate.pid
+
+# Voltage limits
+voltage_min="10.5"
+voltage_max="12.6"
+voltage_hyst_min="0.1"
+voltage_hyst_max="2"
 
 ## ###############
 ## Housekeeping
@@ -51,11 +59,17 @@ Usage:
     output logs of the battery CLI and GUI
 	eg: battery logs 100
 
-  battery maintain LEVEL[1-100,stop]
+  battery maintain PERCENTAGE[1-100,stop]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
 	it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
     eg: battery maintain 80
     eg: battery maintain stop
+
+  battery maintain VOLTAGE[${voltage_min}V-${voltage_max}V,stop] (HYSTERESIS[${voltage_hyst_min}V-${voltage_hyst_max}V])
+    reboot-persistent battery level maintenance: keep battery at a certain voltage
+  default hysteresis: 0.1V
+    eg: battery maintain 11.4V       # keeps battery between 11.3V and 11.5V
+    eg: battery maintain 11.4V 0.3V  # keeps battery between 11.1V and 11.7V
 
   battery charging SETTING[on/off]
     manually set the battery to (not) charge
@@ -64,6 +78,9 @@ Usage:
   battery adapter SETTING[on/off]
     manually set the adapter to (not) charge even when plugged in
     eg: battery adapter off
+
+  battery calibrate 
+    calibrate the battery by discharging it to 15%, then recharging it to 100%, and keeping it there for 1 hour
 
   battery charge LEVEL[1-100]
     charge the battery to a certain percentage, and disable charging when that percentage is reached
@@ -105,6 +122,7 @@ ALL ALL = NOPASSWD: LEDCONTROL
 "
 
 # Get parameters
+battery_binary=$0
 action=$1
 setting=$2
 subsetting=$3
@@ -117,6 +135,14 @@ function log() {
 	echo -e "$(date +%D-%T) - $1"
 }
 
+function valid_percentage() {
+	if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 0 ]] || [[ "$1" -gt 100 ]]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
 ## #################
 ## SMC Manipulation
 ## #################
@@ -124,6 +150,7 @@ function log() {
 # Change magsafe color
 # see community sleuthing: https://github.com/actuallymentor/battery/issues/71
 function change_magsafe_led_color() {
+	log "MagSafe LED function invoked"
 	color=$1
 
 	# Check whether user can run color changes without password (required for backwards compatibility)
@@ -135,11 +162,14 @@ function change_magsafe_led_color() {
 	fi
 
 	if [[ "$color" == "green" ]]; then
+		log "setting LED to green"
 		sudo smc -k ACLC -w 03
 	elif [[ "$color" == "orange" ]]; then
+		log "setting LED to orange"
 		sudo smc -k ACLC -w 04
 	else
 		# Default action: reset. Value 00 is a guess and needs confirmation
+		log "resetting LED"
 		sudo smc -k ACLC -w 00
 	fi
 }
@@ -158,16 +188,26 @@ function disable_discharging() {
 	# Keep track of status
 	is_charging=$(get_smc_charging_status)
 
-	if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+	if ! valid_percentage "$setting"; then
 
-		log "Charge above $setting"
+		log "Disabling discharging: No valid maintain percentage set, enabling charging"
+		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
+		sudo smc -k CH0B -w 00
+		sudo smc -k CH0C -w 00
+		change_magsafe_led_color "orange"
+
+	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+
+		log "Disabling discharging: Charge above $setting, disabling charging"
 		disable_charging
 		change_magsafe_led_color "green"
 
 	elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
-		log "Charge below $setting"
-		enable_charging
+		log "Disabling discharging: Charge below $setting, enabling charging"
+		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
+		sudo smc -k CH0B -w 00
+		sudo smc -k CH0C -w 00
 		change_magsafe_led_color "orange"
 
 	fi
@@ -223,9 +263,19 @@ function get_remaining_time() {
 	echo "$time_remaining"
 }
 
+function get_charger_state() {
+	ac_attached=$(pmset -g batt | tail -n1 | awk '{ x=match($0, /AC attached/) > 0; print x }')
+	echo "$ac_attached"
+}
+
 function get_maintain_percentage() {
 	maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 	echo "$maintain_percentage"
+}
+
+function get_voltage() {
+	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }' | tr ',' '.')
+	echo "$voltage"
 }
 
 ## ###############
@@ -326,7 +376,7 @@ if [[ "$action" == "uninstall" ]]; then
 	fi
 	enable_charging
 	disable_discharging
-	battery remove_daemon
+	$battery_binary remove_daemon
 	sudo rm -v "$binfolder/smc" "$binfolder/battery" $visudo_file
 	sudo rm -v -r "$configfolder"
 	pkill -f "/usr/local/bin/battery.*"
@@ -339,13 +389,16 @@ if [[ "$action" == "charging" ]]; then
 	log "Setting $action to $setting"
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
 		enable_charging
 	elif [[ "$setting" == "off" ]]; then
 		disable_charging
+	else
+		log "Error: $setting is not \"on\" or \"off\"."
+		exit 1
 	fi
 
 	exit 0
@@ -358,13 +411,16 @@ if [[ "$action" == "adapter" ]]; then
 	log "Setting $action to $setting"
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
-		disable_discharging
-	elif [[ "$setting" == "off" ]]; then
 		enable_discharging
+	elif [[ "$setting" == "off" ]]; then
+		disable_discharging
+	else
+		log "Error: $setting is not \"on\" or \"off\"."
+		exit 1
 	fi
 
 	exit 0
@@ -374,29 +430,30 @@ fi
 # Charging on/off controller
 if [[ "$action" == "charge" ]]; then
 
-	# Check if percentage is an integer [1-100]
-	if ! [[ $setting =~ ^[1-9][0-9]?$|^100$ ]]; then
-		log "Specified percentage ($setting) is not valid. Please specify an integer [1-100]."
+	if ! valid_percentage "$setting"; then
+		log "Error: $setting is not a valid setting for battery charge. Please use a number between 0 and 100"
 		exit 1
 	fi
 
 	# Disable running daemon
-	battery maintain stop
+	$battery_binary maintain stop
 
 	# Disable charge blocker if enabled
-	battery adapter on
+	$battery_binary adapter on
 
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 	log "Charging to $setting% from $battery_percentage%"
-	enable_charging
+	enable_charging # also disables discharging
 
 	# Loop until battery percent is exceeded
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
-		log "Battery at $battery_percentage%"
-		caffeinate -is sleep 60
-		battery_percentage=$(get_battery_percentage)
+		if [[ "$battery_percentage" -ge "$((setting - 3))" ]]; then
+			sleep 20
+		else
+			caffeinate -is sleep 60
+		fi
 
 	done
 
@@ -409,6 +466,11 @@ fi
 
 # Discharging on/off controller
 if [[ "$action" == "discharge" ]]; then
+
+	if ! valid_percentage "$setting"; then
+		log "Error: $setting is not a valid setting for battery discharge. Please use a number between 0 and 100"
+		exit 1
+	fi
 
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
@@ -432,6 +494,18 @@ fi
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
 
+	# Checking if the calibration process is running
+	if test -f "$calibrate_pidfile"; then
+		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
+		kill $calibrate_pidfile &>/dev/null
+		log "🚨 Calibration process have been stopped"
+	fi
+
+	if ! validate_percentage "$setting"; then
+		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+		exit 1
+	fi
+
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
 
@@ -452,7 +526,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
 		log "Triggering discharge to $setting before enabling charging limiter"
-		battery discharge "$setting"
+		$battery_binary discharge "$setting"
 		log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
 	else
 		log "Not triggering discharge as it is not requested"
@@ -468,11 +542,14 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 		# Keep track of status
 		is_charging=$(get_smc_charging_status)
+		ac_attached=$(get_charger_state)
 
-		if [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
+		if [[ "$battery_percentage" -ge "$setting" && ("$is_charging" == "enabled" || "$ac_attached" == "1") ]]; then
 
 			log "Charge above $setting"
-			disable_charging
+			if [[ "$is_charging" == "enabled" ]]; then
+				disable_charging
+			fi
 			change_magsafe_led_color "green"
 
 		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
@@ -493,6 +570,54 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 fi
 
+# Maintain at voltage
+if [[ "$action" == "maintain_voltage_synchronous" ]]; then
+
+	# Recover old maintain status if old setting is found
+	if [[ "$setting" == "recover" ]]; then
+
+		# Before doing anything, log out environment details as a debugging trail
+		log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
+
+		maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+		if [[ $maintain_voltage ]]; then
+			log "Recovering maintenance voltage $maintain_voltage"
+			setting=$(echo $maintain_voltage | awk '{print $1}')
+			subsetting=$(echo $maintain_voltage | awk '{print $2}')
+		else
+			log "No setting to recover, exiting"
+			exit 0
+		fi
+	fi
+
+	voltage=$(get_voltage)
+	lower_voltage=$(echo "$setting - $subsetting" | bc -l)
+	upper_voltage=$(echo "$setting + $subsetting" | bc -l)
+	log "Keeping voltage between ${lower_voltage}V and ${upper_voltage}V"
+
+	# Loop
+	while true; do
+		is_charging=$(get_smc_charging_status)
+
+		if (($(echo "$voltage < $lower_voltage" | bc -l))) && [[ "$is_charging" == "disabled" ]]; then
+			log "Battery at ${voltage}V"
+			enable_charging
+		fi
+		if (($(echo "$voltage >= $upper_voltage" | bc -l))) && [[ "$is_charging" == "enabled" ]]; then
+			log "Battery at ${voltage}V"
+			disable_charging
+		fi
+
+		sleep 60
+
+		voltage=$(get_voltage)
+
+	done
+
+	exit 0
+
+fi
+
 # Asynchronous battery level maintenance
 if [[ "$action" == "maintain" ]]; then
 
@@ -502,19 +627,45 @@ if [[ "$action" == "maintain" ]]; then
 		kill $pid &>/dev/null
 	fi
 
+	if test -f "$calibrate_pidfile"; then
+		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
+		kill $calibrate_pidfile &>/dev/null
+		log "🚨 Calibration process have been stopped"
+	fi
+
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2>/dev/null
-		battery disable_daemon
-		enable_charging
-		change_magsafe_led_color
-		battery status
+		$battery_binary disable_daemon
+		$battery_binary status
 		exit 0
 	fi
 
-	# Check if setting is value between 0 and 100
-	if ! [[ "$setting" =~ ^[0-9]+$ ]] || [[ "$setting" -lt 0 ]] || [[ "$setting" -gt 100 ]]; then
+	# Check if setting is a voltage
+	is_voltage=false
+	if [[ "$setting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+		setting="${setting//V/}"
 
+		if [[ "$subsetting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+			subsetting="${subsetting//V/}"
+		else
+			subsetting="0.1"
+		fi
+
+		if (($(echo "$setting < $voltage_min" | bc -l) || $(echo "$setting > $voltage_max" | bc -l))); then
+			log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
+			exit 1
+		fi
+		if (($(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_max" | bc -l))); then
+			log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
+			exit 1
+		fi
+
+		is_voltage=true
+	fi
+
+	# Check if setting is value between 0 and 100
+	if ! valid_percentage "$setting"; then
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
 		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
@@ -526,32 +677,114 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Start maintenance script
 	log "Starting battery maintenance at $setting% $subsetting"
-	nohup battery maintain_synchronous $setting $subsetting >>$logfile &
+	nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
+	if [ "$is_voltage" = true ]; then
+		log "Starting battery maintenance at ${setting}V ±${subsetting}V"
+		nohup battery maintain_voltage_synchronous $setting $subsetting >>$logfile &
+	else
+		log "Starting battery maintenance at $setting% $subsetting"
+		nohup battery maintain_synchronous $setting $subsetting >>$logfile &
+	fi
 
 	# Store pid of maintenance process and setting
 	echo $! >$pidfile
 	pid=$(cat "$pidfile" 2>/dev/null)
 
 	if ! [[ "$setting" == "recover" ]]; then
-		log "Writing new setting $setting to $maintain_percentage_tracker_file"
-		echo $setting >$maintain_percentage_tracker_file
-		log "Maintaining battery at $setting%"
+
+		rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2>/dev/null
+
+		if [[ "$is_voltage" = true ]]; then
+			log "Writing new setting $setting $subsetting to $maintain_voltage_tracker_file"
+			echo "$setting $subsetting" >$maintain_voltage_tracker_file
+			log "Maintaining battery at ${setting}V ±${subsetting}V"
+
+		else
+			log "Writing new setting $setting to $maintain_percentage_tracker_file"
+			echo $setting >$maintain_percentage_tracker_file
+			log "Maintaining battery at $setting%"
+		fi
+
 	fi
 
 	# Enable the daemon that continues maintaining after reboot
-	battery create_daemon
+	$battery_binary create_daemon
 
 	exit 0
 
 fi
 
+# Battery calibration
+if [[ "$action" == "calibrate_synchronous" ]]; then
+	log "Starting calibration"
+
+	# Stop the maintaining
+	battery maintain stop
+
+	# Discharge battery to 15%
+	battery discharge 15
+
+	while true; do
+		log "checking if at 100%"
+		# Check if battery level has reached 100%
+		if battery status | head -n 1 | grep -q "Battery at 100%"; then
+			break
+		else
+			sleep 300
+			continue
+		fi
+	done
+
+	# Wait before discharging to target level
+	log "reached 100%, maintaining for 1 hour"
+	sleep 3600
+
+	# Discharge battery to 80%
+	battery discharge 80
+
+	# Recover old maintain status
+	battery maintain recover
+	exit 0
+fi
+
+# Asynchronous battery level maintenance
+if [[ "$action" == "calibrate" ]]; then
+	# Kill old process silently
+	if test -f "$calibrate_pidfile"; then
+		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
+		kill $pid &>/dev/null
+	fi
+
+	if [[ "$setting" == "stop" ]]; then
+		log "Killing running calibration daemon"
+		kill $calibrate_pidfile &>/dev/null
+		rm $calibrate_pidfile 2>/dev/null
+
+		exit 0
+	fi
+
+	# Start calibration script
+	log "Starting calibration script"
+	nohup battery calibrate_synchronous >>$logfile &
+
+	# Store pid of calibration process and setting
+	echo $! >$calibrate_pidfile
+	pid=$(cat "$calibrate_pidfile" 2>/dev/null)
+fi
+
 # Status logger
 if [[ "$action" == "status" ]]; then
 
-	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), smc charging $(get_smc_charging_status)"
+	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, smc charging $(get_smc_charging_status)"
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
-		log "Your battery is currently being maintained at $maintain_percentage%"
+		if [[ $maintain_percentage ]]; then
+			maintain_level="$maintain_percentage%"
+		else
+			maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+			maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')
+		fi
+		log "Your battery is currently being maintained at $maintain_level"
 	fi
 	exit 0
 
@@ -567,6 +800,11 @@ fi
 # launchd daemon creator, inspiration: https://www.launchd.info/
 if [[ "$action" == "create_daemon" ]]; then
 
+	call_action="maintain_synchronous"
+	if test -f "$maintain_voltage_tracker_file"; then
+		call_action="maintain_voltage_synchronous"
+	fi
+
 	daemon_definition="
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -577,7 +815,7 @@ if [[ "$action" == "create_daemon" ]]; then
 		<key>ProgramArguments</key>
 		<array>
 			<string>$binfolder/battery</string>
-			<string>maintain_synchronous</string>
+			<string>$call_action</string>
 			<string>recover</string>
 		</array>
 		<key>StandardOutPath</key>
@@ -645,15 +883,15 @@ if [[ "$action" == "logs" ]]; then
 	echo -e "👾 Battery CLI logs:\n"
 	tail -n $amount $logfile
 
-	echo -e "\n🖥️  Battery GUI logs:\n"
+	echo -e "\n🖥️	Battery GUI logs:\n"
 	tail -n $amount "$configfolder/gui.log"
 
 	echo -e "\n📁 Config folder details:\n"
 	ls -lah $configfolder
 
-	echo -e "\n⚙️  Battery data:\n"
-	battery status
-	battery | grep -E "v\d.*"
+	echo -e "\n⚙️	Battery data:\n"
+	$battery_binary status
+	$battery_binary | grep -E "v\d.*"
 
 	exit 0
 
