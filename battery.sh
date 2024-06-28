@@ -501,7 +501,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		log "🚨 Calibration process have been stopped"
 	fi
 
-	if ! validate_percentage "$setting"; then
+	if ! valid_percentage "$setting"; then
 		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
 		exit 1
 	fi
