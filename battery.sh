@@ -79,7 +79,7 @@ Usage:
     manually set the adapter to (not) charge even when plugged in
     eg: battery adapter off
 
-  battery calibrate 
+  battery calibrate
     calibrate the battery by discharging it to 15%, then recharging it to 100%, and keeping it there for 1 hour
 
   battery charge LEVEL[1-100]
@@ -141,6 +141,13 @@ function valid_percentage() {
 	else
 		return 0
 	fi
+}
+
+function valid_voltage() {
+	if [[ "$1" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+		return 0
+	fi
+	return 1
 }
 
 ## #################
@@ -462,7 +469,7 @@ if [[ "$action" == "charge" ]]; then
 		if [[ "$battery_percentage" -ge "$((setting - 3))" ]]; then
 			sleep 20
 		else
-			caffeinate -is sleep 60
+		caffeinate -is sleep 60
 		fi
 
 	done
@@ -558,7 +565,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 			log "Charge above $setting"
 			if [[ "$is_charging" == "enabled" ]]; then
-				disable_charging
+			disable_charging
 			fi
 			change_magsafe_led_color "green"
 
@@ -583,22 +590,22 @@ fi
 # Maintain at voltage
 if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 
-	# Recover old maintain status if old setting is found
-	if [[ "$setting" == "recover" ]]; then
+  # Recover old maintain status if old setting is found
+  if [[ "$setting" == "recover" ]]; then
 
-		# Before doing anything, log out environment details as a debugging trail
-		log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
+    # Before doing anything, log out environment details as a debugging trail
+    log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
 
-		maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
-		if [[ $maintain_voltage ]]; then
-			log "Recovering maintenance voltage $maintain_voltage"
-			setting=$(echo $maintain_voltage | awk '{print $1}')
-			subsetting=$(echo $maintain_voltage | awk '{print $2}')
-		else
-			log "No setting to recover, exiting"
-			exit 0
-		fi
-	fi
+    maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+    if [[ $maintain_voltage ]]; then
+      log "Recovering maintenance voltage $maintain_voltage"
+      setting=$(echo $maintain_voltage | awk '{print $1}')
+      subsetting=$(echo $maintain_voltage | awk '{print $2}')
+    else
+      log "No setting to recover, exiting"
+      exit 0
+    fi
+  fi
 
 	voltage=$(get_voltage)
 	lower_voltage=$(echo "$setting - $subsetting" | bc -l)
@@ -610,11 +617,11 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 		is_charging=$(get_smc_charging_status)
 
 		if (($(echo "$voltage < $lower_voltage" | bc -l))) && [[ "$is_charging" == "disabled" ]]; then
-			log "Battery at ${voltage}V"
+		  log "Battery at ${voltage}V"
 			enable_charging
 		fi
 		if (($(echo "$voltage >= $upper_voltage" | bc -l))) && [[ "$is_charging" == "enabled" ]]; then
-			log "Battery at ${voltage}V"
+		  log "Battery at ${voltage}V"
 			disable_charging
 		fi
 
@@ -651,31 +658,30 @@ if [[ "$action" == "maintain" ]]; then
 		exit 0
 	fi
 
-	# Check if setting is a voltage
-	is_voltage=false
-	if [[ "$setting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+  # Check if setting is a voltage
+  is_voltage=false
+  if valid_voltage "$setting"; then
 		setting="${setting//V/}"
 
-		if [[ "$subsetting" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
+    if valid_voltage "$subsetting"; then
 			subsetting="${subsetting//V/}"
-		else
-			subsetting="0.1"
-		fi
+    else
+      subsetting="0.1"
+    fi
 
 		if (($(echo "$setting < $voltage_min" | bc -l) || $(echo "$setting > $voltage_max" | bc -l))); then
-			log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
-			exit 1
-		fi
+      log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
+      exit 1
+    fi
 		if (($(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_max" | bc -l))); then
-			log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
-			exit 1
-		fi
+      log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
+      exit 1
+    fi
 
-		is_voltage=true
-	fi
+    is_voltage=true
 
 	# Check if setting is value between 0 and 100
-	if ! valid_percentage "$setting"; then
+	elif ! valid_percentage "$setting"; then
 		log "Called with $setting $action"
 		# If non 0-100 setting is not a special keyword, exit with an error.
 		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
@@ -686,14 +692,12 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	# Start maintenance script
-	log "Starting battery maintenance at $setting% $subsetting"
-	nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
 	if [ "$is_voltage" = true ]; then
-		log "Starting battery maintenance at ${setting}V ±${subsetting}V"
-		nohup battery maintain_voltage_synchronous $setting $subsetting >>$logfile &
+	  log "Starting battery maintenance at ${setting}V ±${subsetting}V"
+	  nohup $battery_binary maintain_voltage_synchronous $setting $subsetting >>$logfile &
 	else
-		log "Starting battery maintenance at $setting% $subsetting"
-		nohup battery maintain_synchronous $setting $subsetting >>$logfile &
+	  log "Starting battery maintenance at $setting% $subsetting"
+	  nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
 	fi
 
 	# Store pid of maintenance process and setting
@@ -704,16 +708,16 @@ if [[ "$action" == "maintain" ]]; then
 
 		rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2>/dev/null
 
-		if [[ "$is_voltage" = true ]]; then
-			log "Writing new setting $setting $subsetting to $maintain_voltage_tracker_file"
-			echo "$setting $subsetting" >$maintain_voltage_tracker_file
-			log "Maintaining battery at ${setting}V ±${subsetting}V"
+    if [[ "$is_voltage" = true ]]; then
+      log "Writing new setting $setting $subsetting to $maintain_voltage_tracker_file"
+      echo "$setting $subsetting" >$maintain_voltage_tracker_file
+      log "Maintaining battery at ${setting}V ±${subsetting}V"
 
-		else
-			log "Writing new setting $setting to $maintain_percentage_tracker_file"
-			echo $setting >$maintain_percentage_tracker_file
-			log "Maintaining battery at $setting%"
-		fi
+    else
+      log "Writing new setting $setting to $maintain_percentage_tracker_file"
+      echo $setting >$maintain_percentage_tracker_file
+      log "Maintaining battery at $setting%"
+    fi
 
 	fi
 
@@ -789,10 +793,10 @@ if [[ "$action" == "status" ]]; then
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
-			maintain_level="$maintain_percentage%"
+		  maintain_level="$maintain_percentage%"
 		else
-			maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
-			maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')
+		  maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
+		  maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')
 		fi
 		log "Your battery is currently being maintained at $maintain_level"
 	fi
@@ -810,10 +814,10 @@ fi
 # launchd daemon creator, inspiration: https://www.launchd.info/
 if [[ "$action" == "create_daemon" ]]; then
 
-	call_action="maintain_synchronous"
-	if test -f "$maintain_voltage_tracker_file"; then
-		call_action="maintain_voltage_synchronous"
-	fi
+  call_action="maintain_synchronous"
+  if test -f "$maintain_voltage_tracker_file"; then
+    call_action="maintain_voltage_synchronous"
+  fi
 
 	daemon_definition="
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
