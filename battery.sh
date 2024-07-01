@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.2.5"
+BATTERY_CLI_VERSION="v1.2.6"
 
 # Path fixes for unexpected environments
 PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -640,6 +640,7 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Kill old process silently
 	if test -f "$pidfile"; then
+		log "Killing old maintain process at $(cat $pidfile)"
 		pid=$(cat "$pidfile" 2>/dev/null)
 		kill $pid &>/dev/null
 	fi
@@ -654,6 +655,7 @@ if [[ "$action" == "maintain" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
 		rm $pidfile 2>/dev/null
 		$battery_binary disable_daemon
+		enable_charging
 		$battery_binary status
 		exit 0
 	fi
