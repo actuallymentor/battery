@@ -518,11 +518,6 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		log "🚨 Calibration process have been stopped"
 	fi
 
-	if ! valid_percentage "$setting"; then
-		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
-		exit 1
-	fi
-
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
 
@@ -537,6 +532,11 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 			log "No setting to recover, exiting"
 			exit 0
 		fi
+	fi
+
+	if ! valid_percentage "$setting"; then
+		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+		exit 1
 	fi
 
 	# Check if the user requested that the battery maintenance first discharge to the desired level
