@@ -97,6 +97,7 @@ Usage:
 
   battery discharge LEVEL[1-100]
     block power input from the adapter until battery falls to this level
+    should not be used when your laptop is used in clamshell mode
     eg: battery discharge 90
 
   battery visudo
