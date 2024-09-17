@@ -309,8 +309,8 @@ if [[ "$action" == "visudo" ]]; then
 
 	# Write the visudo file to a tempfile
 	visudo_tmpfile="$configfolder/visudo.tmp"
-	sudo rm visudo_tmpfile 2>/dev/null
-	echo -e "$visudoconfig" >$visudo_tmpfile
+	sudo rm "$visudo_tmpfile" 2>/dev/null
+	echo -e "$visudoconfig" >"$visudo_tmpfile"
 
 	# If the visudo file is the same (no error, exit code 0), set the permissions just
 	if sudo cmp $visudo_file $visudo_tmpfile &>/dev/null; then
