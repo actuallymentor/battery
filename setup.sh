@@ -7,13 +7,13 @@ echo -e "# Note: this script will ask for your password once or multiple times."
 echo -e "####################################################################\n\n"
 
 # Set environment variables
-tempfolder=~/.battery-tmp
+tempfolder=$(mktemp -d)
 binfolder=/usr/local/bin
 mkdir -p $tempfolder
 
 # Set script value
 calling_user=${1:-"$USER"}
-configfolder=/Users/$calling_user/.battery
+[ -n "$XDG_CONFIG_HOME" ] && configfolder=$XDG_CONFIG_HOME/battery || configfolder=$HOME/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 

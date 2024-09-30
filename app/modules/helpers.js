@@ -1,5 +1,5 @@
 const { promises: fs } = require( 'fs' )
-const { HOME } = process.env
+const { HOME, XDG_CONFIG_HOME } = process.env
 let has_alerted_user_no_home = false
 
 const { dialog } = require( 'electron' )
@@ -19,7 +19,10 @@ const log = async ( ...messages ) => {
 
     // Log to file if possible
     try {
-        if( HOME ) {
+        if( XDG_CONFIG_HOME ) {
+            await fs.mkdir( `${ XDG_CONFIG_HOME }/battery/`, { recursive: true } )
+            await fs.appendFile( `${ XDG_CONFIG_HOME }/battery/gui.log`, `${ messages.join( '\n' ) }\n`, 'utf8' )
+        } else if( HOME ) {
             await fs.mkdir( `${ HOME }/.battery/`, { recursive: true } )
             await fs.appendFile( `${ HOME }/.battery/gui.log`, `${ messages.join( '\n' ) }\n`, 'utf8' )
         } else if( !has_alerted_user_no_home ) {

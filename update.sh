@@ -4,7 +4,7 @@
 PATH="$PATH:/usr/sbin"
 
 # Set environment variables
-tempfolder=~/.battery-tmp
+tempfolder=$(mktemp -d)
 binfolder=/usr/local/bin
 batteryfolder="$tempfolder/battery"
 mkdir -p $batteryfolder
