@@ -13,7 +13,7 @@ mkdir -p $tempfolder
 
 # Set script value
 calling_user=${1:-"$USER"}
-[ -n "$XDG_CONFIG_HOME" ] && configfolder=$XDG_CONFIG_HOME/battery || configfolder=$HOME/.battery
+[ -n "$XDG_CONFIG_HOME" ] && configfolder=$XDG_CONFIG_HOME/battery || configfolder=/Users/$calling_user/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 
