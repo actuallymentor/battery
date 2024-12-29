@@ -139,18 +139,19 @@ const initialize_battery = async () => {
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( () => false ),
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( () => false ),
             exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 02` ).catch( () => false )
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 02` ).then( () => true ).catch( () => false )
         ] )
 
         const visudo_complete = charging_in_visudo && discharging_in_visudo && magsafe_led_in_visudo && additional_magsafe_led_in_visudo
         const is_installed = battery_installed && smc_installed
         log( 'Is installed? ', is_installed )
+        log( 'visudo complete? ', visudo_complete )
 
         // Kill running instances of battery
         const processes = await exec_async( `ps aux | grep "/usr/local/bin/battery " | wc -l | grep -Eo "\\d*"` )
         log( `Found ${ `${ processes }`.replace( /\n/, '' ) } battery related processed to kill` )
         if( is_installed ) await exec_async( `${ battery } maintain stop` )
-        await exec_async( `pkill -f "/usr/local/bin/battery.*"` ).catch( e => log( `Error killing existing battery progesses, usually means no running processes` ) )
+        await exec_async( `pkill -f "/usr/local/bin/battery.*"` ).catch( e => log( `Error killing existing battery processes, usually means no running processes` ) )
 
         // If installed, update
         if( is_installed && visudo_complete ) {
