@@ -16,7 +16,7 @@ This is an app for Apple Silicon Macs. It will not work on Intel macs. Do you ha
 
 When installing via brew or dmg, opening the macOS app is required to complete the installation.
 
-The first time you open the app, it will ask for your administator password so it can install the needed components. Please note that the app:
+The first time you open the app, it will ask for your administrator password so it can install the needed components. Please note that the app:
 
 - Discharges your battery until it reaches 80%, **even when plugged in**
 - Disables charging when your battery is above 80% charged
