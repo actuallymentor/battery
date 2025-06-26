@@ -21,6 +21,7 @@ const exec_async_no_timeout = command => new Promise( ( resolve, reject ) => {
         if( error ) return reject( error, stderr, stdout )
         if( stderr ) return reject( stderr )
         if( stdout ) return resolve( stdout )
+        if( !stdout ) return resolve( '' )
 
     } )
 
@@ -44,6 +45,7 @@ const exec_sudo_async = command => new Promise( ( resolve, reject ) => {
         if( error ) return reject( error, stderr, stdout )
         if( stderr ) return reject( stderr )
         if( stdout ) return resolve( stdout )
+        if( !stdout ) return resolve( '' )
 
     } )
 
@@ -110,6 +112,11 @@ const disable_battery_limiter = async () => {
 
 }
 
+const low_err_return_false = ( ...errdata ) => {
+    log( 'Error in shell call: ', ...errdata )
+    return false
+}
+
 const initialize_battery = async () => {
 
     try {
@@ -134,17 +141,24 @@ const initialize_battery = async () => {
             magsafe_led_in_visudo,
             additional_magsafe_led_in_visudo
         ] = await Promise.all( [
-            exec_async( `${ path_fix } which battery` ).catch( () => false ),
-            exec_async( `${ path_fix } which smc` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( () => false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 02` ).catch( () => false )
+            exec_async( `${ path_fix } which battery` ).catch( low_err_return_false ),
+            exec_async( `${ path_fix } which smc` ).catch( low_err_return_false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( low_err_return_false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( low_err_return_false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( low_err_return_false ),
+            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 02` ).catch( low_err_return_false )
         ] )
 
-        const visudo_complete = charging_in_visudo && discharging_in_visudo && magsafe_led_in_visudo && additional_magsafe_led_in_visudo
+        const visudo_complete = ![ charging_in_visudo,  discharging_in_visudo,  magsafe_led_in_visudo,  additional_magsafe_led_in_visudo ].some( entry => entry === false )
         const is_installed = battery_installed && smc_installed
         log( 'Is installed? ', is_installed )
+        log( 'Visudo complete? ', {
+            charging_in_visudo,
+            discharging_in_visudo,
+            magsafe_led_in_visudo,
+            additional_magsafe_led_in_visudo,
+            visudo_complete
+        } )
 
         // Kill running instances of battery
         const processes = await exec_async( `ps aux | grep "/usr/local/bin/battery " | wc -l | grep -Eo "\\d*"` )
@@ -162,14 +176,19 @@ const initialize_battery = async () => {
         }
 
         // If not installed, run install script
-        if( !is_installed || !visudo_complete ) {
+        if( !is_installed ) {
             log( `Installing battery for ${ USER }...` )
             if( !online ) return alert( `Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.` )
             if( !is_installed ) await alert( `Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.` )
-            if( !visudo_complete ) await alert( `Battery needs to apply a backwards incompatible update, to do this it will ask for your password. This should not happen frequently.` )
             const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
             log( `Install result success `, result )
             await alert( `Battery background components installed successfully. You can find the battery limiter icon in the top right of your menu bar.` )
+        }
+
+        // If visudo entries are incomplete, update
+        if( !visudo_complete ) {
+            await alert( `Battery needs to apply a backwards incompatible update, to do this it will ask for your password. This should not happen frequently.` )
+            await exec_sudo_async( `${ path_fix } battery visudo` )
         }
 
         // Recover old battery setting on boot (as we killed all old processes above)

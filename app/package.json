@@ -1,6 +1,6 @@
 {
   "name": "battery",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "A battery charge limiter for Apple silicon Mac devices",
   "main": "main.js",
   "build": {
