@@ -91,6 +91,9 @@ Usage:
     manually set the adapter to (not) charge even when plugged in
     eg: battery adapter off
 
+  battery calibrate
+    calibrate the battery by discharging it to 15%, then recharging it to 100%, and keeping it there for 1 hour
+
   battery charge LEVEL[1-100]
     charge the battery to a certain percentage, and disable charging when that percentage is reached
     eg: battery charge 90
