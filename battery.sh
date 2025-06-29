@@ -15,7 +15,7 @@ PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin
 binfolder=/usr/local/bin
 visudo_folder=/private/etc/sudoers.d
 visudo_file=${visudo_folder}/battery
-configfolder=$HOME/.battery
+[ -n "$XDG_CONFIG_HOME" ] && configfolder=$XDG_CONFIG_HOME/battery || configfolder=$HOME/.battery
 pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
 maintain_percentage_tracker_file=$configfolder/maintain.percentage
