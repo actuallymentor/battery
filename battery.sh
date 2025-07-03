@@ -150,6 +150,14 @@ function valid_voltage() {
 	return 1
 }
 
+function kill_daemon() {
+	if test -f "$pidfile"; then
+		log "Killing old maintain process at $(cat $pidfile)"
+		pid=$(cat "$pidfile" 2>/dev/null)
+		kill $pid &>/dev/null
+	fi
+}
+
 ## #################
 ## SMC Manipulation
 ## #################
@@ -510,6 +518,8 @@ fi
 
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
+	kill_daemon
+	echo $$ >$pidfile
 
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
@@ -589,6 +599,8 @@ fi
 
 # Maintain at voltage
 if [[ "$action" == "maintain_voltage_synchronous" ]]; then
+	kill_daemon
+	echo $$ >$pidfile
 
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
@@ -638,13 +650,6 @@ fi
 # Asynchronous battery level maintenance
 if [[ "$action" == "maintain" ]]; then
 
-	# Kill old process silently
-	if test -f "$pidfile"; then
-		log "Killing old maintain process at $(cat $pidfile)"
-		pid=$(cat "$pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
-	fi
-
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
 		kill $calibrate_pidfile &>/dev/null
@@ -652,7 +657,8 @@ if [[ "$action" == "maintain" ]]; then
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
-		log "Killing running maintain daemons & enabling charging as default state"
+		kill_daemon
+		log "Enabling charging as default state"
 		rm $pidfile 2>/dev/null
 		$battery_binary disable_daemon
 		enable_charging
@@ -702,8 +708,6 @@ if [[ "$action" == "maintain" ]]; then
 		nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
 	fi
 
-	# Store pid of maintenance process and setting
-	echo $! >$pidfile
 	pid=$(cat "$pidfile" 2>/dev/null)
 
 	if ! [[ "$setting" == "recover" ]]; then
