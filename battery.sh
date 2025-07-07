@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.2.7"
+BATTERY_CLI_VERSION="v1.3.0"
 
 # Path fixes for unexpected environments
 PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -59,11 +59,16 @@ Usage:
     output logs of the battery CLI and GUI
 	eg: battery logs 100
 
-  battery maintain PERCENTAGE[1-100,stop]
-    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
-	it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
-    eg: battery maintain 80
-    eg: battery maintain stop
+  battery maintain LEVEL[value/minvalue-maxvalue/stop]
+    reboot-persistent battery level maintenance. There are two modes:
+      threshold mode:
+        turn off charging above, and on below a certain value.
+      range mode:
+        turn off charging above the maximum value, and on below the minimum value.
+    it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
+    eg: battery maintain 80                // threshold mode
+    eg: battery maintain_synchronous 20-80 // range mode
+    eg: battery maintain stop              // disable maintain mode
 
   battery maintain VOLTAGE[${voltage_min}V-${voltage_max}V,stop] (HYSTERESIS[${voltage_hyst_min}V-${voltage_hyst_max}V])
     reboot-persistent battery level maintenance: keep battery at a certain voltage
@@ -136,8 +141,18 @@ function log() {
 }
 
 function valid_percentage() {
-	if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 0 ]] || [[ "$1" -gt 100 ]]; then
-		return 1
+	local precentage="$1"
+	# Extract upper and lower
+	lower_threshold=${precentage/-*/}
+	upper_threshold=${precentage/*-/}
+	# Check if setting is a legal range and is value between 1 and 100
+	if [[ "$precentage" =~ ^[0-9]+-?[0-9]+$ ]]; then
+		# check if values are legal
+		if [[ "$lower_threshold" -lt 1 ]] || [[ "$lower_threshold" -gt 100 ]] ||
+			[[ "$upper_threshold" -lt 1 ]] || [[ "$upper_threshold" -gt 100 ]] ||
+			[[ "$lower_threshold" -gt "$upper_threshold" ]]; then
+			return 1
+		fi
 	else
 		return 0
 	fi
@@ -552,7 +567,12 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 
-	log "Charging to and maintaining at $setting% from $battery_percentage%"
+	if [[ "$lower_threshold" -eq "$upper_threshold" ]]; then
+		# the string had no "-", both threasholds are the same
+		log "Charging to and maintaining at $lower_threshold% from $battery_percentage%"
+	else
+		log "Charging to and maintaining in range of $lower_threshold% to $upper_threshold% from $battery_percentage%"
+	fi
 
 	# Loop until battery percent is exceeded
 	while true; do
@@ -561,17 +581,17 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		is_charging=$(get_smc_charging_status)
 		ac_attached=$(get_charger_state)
 
-		if [[ "$battery_percentage" -ge "$setting" && ("$is_charging" == "enabled" || "$ac_attached" == "1") ]]; then
+		if [[ "$battery_percentage" -ge "$upper_threshold" ]] && [[ "$is_charging" == "enabled" ]]; then
 
-			log "Charge above $setting"
+			log "Charge above $upper_threshold"
 			if [[ "$is_charging" == "enabled" ]]; then
 				disable_charging
 			fi
 			change_magsafe_led_color "green"
 
-		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
+		elif [[ "$battery_percentage" -lt "$lower_threshold" ]] && [[ "$is_charging" == "disabled" ]]; then
 
-			log "Charge below $setting"
+			log "Charge below $lower_threshold"
 			enable_charging
 			change_magsafe_led_color "orange"
 
@@ -685,12 +705,11 @@ if [[ "$action" == "maintain" ]]; then
 	# Check if setting is value between 0 and 100
 	elif ! valid_percentage "$setting"; then
 		log "Called with $setting $action"
-		# If non 0-100 setting is not a special keyword, exit with an error.
+		# If setting is not a special keyword, exit with an error.
 		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
-			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100, or an action keyword like 'stop' or 'recover'."
+			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 1 and 100, or an action keyword like 'stop' or 'recover'."
 			exit 1
 		fi
-
 	fi
 
 	# Start maintenance script
@@ -699,7 +718,7 @@ if [[ "$action" == "maintain" ]]; then
 		nohup $battery_binary maintain_voltage_synchronous $setting $subsetting >>$logfile &
 	else
 		log "Starting battery maintenance at $setting% $subsetting"
-		nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
+		nohup $battery_binary maintain_synchronous $upper_threshold $subsetting >>$logfile &
 	fi
 
 	# Store pid of maintenance process and setting
