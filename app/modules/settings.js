@@ -3,6 +3,10 @@ const { log, confirm } = require( './helpers' )
 const store = new Store( {
     force_discharge_if_needed: {
         type: 'boolean'
+    },
+    telemetry: {
+        type: 'boolean',
+        default: true
     }
 } )
 
@@ -41,8 +45,21 @@ const update_force_discharge_setting = async () => {
 
 }
 
+const get_telemetry_setting = () => {
+    const telemetry = store.get('telemetry');
+    log(`Telemetry is ${telemetry === true ? 'enabled' : 'disabled'}`);
+    return telemetry === true;
+};
+
+const set_telemetry_setting = value => {
+    log(`Telemetry is now ${value ? 'enabled' : 'disabled'}`);
+    store.set('telemetry', !!value);
+};
+
 module.exports = {
     get_force_discharge_setting,
     toggle_force_discharge,
-    update_force_discharge_setting
+    update_force_discharge_setting,
+    get_telemetry_setting,
+    set_telemetry_setting
 }
