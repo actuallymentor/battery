@@ -46,8 +46,14 @@ const update_force_discharge_setting = async () => {
 }
 
 const get_telemetry_setting = () => {
-    const telemetry = store.get('telemetry');
-    log(`Telemetry is ${telemetry === true ? 'enabled' : 'disabled'}`);
+    let telemetry = store.get('telemetry');
+    if (typeof telemetry === 'undefined') {
+        telemetry = true;
+        store.set('telemetry', true);
+        log('Telemetry was undefined, set to enabled by default.');
+    } else {
+        log(`Telemetry is ${telemetry === true ? 'enabled' : 'disabled'}`);
+    }
     return telemetry === true;
 };
 
