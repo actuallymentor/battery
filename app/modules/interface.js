@@ -1,5 +1,5 @@
 const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
-const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
+const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery, enable_charging, disable_charging, is_charging_enabled } = require( './battery' )
 const { log } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
 const { get_force_discharge_setting, update_force_discharge_setting } = require( './settings' )
@@ -20,11 +20,14 @@ const generate_app_menu = async () => {
         // Check if limiter is on
         const limiter_on = await is_limiter_enabled()
 
+        // Check charging status
+        const charging_enabled = await is_charging_enabled()
+
         // Check force discharge setting
         const allow_discharge = get_force_discharge_setting()
 
         // Set tray icon
-        log( `Generate app menu percentage: ${ percentage } (discharge ${ allow_discharge ? 'allowed' : 'disallowed' }, limited ${ limiter_on ? 'on' : 'off' })` )
+        log( `Generate app menu percentage: ${ percentage } (discharge ${ allow_discharge ? 'allowed' : 'disallowed' }, limited ${ limiter_on ? 'on' : 'off' }, charging ${ charging_enabled ? 'enabled' : 'disabled' })` )
         tray.setImage( get_logo_template( percentage, limiter_on ) )
 
         // Build menu
@@ -41,6 +44,15 @@ const generate_app_menu = async () => {
                 type: 'radio',
                 checked: !limiter_on,
                 click: disable_limiter
+            },
+            {
+                type: 'separator'
+            },
+            {
+                label: `Battery charging: ${ charging_enabled ? 'ON' : 'OFF' }`,
+                type: 'checkbox',
+                checked: charging_enabled,
+                click: toggle_charging
             },
             {
                 type: 'separator'
@@ -253,6 +265,27 @@ async function restart_limiter() {
         await refresh_tray()
     } catch ( e ) {
         log( `Error in restart_limiter: `, e )
+    }
+
+}
+
+async function toggle_charging() {
+
+    try {
+        log( 'Toggle charging' )
+        const currently_charging = await is_charging_enabled()
+        
+        if( currently_charging ) {
+            log( 'Disabling charging' )
+            await disable_charging()
+        } else {
+            log( 'Enabling charging' )
+            await enable_charging()
+        }
+        
+        await refresh_tray()
+    } catch ( e ) {
+        log( `Error in toggle_charging: `, e )
     }
 
 }
