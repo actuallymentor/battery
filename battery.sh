@@ -22,6 +22,12 @@ maintain_percentage_tracker_file=$configfolder/maintain.percentage
 maintain_voltage_tracker_file=$configfolder/maintain.voltage
 daemon_path=$HOME/Library/LaunchAgents/battery.plist
 calibrate_pidfile=$configfolder/calibrate.pid
+smc_capabilities_detected=false
+smc_supports_tahoe=false
+smc_supports_legacy=false
+smc_supports_adapter_chie=false
+smc_supports_adapter_ch0i=false
+smc_supports_adapter_ch0j=false
 
 # Voltage limits
 voltage_min="10.5"
@@ -150,6 +156,54 @@ function valid_voltage() {
 	return 1
 }
 
+function detect_smc_capabilities() {
+	if [[ "$smc_capabilities_detected" == "true" ]]; then
+		return
+	fi
+
+	smc_capabilities_detected=true
+	smc_supports_tahoe=false
+	smc_supports_legacy=false
+	smc_supports_adapter_chie=false
+	smc_supports_adapter_ch0i=false
+	smc_supports_adapter_ch0j=false
+
+	if sudo -n smc -k CHTE -r &>/dev/null; then
+		smc_supports_tahoe=true
+	fi
+	if sudo -n smc -k CH0B -r &>/dev/null && sudo -n smc -k CH0C -r &>/dev/null; then
+		smc_supports_legacy=true
+	fi
+	if sudo -n smc -k CHIE -r &>/dev/null; then
+		smc_supports_adapter_chie=true
+	fi
+	if sudo -n smc -k CH0I -r &>/dev/null; then
+		smc_supports_adapter_ch0i=true
+	fi
+	if sudo -n smc -k CH0J -r &>/dev/null; then
+		smc_supports_adapter_ch0j=true
+	fi
+
+	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
+}
+
+function smc_read_hex() {
+	local key=$1
+	local value=$(sudo -n smc -k "$key" -r 2>/dev/null | awk '{print $4}')
+	value=${value//:/}
+	echo "$value"
+}
+
+function smc_write_hex() {
+	local key=$1
+	local hex_value=$2
+	if ! sudo smc -k "$key" -w "$hex_value" >/dev/null 2>&1; then
+		log "⚠️ Failed to write $hex_value to $key"
+		return 1
+	fi
+	return 0
+}
+
 ## #################
 ## SMC Manipulation
 ## #################
@@ -185,13 +239,29 @@ function change_magsafe_led_color() {
 # CH0I seems to be the "disable the adapter" key
 function enable_discharging() {
 	log "🔽🪫 Enabling battery discharging"
-	sudo smc -k CH0I -w 01
+	detect_smc_capabilities
+	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
+		smc_write_hex CHIE 08
+	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
+		smc_write_hex CH0J 01
+	else
+		smc_write_hex CH0I 01
+	fi
 	sudo smc -k ACLC -w 01
 }
 
 function disable_discharging() {
 	log "🔼🪫 Disabling battery discharging"
-	sudo smc -k CH0I -w 00
+	detect_smc_capabilities
+	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
+		smc_write_hex CHIE 00
+	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
+		smc_write_hex CH0J 00
+	elif [[ "$smc_supports_adapter_ch0i" == "true" ]]; then
+		smc_write_hex CH0I 00
+	else
+		smc_write_hex CH0I 00
+	fi
 	# Keep track of status
 	is_charging=$(get_smc_charging_status)
 
@@ -199,8 +269,14 @@ function disable_discharging() {
 
 		log "Disabling discharging: No valid maintain percentage set, enabling charging"
 		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		sudo smc -k CH0B -w 00
-		sudo smc -k CH0C -w 00
+		if [[ "$smc_supports_tahoe" == "true" ]]; then
+			smc_write_hex CHTE 00000000
+		elif [[ "$smc_supports_legacy" == "true" ]]; then
+			smc_write_hex CH0B 00
+			smc_write_hex CH0C 00
+		else
+			log "⚠️ Unable to reset charging state"
+		fi
 		change_magsafe_led_color "orange"
 
 	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
@@ -213,8 +289,14 @@ function disable_discharging() {
 
 		log "Disabling discharging: Charge below $setting, enabling charging"
 		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		sudo smc -k CH0B -w 00
-		sudo smc -k CH0C -w 00
+		if [[ "$smc_supports_tahoe" == "true" ]]; then
+			smc_write_hex CHTE 00000000
+		elif [[ "$smc_supports_legacy" == "true" ]]; then
+			smc_write_hex CH0B 00
+			smc_write_hex CH0C 00
+		else
+			log "⚠️ Unable to reset charging state"
+		fi
 		change_magsafe_led_color "orange"
 
 	fi
@@ -227,20 +309,49 @@ function disable_discharging() {
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
 function enable_charging() {
 	log "🔌🔋 Enabling battery charging"
-	sudo smc -k CH0B -w 00
-	sudo smc -k CH0C -w 00
+	detect_smc_capabilities
+	if [[ "$smc_supports_tahoe" == "true" ]]; then
+		smc_write_hex CHTE 00000000
+	elif [[ "$smc_supports_legacy" == "true" ]]; then
+		smc_write_hex CH0B 00
+		smc_write_hex CH0C 00
+	else
+		log "⚠️ Unable to determine SMC keys for enabling charging"
+	fi
 	disable_discharging
 }
 
 function disable_charging() {
 	log "🔌🪫 Disabling battery charging"
-	sudo smc -k CH0B -w 02
-	sudo smc -k CH0C -w 02
+	detect_smc_capabilities
+	if [[ "$smc_supports_tahoe" == "true" ]]; then
+		smc_write_hex CHTE 01000000
+	elif [[ "$smc_supports_legacy" == "true" ]]; then
+		smc_write_hex CH0B 02
+		smc_write_hex CH0C 02
+	else
+		log "⚠️ Unable to determine SMC keys for disabling charging"
+	fi
 }
 
 function get_smc_charging_status() {
-	hex_status=$(smc -k CH0B -r | awk '{print $4}' | sed s:\)::)
-	if [[ "$hex_status" == "00" ]]; then
+	detect_smc_capabilities
+	local status_key="CH0B"
+	if [[ "$smc_supports_tahoe" == "true" ]]; then
+		status_key="CHTE"
+	fi
+	hex_status=$(smc_read_hex "$status_key")
+	if [[ -z "$hex_status" ]]; then
+		echo "unknown"
+		return
+	fi
+	if [[ "$smc_supports_tahoe" == "true" ]]; then
+		if [[ "$hex_status" == "00000000" ]]; then
+			echo "enabled"
+		else
+			echo "disabled"
+		fi
+	elif [[ "$hex_status" == "00" ]]; then
 		echo "enabled"
 	else
 		echo "disabled"
@@ -248,8 +359,19 @@ function get_smc_charging_status() {
 }
 
 function get_smc_discharging_status() {
-	hex_status=$(smc -k CH0I -r | awk '{print $4}' | sed s:\)::)
-	if [[ "$hex_status" == "0" ]]; then
+	detect_smc_capabilities
+	local status_key="CH0I"
+	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
+		status_key="CHIE"
+	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
+		status_key="CH0J"
+	fi
+	hex_status=$(smc_read_hex "$status_key")
+	if [[ -z "$hex_status" ]]; then
+		echo "unknown"
+		return
+	fi
+	if [[ "$hex_status" == "0" || "$hex_status" == "00" ]]; then
 		echo "not discharging"
 	else
 		echo "discharging"
