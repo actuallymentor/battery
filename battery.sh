@@ -194,10 +194,13 @@ function detect_smc_capabilities() {
 }
 
 function smc_read_hex() {
-	local key=$1
-	local value=$(sudo -n smc -k "$key" -r 2>/dev/null | awk '{print $4}')
-	value=${value//:/}
-	echo "$value"
+	key=$1
+	line=$(echo $(smc -k $key -r))
+	if [[ $line =~ "no data" ]]; then
+		echo
+	else
+		echo ${line#*bytes} | tr -d ' ' | tr -d ')'
+	fi
 }
 
 function smc_write_hex() {
