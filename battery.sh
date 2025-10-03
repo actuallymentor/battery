@@ -344,7 +344,7 @@ function disable_charging() {
 }
 
 function get_smc_charging_status() {
-	detect_smc_capabilities
+	detect_smc_capabilities >/dev/null
 	local status_key="CH0B"
 	if [[ "$smc_supports_tahoe" == "true" ]]; then
 		status_key="CHTE"
@@ -368,7 +368,7 @@ function get_smc_charging_status() {
 }
 
 function get_smc_discharging_status() {
-	detect_smc_capabilities
+	detect_smc_capabilities >/dev/null
 	local status_key="CH0I"
 	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
 		status_key="CHIE"
