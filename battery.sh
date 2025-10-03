@@ -120,11 +120,17 @@ Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C
 Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
 Cmnd_Alias      DISCHARGEON = $binfolder/smc -k CH0I -w 01
 Cmnd_Alias      LEDCONTROL = $binfolder/smc -k ACLC -w 04, $binfolder/smc -k ACLC -w 03, $binfolder/smc -k ACLC -w 02, $binfolder/smc -k ACLC -w 01, $binfolder/smc -k ACLC -w 00, $binfolder/smc -k ACLC -r
+Cmnd_Alias      CHTE = $binfolder/smc -k CHTE -r, $binfolder/smc -k CHTE -w 00000000, $binfolder/smc -k CHTE -w 01000000
+Cmnd_Alias      CHIE = $binfolder/smc -k CHIE -r, $binfolder/smc -k CHIE -w 08, $binfolder/smc -k CHIE -w 00
+Cmnd_Alias      CH0J = $binfolder/smc -k CH0J -r, $binfolder/smc -k CH0J -w 01, $binfolder/smc -k CH0J -w 00
 ALL ALL = NOPASSWD: BATTERYOFF
 ALL ALL = NOPASSWD: BATTERYON
 ALL ALL = NOPASSWD: DISCHARGEOFF
 ALL ALL = NOPASSWD: DISCHARGEON
 ALL ALL = NOPASSWD: LEDCONTROL
+ALL ALL = NOPASSWD: CHTE
+ALL ALL = NOPASSWD: CHIE
+ALL ALL = NOPASSWD: CH0J
 "
 
 # Get parameters
