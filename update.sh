@@ -25,7 +25,7 @@ chmod 755 $binfolder/battery
 chmod u+x $binfolder/battery
 
 echo "[ 3 ] Updating visudo declarations"
-sudo $binfolder/battery.sh visudo
+sudo $binfolder/battery visudo
 
 # Remove tempfiles
 cd
