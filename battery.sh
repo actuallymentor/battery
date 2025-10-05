@@ -22,12 +22,6 @@ maintain_percentage_tracker_file=$configfolder/maintain.percentage
 maintain_voltage_tracker_file=$configfolder/maintain.voltage
 daemon_path=$HOME/Library/LaunchAgents/battery.plist
 calibrate_pidfile=$configfolder/calibrate.pid
-smc_capabilities_detected=false
-smc_supports_tahoe=false
-smc_supports_legacy=false
-smc_supports_adapter_chie=false
-smc_supports_adapter_ch0i=false
-smc_supports_adapter_ch0j=false
 
 # Voltage limits
 voltage_min="10.5"
@@ -120,11 +114,17 @@ Cmnd_Alias      BATTERYON = $binfolder/smc -k CH0B -w 00, $binfolder/smc -k CH0C
 Cmnd_Alias      DISCHARGEOFF = $binfolder/smc -k CH0I -w 00, $binfolder/smc -k CH0I -r
 Cmnd_Alias      DISCHARGEON = $binfolder/smc -k CH0I -w 01
 Cmnd_Alias      LEDCONTROL = $binfolder/smc -k ACLC -w 04, $binfolder/smc -k ACLC -w 03, $binfolder/smc -k ACLC -w 02, $binfolder/smc -k ACLC -w 01, $binfolder/smc -k ACLC -w 00, $binfolder/smc -k ACLC -r
+Cmnd_Alias      CHTE = $binfolder/smc -k CHTE -r, $binfolder/smc -k CHTE -w 00000000, $binfolder/smc -k CHTE -w 01000000
+Cmnd_Alias      CHIE = $binfolder/smc -k CHIE -r, $binfolder/smc -k CHIE -w 08, $binfolder/smc -k CHIE -w 00
+Cmnd_Alias      CH0J = $binfolder/smc -k CH0J -r, $binfolder/smc -k CH0J -w 01, $binfolder/smc -k CH0J -w 00
 ALL ALL = NOPASSWD: BATTERYOFF
 ALL ALL = NOPASSWD: BATTERYON
 ALL ALL = NOPASSWD: DISCHARGEOFF
 ALL ALL = NOPASSWD: DISCHARGEON
 ALL ALL = NOPASSWD: LEDCONTROL
+ALL ALL = NOPASSWD: CHTE
+ALL ALL = NOPASSWD: CHIE
+ALL ALL = NOPASSWD: CH0J
 "
 
 # Get parameters
@@ -156,42 +156,14 @@ function valid_voltage() {
 	return 1
 }
 
-function detect_smc_capabilities() {
-	if [[ "$smc_capabilities_detected" == "true" ]]; then
-		return
-	fi
-
-	smc_capabilities_detected=true
-	smc_supports_tahoe=false
-	smc_supports_legacy=false
-	smc_supports_adapter_chie=false
-	smc_supports_adapter_ch0i=false
-	smc_supports_adapter_ch0j=false
-
-	if sudo -n smc -k CHTE -r &>/dev/null; then
-		smc_supports_tahoe=true
-	fi
-	if sudo -n smc -k CH0B -r &>/dev/null && sudo -n smc -k CH0C -r &>/dev/null; then
-		smc_supports_legacy=true
-	fi
-	if sudo -n smc -k CHIE -r &>/dev/null; then
-		smc_supports_adapter_chie=true
-	fi
-	if sudo -n smc -k CH0I -r &>/dev/null; then
-		smc_supports_adapter_ch0i=true
-	fi
-	if sudo -n smc -k CH0J -r &>/dev/null; then
-		smc_supports_adapter_ch0j=true
-	fi
-
-	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
-}
-
 function smc_read_hex() {
-	local key=$1
-	local value=$(sudo -n smc -k "$key" -r 2>/dev/null | awk '{print $4}')
-	value=${value//:/}
-	echo "$value"
+	key=$1
+	line=$(echo $(sudo smc -k $key -r))
+	if [[ $line =~ "no data" ]]; then
+		echo
+	else
+		echo ${line#*bytes} | tr -d ' ' | tr -d ')'
+	fi
 }
 
 function smc_write_hex() {
@@ -202,6 +174,19 @@ function smc_write_hex() {
 		return 1
 	fi
 	return 0
+}
+
+## #########################
+## Detect supported SMC keys
+## #########################
+[[ $(sudo smc -k CHTE -r) =~ "no data" ]] && smc_supports_tahoe=false || smc_supports_tahoe=true;
+[[ $(sudo smc -k CH0B -r) =~ "no data" ]] && smc_supports_legacy=false || smc_supports_legacy=true;
+[[ $(sudo smc -k CHIE -r) =~ "no data" ]] && smc_supports_adapter_chie=false || smc_supports_adapter_chie=true;
+[[ $(sudo smc -k CH0I -r) =~ "no data" ]] && smc_supports_adapter_ch0i=false || smc_supports_adapter_ch0i=true;
+[[ $(sudo smc -k CH0J -r) =~ "no data" || $(sudo smc -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
+
+function log_smc_capabilities() {
+	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
 }
 
 ## #################
@@ -239,7 +224,6 @@ function change_magsafe_led_color() {
 # CH0I seems to be the "disable the adapter" key
 function enable_discharging() {
 	log "🔽🪫 Enabling battery discharging"
-	detect_smc_capabilities
 	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
 		smc_write_hex CHIE 08
 	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
@@ -252,7 +236,6 @@ function enable_discharging() {
 
 function disable_discharging() {
 	log "🔼🪫 Disabling battery discharging"
-	detect_smc_capabilities
 	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
 		smc_write_hex CHIE 00
 	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
@@ -309,7 +292,6 @@ function disable_discharging() {
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
 function enable_charging() {
 	log "🔌🔋 Enabling battery charging"
-	detect_smc_capabilities
 	if [[ "$smc_supports_tahoe" == "true" ]]; then
 		smc_write_hex CHTE 00000000
 	elif [[ "$smc_supports_legacy" == "true" ]]; then
@@ -323,7 +305,6 @@ function enable_charging() {
 
 function disable_charging() {
 	log "🔌🪫 Disabling battery charging"
-	detect_smc_capabilities
 	if [[ "$smc_supports_tahoe" == "true" ]]; then
 		smc_write_hex CHTE 01000000
 	elif [[ "$smc_supports_legacy" == "true" ]]; then
@@ -335,7 +316,6 @@ function disable_charging() {
 }
 
 function get_smc_charging_status() {
-	detect_smc_capabilities
 	local status_key="CH0B"
 	if [[ "$smc_supports_tahoe" == "true" ]]; then
 		status_key="CHTE"
@@ -359,7 +339,6 @@ function get_smc_charging_status() {
 }
 
 function get_smc_discharging_status() {
-	detect_smc_capabilities
 	local status_key="CH0I"
 	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
 		status_key="CHIE"
@@ -633,6 +612,8 @@ fi
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
 
+	log_smc_capabilities
+
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
@@ -711,6 +692,8 @@ fi
 
 # Maintain at voltage
 if [[ "$action" == "maintain_voltage_synchronous" ]]; then
+
+	log_smc_capabilities
 
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then

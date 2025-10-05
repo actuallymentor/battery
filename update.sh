@@ -24,9 +24,12 @@ chown $USER $binfolder/battery
 chmod 755 $binfolder/battery
 chmod u+x $binfolder/battery
 
+echo "[ 3 ] Updating visudo declarations"
+sudo $binfolder/battery visudo
+
 # Remove tempfiles
 cd
 rm -rf $tempfolder
-echo "[ 3 ] Removed temporary folder"
+echo "[ 4 ] Removed temporary folder"
 
 echo -e "\n🎉 Battery tool updated.\n"
