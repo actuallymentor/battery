@@ -1,1 +1,12 @@
+Hello fellow dev 👋
+
+I appreciate any time you are willing and able to put into making `battery` better.
+
 Contributions are welcome. Open a pull-request for any improvements or additions. It might take me a while to get to seeing it though, please contact me on Twitter if I'm being very slow (@actuallymentor).
+
+Some things to keep in mind:
+
+- I do not monitor the issue anymore, it's too much
+- You ARE welcome to tag me in pull requests if you need help. I might respond slow, but I will see you
+- The CLI is the place for fancy new features. The GUI app is minimalistic on purpose.
+- Please please test any changes you make in great detail and add what and how you tested to the PR. It will make it much faster for me to check if everything is ready for shipping
