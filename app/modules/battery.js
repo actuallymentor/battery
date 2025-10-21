@@ -237,6 +237,46 @@ const is_limiter_enabled = async () => {
 
 }
 
+const enable_charging = async () => {
+
+    try {
+        log( 'Enabling battery charging' )
+        await exec_async( `${ battery } charging on` )
+        const status = await get_battery_status()
+        return status?.percentage
+    } catch ( e ) {
+        log( 'Error enabling charging: ', e )
+        alert( e.message )
+    }
+
+}
+
+const disable_charging = async () => {
+
+    try {
+        log( 'Disabling battery charging' )
+        await exec_async( `${ battery } charging off` )
+        const status = await get_battery_status()
+        return status?.percentage
+    } catch ( e ) {
+        log( 'Error disabling charging: ', e )
+        alert( e.message )
+    }
+
+}
+
+const is_charging_enabled = async () => {
+
+    try {
+        const status = await get_battery_status()
+        return status?.charging
+    } catch ( e ) {
+        log( `Error getting charging status: `, e )
+        alert( `Battery charging status error: ${ e.message }` )
+    }
+
+}
+
 
 module.exports = {
     enable_battery_limiter,
@@ -244,5 +284,8 @@ module.exports = {
     initialize_battery,
     is_limiter_enabled,
     get_battery_status,
-    uninstall_battery
+    uninstall_battery,
+    enable_charging,
+    disable_charging,
+    is_charging_enabled
 }
