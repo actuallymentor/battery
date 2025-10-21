@@ -59,10 +59,11 @@ Usage:
     output logs of the battery CLI and GUI
 	eg: battery logs 100
 
-  battery maintain PERCENTAGE[1-100,stop]
+  battery maintain PERCENTAGE[1-100,stop] or RANGE[lower-upper]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
 	it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
-    eg: battery maintain 80
+    eg: battery maintain 80           # maintain at 80%
+    eg: battery maintain 70-80        # maintain between 70-80%
     eg: battery maintain stop
 
   battery maintain VOLTAGE[${voltage_min}V-${voltage_max}V,stop] (HYSTERESIS[${voltage_hyst_min}V-${voltage_hyst_max}V])
@@ -141,6 +142,34 @@ function valid_percentage() {
 	else
 		return 0
 	fi
+}
+
+function valid_percentage_range() {
+	# Check if input matches range format: NUMBER-NUMBER
+	if ! [[ "$1" =~ ^[0-9]+-[0-9]+$ ]]; then
+		return 1
+	fi
+
+	# Extract lower and upper bounds
+	local lower="${1%-*}"
+	local upper="${1#*-}"
+
+	# Validate both numbers are valid percentages
+	if ! valid_percentage "$lower" || ! valid_percentage "$upper"; then
+		return 1
+	fi
+
+	# Check lower < upper
+	if [[ "$lower" -ge "$upper" ]]; then
+		return 1
+	fi
+
+	# Check bounds are reasonable (lower >= 10, upper <= 100)
+	if [[ "$lower" -lt 10 ]] || [[ "$upper" -gt 100 ]]; then
+		return 1
+	fi
+
+	return 0
 }
 
 function valid_voltage() {
@@ -534,16 +563,32 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		fi
 	fi
 
-	if ! valid_percentage "$setting"; then
-		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100"
+	# Parse setting - could be single value or range
+	local lower_bound=""
+	local upper_bound=""
+	local is_range=false
+
+	if valid_percentage_range "$setting"; then
+		# Range format: lower-upper
+		is_range=true
+		lower_bound="${setting%-*}"
+		upper_bound="${setting#*-}"
+	elif valid_percentage "$setting"; then
+		# Single value format (backward compatible)
+		is_range=false
+		lower_bound="$setting"
+		upper_bound="$setting"
+	else
+		log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100, or a range like 70-80"
 		exit 1
 	fi
 
 	# Check if the user requested that the battery maintenance first discharge to the desired level
 	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
-		log "Triggering discharge to $setting before enabling charging limiter"
-		$battery_binary discharge "$setting"
+		local discharge_target="$lower_bound"
+		log "Triggering discharge to $discharge_target before enabling charging limiter"
+		$battery_binary discharge "$discharge_target"
 		log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
 	else
 		log "Not triggering discharge as it is not requested"
@@ -552,7 +597,11 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 
-	log "Charging to and maintaining at $setting% from $battery_percentage%"
+	if [[ "$is_range" == true ]]; then
+		log "Maintaining battery between $lower_bound% and $upper_bound% from $battery_percentage%"
+	else
+		log "Charging to and maintaining at $setting% from $battery_percentage%"
+	fi
 
 	# Loop until battery percent is exceeded
 	while true; do
@@ -561,17 +610,17 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		is_charging=$(get_smc_charging_status)
 		ac_attached=$(get_charger_state)
 
-		if [[ "$battery_percentage" -ge "$setting" && ("$is_charging" == "enabled" || "$ac_attached" == "1") ]]; then
+		if [[ "$battery_percentage" -ge "$upper_bound" && ("$is_charging" == "enabled" || "$ac_attached" == "1") ]]; then
 
-			log "Charge above $setting"
+			log "Charge at or above $upper_bound%"
 			if [[ "$is_charging" == "enabled" ]]; then
 				disable_charging
 			fi
 			change_magsafe_led_color "green"
 
-		elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
+		elif [[ "$battery_percentage" -lt "$lower_bound" && "$is_charging" == "disabled" ]]; then
 
-			log "Charge below $setting"
+			log "Charge below $lower_bound%"
 			enable_charging
 			change_magsafe_led_color "orange"
 
@@ -682,12 +731,12 @@ if [[ "$action" == "maintain" ]]; then
 
 		is_voltage=true
 
-	# Check if setting is value between 0 and 100
-	elif ! valid_percentage "$setting"; then
+	# Check if setting is a percentage range or single value
+	elif ! valid_percentage "$setting" && ! valid_percentage_range "$setting"; then
 		log "Called with $setting $action"
-		# If non 0-100 setting is not a special keyword, exit with an error.
+		# If setting is not a valid percentage/range and not a special keyword, exit with an error.
 		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
-			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100, or an action keyword like 'stop' or 'recover'."
+			log "Error: $setting is not a valid setting for battery maintain. Please use a number between 0 and 100, a range like 70-80, or an action keyword like 'stop' or 'recover'."
 			exit 1
 		fi
 
@@ -698,7 +747,11 @@ if [[ "$action" == "maintain" ]]; then
 		log "Starting battery maintenance at ${setting}V ±${subsetting}V"
 		nohup $battery_binary maintain_voltage_synchronous $setting $subsetting >>$logfile &
 	else
-		log "Starting battery maintenance at $setting% $subsetting"
+		if valid_percentage_range "$setting"; then
+			log "Starting battery maintenance between ${setting/-/% and }%"
+		else
+			log "Starting battery maintenance at $setting% $subsetting"
+		fi
 		nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
 	fi
 
@@ -718,7 +771,11 @@ if [[ "$action" == "maintain" ]]; then
 		else
 			log "Writing new setting $setting to $maintain_percentage_tracker_file"
 			echo $setting >$maintain_percentage_tracker_file
-			log "Maintaining battery at $setting%"
+			if valid_percentage_range "$setting"; then
+				log "Maintaining battery between ${setting/-/% and }%"
+			else
+				log "Maintaining battery at $setting%"
+			fi
 		fi
 
 	fi
@@ -795,7 +852,11 @@ if [[ "$action" == "status" ]]; then
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
-			maintain_level="$maintain_percentage%"
+			if valid_percentage_range "$maintain_percentage"; then
+				maintain_level="${maintain_percentage/-/% - }%"
+			else
+				maintain_level="$maintain_percentage%"
+			fi
 		else
 			maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
 			maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')

@@ -58,6 +58,9 @@ Example usage:
 ```shell
 # This will enable charging when your battery dips under 80, and disable it when it exceeds 80
 battery maintain 80
+
+# This will maintain your battery between 70-80%, letting it rest in that range
+battery maintain 70-80
 ```
 
 After running a command like `battery charging off` you can verify the change visually by looking at the battery icon:
@@ -78,9 +81,10 @@ Usage:
   battery status
     output battery SMC status, % and time remaining
 
-  battery maintain LEVEL[1-100,stop]
+  battery maintain LEVEL[1-100,stop] or RANGE[lower-upper]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
-    eg: battery maintain 80
+    eg: battery maintain 80           # maintain at 80%
+    eg: battery maintain 70-80        # maintain between 70-80%
     eg: battery maintain stop
 
   battery charging SETTING[on/off]
