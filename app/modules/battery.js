@@ -127,17 +127,12 @@ const initialize_battery = async () => {
         const { development, skipupdate } = process.env
         if( development ) log( `Dev mode on, skip updates: ${ skipupdate }` )
 
-        // Check for network only if telemetry is enabled
-        let online = false;
-        if (get_telemetry_setting()) {
-            online = await Promise.race([
-                exec_async(`${path_fix} curl -I https://icanhazip.com &> /dev/null`).then(() => true).catch(() => false),
-                exec_async(`${path_fix} curl -I https://github.com &> /dev/null`).then(() => true).catch(() => false)
-            ]);
-            log(`Internet online: ${online}`);
-        } else {
-            log('Internet check skipped because telemetry is not enabled');
-        }
+        // Check for network
+        const online = await Promise.race( [
+            exec_async( `${ path_fix } curl -I https://icanhazip.com &> /dev/null` ).then( () => true ).catch( () => false ),
+            exec_async( `${ path_fix } curl -I https://github.com &> /dev/null` ).then( () => true ).catch( () => false )
+        ] )
+        log( `Internet online: ${ online }` )
 
         // Check if battery is installed and visudo entries are complete. New visudo entries are added when we do new `sudo` stuff in battery.sh
         const [
