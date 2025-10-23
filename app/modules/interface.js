@@ -74,7 +74,7 @@ const generate_app_menu = async () => {
                         label: `Enable telemetry`,
                         type: 'checkbox',
                         checked: telemetry_enabled,
-                        click: async (menuItem) => {
+                        click: (menuItem) => {
                             set_telemetry_setting(menuItem.checked)
                         }
                     }
