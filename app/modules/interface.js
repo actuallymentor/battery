@@ -2,7 +2,7 @@ const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
 const { log } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
-const { get_force_discharge_setting, update_force_discharge_setting, get_telemetry_setting, set_telemetry_setting } = require( './settings' )
+const { get_force_discharge_setting, update_force_discharge_setting, get_telemetry_setting, toggle_telemetry } = require( './settings' )
 
 /* ///////////////////////////////
 // Menu helpers
@@ -74,8 +74,8 @@ const generate_app_menu = async () => {
                         label: `Enable telemetry`,
                         type: 'checkbox',
                         checked: telemetry_enabled,
-                        click: (menuItem) => {
-                            set_telemetry_setting(menuItem.checked)
+                        click: () => {
+                            toggle_telemetry()
                         }
                     }
                 ]

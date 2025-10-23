@@ -57,15 +57,16 @@ const get_telemetry_setting = () => {
     return telemetry === true;
 };
 
-const set_telemetry_setting = value => {
-    log(`Telemetry is now ${value ? 'enabled' : 'disabled'}`);
-    store.set('telemetry', !!value);
-};
+const toggle_telemetry = () => {
+    const status = get_telemetry_setting()
+    log( `Setting telemetry to ${ !status }` )
+    store.set( 'telemetry', !status )
+}
 
 module.exports = {
     get_force_discharge_setting,
     toggle_force_discharge,
     update_force_discharge_setting,
     get_telemetry_setting,
-    set_telemetry_setting
+    toggle_telemetry
 }
