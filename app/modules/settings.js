@@ -3,6 +3,9 @@ const { log, confirm } = require( './helpers' )
 const store = new Store( {
     force_discharge_if_needed: {
         type: 'boolean'
+    },
+    show_percentage_in_menu: {
+        type: 'boolean'
     }
 } )
 
@@ -41,8 +44,21 @@ const update_force_discharge_setting = async () => {
 
 }
 
+function get_show_percentage_setting() {
+    return store.get('show_percentage_in_menu', false); // default OFF
+}
+
+function update_show_percentage_setting() {
+    const current = get_show_percentage_setting();
+    const newValue = !current;
+    store.set('show_percentage_in_menu', newValue);
+    return newValue;
+}
+
 module.exports = {
     get_force_discharge_setting,
     toggle_force_discharge,
-    update_force_discharge_setting
+    update_force_discharge_setting,
+    get_show_percentage_setting,
+    update_show_percentage_setting
 }

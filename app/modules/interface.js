@@ -2,7 +2,7 @@ const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
 const { log } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
-const { get_force_discharge_setting, update_force_discharge_setting } = require( './settings' )
+const { get_force_discharge_setting, update_force_discharge_setting, get_show_percentage_setting, update_show_percentage_setting } = require( './settings' )
 
 /* ///////////////////////////////
 // Menu helpers
@@ -25,7 +25,15 @@ const generate_app_menu = async () => {
 
         // Set tray icon
         log( `Generate app menu percentage: ${ percentage } (discharge ${ allow_discharge ? 'allowed' : 'disallowed' }, limited ${ limiter_on ? 'on' : 'off' })` )
-        tray.setImage( get_logo_template( percentage, limiter_on ) )
+        tray.setImage( get_logo_template( percentage, limiter_on ) );
+
+        // Check if user wants to see battery %
+        const show_percent = get_show_percentage_setting();
+        if (show_percent) {
+            tray.setTitle(` ${percentage}%`);
+        } else {
+            tray.setTitle('');
+        }
 
         // Build menu
         return Menu.buildFromTemplate( [
@@ -66,6 +74,16 @@ const generate_app_menu = async () => {
                         click: async () => {
                             const success = await update_force_discharge_setting()
                             if( limiter_on && success ) await restart_limiter()
+                        }
+                    },
+                    {
+                        label: `Show battery % in menu bar`,
+                        type: 'checkbox',
+                        checked: get_show_percentage_setting(),
+                        click: async () => {
+                            const newValue = await update_show_percentage_setting();
+                            const { percentage } = await get_battery_status();
+                            tray.setTitle(newValue ? ` ${percentage}%` : '');
                         }
                     }
                 ]
