@@ -237,6 +237,16 @@ const is_limiter_enabled = async () => {
 
 }
 
+const get_charging_status = async() => {
+    try {
+        const charging_message = await exec_async('pmset -g batt')
+        // Check if the output contains "charging"
+        return !charging_message.includes('discharging');
+    } catch ( e ) {
+        log( `Error getting charging status: `, e )
+    }
+}
+
 
 module.exports = {
     enable_battery_limiter,
@@ -244,5 +254,6 @@ module.exports = {
     initialize_battery,
     is_limiter_enabled,
     get_battery_status,
-    uninstall_battery
+    uninstall_battery,
+    get_charging_status
 }

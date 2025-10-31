@@ -1,5 +1,5 @@
 const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
-const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
+const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery, get_charging_status } = require( './battery' )
 const { log } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
 const { get_force_discharge_setting, update_force_discharge_setting, get_show_percentage_setting, update_show_percentage_setting } = require( './settings' )
@@ -16,6 +16,7 @@ const generate_app_menu = async () => {
     try {
         // Get battery and daemon status
         const { battery_state, daemon_state, maintain_percentage=80, percentage } = await get_battery_status()
+        const charging_status = await get_charging_status()
 
         // Check if limiter is on
         const limiter_on = await is_limiter_enabled()
@@ -29,11 +30,14 @@ const generate_app_menu = async () => {
 
         // Check if user wants to see battery %
         const show_percent = get_show_percentage_setting();
-        if (show_percent) {
-            tray.setTitle(` ${percentage}%`);
-        } else {
-            tray.setTitle('');
+        let title_text = "";
+        if (charging_status) {
+            title_text += "⚡"
         }
+        if (show_percent) {
+            title_text += `${percentage}%`;
+        }
+        tray.setTitle(title_text);
 
         // Build menu
         return Menu.buildFromTemplate( [
