@@ -240,8 +240,13 @@ const is_limiter_enabled = async () => {
 const get_charging_status = async() => {
     try {
         const charging_message = await exec_async('pmset -g batt')
-        // Check if the output contains "charging"
-        return !charging_message.includes('discharging');
+
+        if (charging_message.includes("charging") && !charging_message.includes("not charging")) {
+            return true;  // Charging
+        }
+        else {
+            return false;  // Not charging
+        }
     } catch ( e ) {
         log( `Error getting charging status: `, e )
     }
