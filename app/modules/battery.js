@@ -241,7 +241,7 @@ const get_charging_status = async() => {
     try {
         const charging_message = await exec_async('pmset -g batt')
 
-        if (charging_message.includes("charging") && !charging_message.includes("not charging")) {
+        if (charging_message.includes("charging") && !charging_message.includes("not charging") && !charging_message.includes("discharging")) {
             return true;  // Charging
         }
         else {
