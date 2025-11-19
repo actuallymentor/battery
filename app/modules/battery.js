@@ -139,10 +139,10 @@ const initialize_battery = async () => {
             '-k CH0C -r',
             '-k CH0I -r',
             '-k ACLC -r',
-            '-k ACLC -w 02',
-            // Update for Sanoma 26.x
+            // Apple introduced the following two in 2025.
+            // It seems to apply to all Apple Silicon MacBooks, regardless of macOS version.
             '-k CHTE -r',
-            '-k CH0J -w 01'
+            '-k CHIE -r'
         ]
         const [
             battery_installed,
@@ -150,21 +150,23 @@ const initialize_battery = async () => {
             charging_in_visudo,
             discharging_in_visudo,
             magsafe_led_in_visudo,
-            additional_magsafe_led_in_visudo
+            chte_charging_in_visudo,
+            chie_discharging_in_visudo,
         ] = await Promise.all( [
             exec_async( `${ path_fix } which battery` ).catch( low_err_return_false ),
             exec_async( `${ path_fix } which smc` ).catch( low_err_return_false ),
             ...smc_commands.map( cmd => exec_async( `${ path_fix } sudo -n /usr/local/bin/smc ${ cmd }` ).catch( low_err_return_false ) )
         ] )
 
-        const visudo_complete = ![ charging_in_visudo,  discharging_in_visudo,  magsafe_led_in_visudo,  additional_magsafe_led_in_visudo ].some( entry => entry === false )
+        const visudo_complete = ![ charging_in_visudo,  discharging_in_visudo,  magsafe_led_in_visudo, chte_charging_in_visudo, chie_discharging_in_visudo ].some( entry => entry === false )
         const is_installed = battery_installed && smc_installed
         log( 'Is installed? ', is_installed )
         log( 'Visudo complete? ', {
             charging_in_visudo,
             discharging_in_visudo,
             magsafe_led_in_visudo,
-            additional_magsafe_led_in_visudo,
+            chte_charging_in_visudo,
+            chie_discharging_in_visudo,
             visudo_complete
         } )
 
