@@ -229,7 +229,7 @@ const is_limiter_enabled = async () => {
     try {
         const message = await exec_async( `${ battery } status` )
         log( `Limiter status message: `, message )
-        return message.includes( 'being maintained at' )
+        return message?.includes( 'being maintained at' )
     } catch ( e ) {
         log( `Error getting battery status: `, e )
         alert( `Battery limiter error: ${ e.message }` )
