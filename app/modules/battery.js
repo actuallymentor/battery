@@ -133,6 +133,17 @@ const initialize_battery = async () => {
         log( `Internet online: ${ online }` )
 
         // Check if battery is installed and visudo entries are complete. New visudo entries are added when we do new `sudo` stuff in battery.sh
+        // note to self: only added a few of the new entries, there is no need to be exhaustive except to make sure all new sudo stuff is covered
+        const smc_commands = [
+            // Old list
+            '-k CH0C -r',
+            '-k CH0I -r',
+            '-k ACLC -r',
+            '-k ACLC -w 02',
+            // Update for Sanoma 26.x
+            '-k CHTE -r',
+            '-k CH0J -w 01'
+        ]
         const [
             battery_installed,
             smc_installed,
@@ -143,10 +154,7 @@ const initialize_battery = async () => {
         ] = await Promise.all( [
             exec_async( `${ path_fix } which battery` ).catch( low_err_return_false ),
             exec_async( `${ path_fix } which smc` ).catch( low_err_return_false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0C -r` ).catch( low_err_return_false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k CH0I -r` ).catch( low_err_return_false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -r` ).catch( low_err_return_false ),
-            exec_async( `${ path_fix } sudo -n /usr/local/bin/smc -k ACLC -w 02` ).catch( low_err_return_false )
+            ...smc_commands.map( cmd => exec_async( `${ path_fix } sudo -n /usr/local/bin/smc ${ cmd }` ).catch( low_err_return_false ) )
         ] )
 
         const visudo_complete = ![ charging_in_visudo,  discharging_in_visudo,  magsafe_led_in_visudo,  additional_magsafe_led_in_visudo ].some( entry => entry === false )
