@@ -667,9 +667,9 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	fi
 
 	# Parse setting - could be single value or range
-	local lower_bound=""
-	local upper_bound=""
-	local is_range=false
+	lower_bound=""
+	upper_bound=""
+	is_range=false
 
 	if valid_percentage_range "$setting"; then
 		# Range format: lower-upper
@@ -689,7 +689,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Check if the user requested that the battery maintenance first discharge to the desired level
 	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
-		local discharge_target="$lower_bound"
+		discharge_target="$lower_bound"
 		log "Triggering discharge to $discharge_target before enabling charging limiter"
 		$battery_binary discharge "$discharge_target"
 		log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
