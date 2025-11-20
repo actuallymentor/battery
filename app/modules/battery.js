@@ -3,6 +3,8 @@ const { app } = require( 'electron' )
 const { exec } = require( 'node:child_process' )
 const { log, alert, wait, confirm } = require( './helpers' )
 const { get_force_discharge_setting } = require( './settings' )
+const { get_telemetry_setting } = require('./settings')
+
 const { USER } = process.env
 const path_fix = 'PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
 const battery = `${ path_fix } battery`
@@ -205,7 +207,7 @@ const initialize_battery = async () => {
         await exec_async( `${ battery } maintain recover` )
 
         // Basic user tracking on app open, run it in the background so it does not cause any delay for the user
-        if( online ) exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )
+        if(get_telemetry_setting() && online) exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )
 
 
     } catch ( e ) {
