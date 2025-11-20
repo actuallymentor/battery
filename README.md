@@ -104,6 +104,7 @@ Usage:
 
   battery discharge LEVEL[1-100]
     block power input from the adapter until battery falls to this level
+    Does not work in clamshell mode!
     eg: battery discharge 90
 
   battery visudo
