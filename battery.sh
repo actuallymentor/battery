@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.3.0"
+BATTERY_CLI_VERSION="v1.3.1"
 
 # Path fixes for unexpected environments
 PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -439,7 +439,7 @@ if [[ "$action" == "visudo" ]]; then
 
 	# Write the visudo file to a tempfile
 	visudo_tmpfile="$configfolder/visudo.tmp"
-	sudo rm visudo_tmpfile 2>/dev/null
+	sudo rm $visudo_tmpfile 2>/dev/null
 	echo -e "$visudoconfig" >$visudo_tmpfile
 
 	# If the visudo file is the same (no error, exit code 0), set the permissions just
@@ -646,7 +646,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $calibrate_pidfile &>/dev/null
+		kill $pid &>/dev/null
 		log "🚨 Calibration process have been stopped"
 	fi
 
@@ -801,7 +801,7 @@ if [[ "$action" == "maintain" ]]; then
 
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $calibrate_pidfile &>/dev/null
+		kill $pid &>/dev/null
 		log "🚨 Calibration process have been stopped"
 	fi
 
@@ -829,7 +829,7 @@ if [[ "$action" == "maintain" ]]; then
 			log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
 			exit 1
 		fi
-		if (($(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_max" | bc -l))); then
+		if (($(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_hyst_max" | bc -l))); then
 			log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
 			exit 1
 		fi
@@ -935,7 +935,8 @@ if [[ "$action" == "calibrate" ]]; then
 
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running calibration daemon"
-		kill $calibrate_pidfile &>/dev/null
+		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
+		kill $pid &>/dev/null
 		rm $calibrate_pidfile 2>/dev/null
 
 		exit 0
