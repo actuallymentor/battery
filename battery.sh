@@ -509,6 +509,14 @@ if [[ "$action" == "update" ]]; then
 			read
 		fi
 		curl -sS https://raw.githubusercontent.com/actuallymentor/battery/main/update.sh | bash
+		if [[ ! "$setting" == "silent" ]]; then
+			# The setting "silent" is always passed when `battery update` is invoked from the UI app,
+			# which decides whether to invoke `battery visudo` as well. But for Terminal-only users
+			# there is no UI app. So it's either we invoke `battery visudo` here, or assume that users
+			# remember to do it themselves, which did not work in the past.
+			echo "Runnig $battery_binary visudo"
+			$battery_binary visudo
+		fi
 	fi
 	exit 0
 fi
