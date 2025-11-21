@@ -514,7 +514,7 @@ if [[ "$action" == "update" ]]; then
 			# which decides whether to invoke `battery visudo` as well. But for Terminal-only users
 			# there is no UI app. So it's either we invoke `battery visudo` here, or assume that users
 			# remember to do it themselves, which did not work in the past.
-			echo "Runnig $battery_binary visudo"
+			echo "Running $battery_binary visudo"
 			$battery_binary visudo
 		fi
 	fi
