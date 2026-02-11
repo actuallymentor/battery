@@ -56,19 +56,21 @@ const get_battery_status = async () => {
 
     try {
         const message = await exec_async( `${ battery } status_csv` )
-        let [ percentage='??', remaining='', charging='', discharging='', maintain_percentage='' ] = message?.split( ',' ) || []
+        let [ percentage='??', remaining='', charging='', discharging='', maintain_percentage='', cycle_count='', battery_health='' ] = message?.split( ',' ) || []
         maintain_percentage = maintain_percentage.trim()
         maintain_percentage = maintain_percentage.length ? maintain_percentage : undefined
         charging = charging == 'enabled'
         discharging = discharging == 'discharging'
         remaining = remaining.match( /\d{1,2}:\d{1,2}/ ) ? remaining : 'unknown'
+        cycle_count = cycle_count.trim()
+        battery_health = battery_health.trim()
 
         let battery_state = `${ percentage }% (${ remaining } remaining)`
         let daemon_state = ``
         if( discharging ) daemon_state += `forcing discharge to ${ maintain_percentage || 80 }%`
         else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
 
-        const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
+        const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state, cycle_count, battery_health }
         log( 'Battery status: ', JSON.stringify( status_object ) )
         return status_object
 
