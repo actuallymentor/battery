@@ -1,80 +1,80 @@
 // Command line interactors
-const { app } = require( 'electron' )
-const { exec } = require( 'node:child_process' )
-const { log, alert, wait, confirm } = require( './helpers' )
-const { get_force_discharge_setting } = require( './settings' )
+const { app } = require('electron')
+const { exec } = require('node:child_process')
+const { log, alert, wait, confirm } = require('./helpers')
+const { get_force_discharge_setting } = require('./settings')
 const { USER } = process.env
 const path_fix = 'PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-const battery = `${ path_fix } battery`
+const battery = `${path_fix} battery`
 const shell_options = {
     shell: '/bin/bash',
-    env: { ...process.env, PATH: `${ process.env.PATH }:/usr/local/bin` }
+    env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin` }
 }
 
 // Execute without sudo
-const exec_async_no_timeout = command => new Promise( ( resolve, reject ) => {
+const exec_async_no_timeout = command => new Promise((resolve, reject) => {
 
-    log( `Executing ${ command }` )
+    log(`Executing ${command}`)
 
-    exec( command, shell_options, ( error, stdout, stderr ) => {
+    exec(command, shell_options, (error, stdout, stderr) => {
 
-        if( error ) return reject( error, stderr, stdout )
-        if( stderr ) return reject( stderr )
-        if( stdout ) return resolve( stdout )
-        if( !stdout ) return resolve( '' )
+        if (error) return reject(error, stderr, stdout)
+        if (stderr) return reject(stderr)
+        if (stdout) return resolve(stdout)
+        if (!stdout) return resolve('')
 
-    } )
+    })
 
-} )
+})
 
-const exec_async = ( command, timeout_in_ms=2000, throw_on_timeout=false ) => Promise.race( [
-    exec_async_no_timeout( command ),
-    wait( timeout_in_ms ).then( () => {
-        if( throw_on_timeout ) throw new Error( `${ command } timed out` )
-    } )
-] )
+const exec_async = (command, timeout_in_ms = 2000, throw_on_timeout = false) => Promise.race([
+    exec_async_no_timeout(command),
+    wait(timeout_in_ms).then(() => {
+        if (throw_on_timeout) throw new Error(`${command} timed out`)
+    })
+])
 
 // Execute with sudo
-const exec_sudo_async = command => new Promise( ( resolve, reject ) => {
+const exec_sudo_async = command => new Promise((resolve, reject) => {
 
-    log( `Executing ${ command } by running:` )
-    log( `osascript -e "do shell script \\"${ command }\\" with administrator privileges"` )
+    log(`Executing ${command} by running:`)
+    log(`osascript -e "do shell script \\"${command}\\" with administrator privileges"`)
 
-    exec( `osascript -e "do shell script \\"${ command }\\" with administrator privileges"`, shell_options, ( error, stdout, stderr ) => {
+    exec(`osascript -e "do shell script \\"${command}\\" with administrator privileges"`, shell_options, (error, stdout, stderr) => {
 
-        if( error ) return reject( error, stderr, stdout )
-        if( stderr ) return reject( stderr )
-        if( stdout ) return resolve( stdout )
-        if( !stdout ) return resolve( '' )
+        if (error) return reject(error, stderr, stdout)
+        if (stderr) return reject(stderr)
+        if (stdout) return resolve(stdout)
+        if (!stdout) return resolve('')
 
-    } )
+    })
 
-} )
+})
 
 // Battery status checker
 const get_battery_status = async () => {
 
     try {
-        const message = await exec_async( `${ battery } status_csv` )
-        let [ percentage='??', remaining='', charging='', discharging='', maintain_percentage='' ] = message?.split( ',' ) || []
+        const message = await exec_async(`${battery} status_csv`)
+        let [percentage = '??', remaining = '', charging = '', discharging = '', maintain_percentage = ''] = message?.split(',') || []
         maintain_percentage = maintain_percentage.trim()
         maintain_percentage = maintain_percentage.length ? maintain_percentage : undefined
         charging = charging == 'enabled'
         discharging = discharging == 'discharging'
-        remaining = remaining.match( /\d{1,2}:\d{1,2}/ ) ? remaining : 'unknown'
+        remaining = remaining.match(/\d{1,2}:\d{1,2}/) ? remaining : 'unknown'
 
-        let battery_state = `${ percentage }% (${ remaining } remaining)`
+        let battery_state = `${percentage}% (${remaining} remaining)`
         let daemon_state = ``
-        if( discharging ) daemon_state += `forcing discharge to ${ maintain_percentage || 80 }%`
-        else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
+        if (discharging) daemon_state += `forcing discharge to ${maintain_percentage || 80}%`
+        else daemon_state += `smc charging ${charging ? 'enabled' : 'disabled'}`
 
         const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
-        log( 'Battery status: ', JSON.stringify( status_object ) )
+        log('Battery status: ', JSON.stringify(status_object))
         return status_object
 
-    } catch ( e ) {
-        log( `Error getting battery status: `, e )
-        alert( `Battery limiter error: ${ e.message }` )
+    } catch (e) {
+        log(`Error getting battery status: `, e)
+        alert(`Battery limiter error: ${e.message}`)
     }
 
 }
@@ -89,12 +89,12 @@ const enable_battery_limiter = async () => {
         // Start battery maintainer
         const status = await get_battery_status()
         const allow_force_discharge = get_force_discharge_setting()
-        await exec_async( `${ battery } maintain ${ status?.maintain_percentage || 80 }${ allow_force_discharge ? ' --force-discharge' : '' }` )
-        log( `enable_battery_limiter exec complete` )
+        await exec_async(`${battery} maintain ${status?.maintain_percentage || 80}${allow_force_discharge ? ' --force-discharge' : ''}`)
+        log(`enable_battery_limiter exec complete`)
         return status?.percentage
-    } catch ( e ) {
-        log( 'Error enabling battery: ', e )
-        alert( e.message )
+    } catch (e) {
+        log('Error enabling battery: ', e)
+        alert(e.message)
     }
 
 }
@@ -102,18 +102,18 @@ const enable_battery_limiter = async () => {
 const disable_battery_limiter = async () => {
 
     try {
-        await exec_async( `${ battery } maintain stop` )
+        await exec_async(`${battery} maintain stop`)
         const status = await get_battery_status()
         return status?.percentage
-    } catch ( e ) {
-        log( 'Error enabling battery: ', e )
-        alert( e.message )
+    } catch (e) {
+        log('Error enabling battery: ', e)
+        alert(e.message)
     }
 
 }
 
-const low_err_return_false = ( ...errdata ) => {
-    log( 'Error in shell call: ', ...errdata )
+const low_err_return_false = (...errdata) => {
+    log('Error in shell call: ', ...errdata)
     return false
 }
 
@@ -123,14 +123,14 @@ const initialize_battery = async () => {
 
         // Check if dev mode
         const { development, skipupdate } = process.env
-        if( development ) log( `Dev mode on, skip updates: ${ skipupdate }` )
+        if (development) log(`Dev mode on, skip updates: ${skipupdate}`)
 
         // Check for network
-        const online = await Promise.race( [
-            exec_async( `${ path_fix } curl -I https://icanhazip.com &> /dev/null` ).then( () => true ).catch( () => false ),
-            exec_async( `${ path_fix } curl -I https://github.com &> /dev/null` ).then( () => true ).catch( () => false )
-        ] )
-        log( `Internet online: ${ online }` )
+        const online = await Promise.race([
+            exec_async(`${path_fix} curl -I https://icanhazip.com &> /dev/null`).then(() => true).catch(() => false),
+            exec_async(`${path_fix} curl -I https://github.com &> /dev/null`).then(() => true).catch(() => false)
+        ])
+        log(`Internet online: ${online}`)
 
         // Check if battery is installed and visudo entries are complete. New visudo entries are added when we do new `sudo` stuff in battery.sh
         // note to self: only added a few of the new entries, there is no need to be exhaustive except to make sure all new sudo stuff is covered
@@ -152,65 +152,65 @@ const initialize_battery = async () => {
             magsafe_led_in_visudo,
             chte_charging_in_visudo,
             chie_discharging_in_visudo,
-        ] = await Promise.all( [
-            exec_async( `${ path_fix } which battery` ).catch( low_err_return_false ),
-            exec_async( `${ path_fix } which smc` ).catch( low_err_return_false ),
-            ...smc_commands.map( cmd => exec_async( `${ path_fix } sudo -n /usr/local/bin/smc ${ cmd }` ).catch( low_err_return_false ) )
-        ] )
+        ] = await Promise.all([
+            exec_async(`${path_fix} which battery`).catch(low_err_return_false),
+            exec_async(`${path_fix} which smc`).catch(low_err_return_false),
+            ...smc_commands.map(cmd => exec_async(`${path_fix} sudo -n /usr/local/bin/smc ${cmd}`).catch(low_err_return_false))
+        ])
 
-        const visudo_complete = ![ charging_in_visudo,  discharging_in_visudo,  magsafe_led_in_visudo, chte_charging_in_visudo, chie_discharging_in_visudo ].some( entry => entry === false )
+        const visudo_complete = ![charging_in_visudo, discharging_in_visudo, magsafe_led_in_visudo, chte_charging_in_visudo, chie_discharging_in_visudo].some(entry => entry === false)
         const is_installed = battery_installed && smc_installed
-        log( 'Is installed? ', is_installed )
-        log( 'Visudo complete? ', {
+        log('Is installed? ', is_installed)
+        log('Visudo complete? ', {
             charging_in_visudo,
             discharging_in_visudo,
             magsafe_led_in_visudo,
             chte_charging_in_visudo,
             chie_discharging_in_visudo,
             visudo_complete
-        } )
+        })
 
         // Kill running instances of battery
-        const processes = await exec_async( `ps aux | grep "/usr/local/bin/battery " | wc -l | grep -Eo "\\d*"` )
-        log( `Found ${ `${ processes }`.replace( /\n/, '' ) } battery related processed to kill` )
-        if( is_installed ) await exec_async( `${ battery } maintain stop` )
-        await exec_async( `pkill -f "/usr/local/bin/battery.*"` ).catch( e => log( `Error killing existing battery progesses, usually means no running processes` ) )
+        const processes = await exec_async(`ps aux | grep "/usr/local/bin/battery " | wc -l | grep -Eo "\\d*"`)
+        log(`Found ${`${processes}`.replace(/\n/, '')} battery related processed to kill`)
+        if (is_installed) await exec_async(`${battery} maintain stop`)
+        await exec_async(`pkill -f "/usr/local/bin/battery.*"`).catch(e => log(`Error killing existing battery progesses, usually means no running processes`))
 
         // If installed, update
-        if( is_installed && visudo_complete ) {
-            if( !online ) return log( `Skipping battery update because we are offline` )
-            if( skipupdate ) return log( `Skipping update due to environment variable` )
-            log( `Updating battery...` )
-            const result = await exec_async( `${ battery } update silent` ).catch( e => e )
-            log( `Update result: `, result )
+        if (is_installed && visudo_complete) {
+            if (!online) return log(`Skipping battery update because we are offline`)
+            if (skipupdate) return log(`Skipping update due to environment variable`)
+            log(`Updating battery...`)
+            const result = await exec_async(`${battery} update silent`).catch(e => e)
+            log(`Update result: `, result)
         }
 
         // If not installed, run install script
-        if( !is_installed ) {
-            log( `Installing battery for ${ USER }...` )
-            if( !online ) return alert( `Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.` )
-            if( !is_installed ) await alert( `Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.` )
-            const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
-            log( `Install result success `, result )
-            await alert( `Battery background components installed successfully. You can find the battery limiter icon in the top right of your menu bar.` )
+        if (!is_installed) {
+            log(`Installing battery for ${USER}...`)
+            if (!online) return alert(`Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.`)
+            if (!is_installed) await alert(`Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.`)
+            const result = await exec_sudo_async(`curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER`)
+            log(`Install result success `, result)
+            await alert(`Battery background components installed successfully. You can find the battery limiter icon in the top right of your menu bar.`)
         }
 
         // If visudo entries are incomplete, update
-        if( !visudo_complete ) {
-            await alert( `Battery needs to apply a backwards incompatible update, to do this it will ask for your password. This should not happen frequently.` )
-            await exec_sudo_async( `${ path_fix } battery visudo` )
+        if (!visudo_complete) {
+            await alert(`Battery needs to apply a backwards incompatible update, to do this it will ask for your password. This should not happen frequently.`)
+            await exec_sudo_async(`${path_fix} battery visudo`)
         }
 
         // Recover old battery setting on boot (as we killed all old processes above)
-        await exec_async( `${ battery } maintain recover` )
+        await exec_async(`${battery} maintain recover`)
 
         // Basic user tracking on app open, run it in the background so it does not cause any delay for the user
-        if( online ) exec_async( `nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1` )
+        if (online) exec_async(`nohup curl "https://unidentifiedanalytics.web.app/touch/?namespace=battery" > /dev/null 2>&1`)
 
 
-    } catch ( e ) {
-        log( `Update/install error: `, e )
-        await alert( `Error installing battery limiter: ${ e.message }` )
+    } catch (e) {
+        log(`Update/install error: `, e)
+        await alert(`Error installing battery limiter: ${e.message}`)
         app.quit()
         app.exit()
     }
@@ -220,14 +220,14 @@ const initialize_battery = async () => {
 const uninstall_battery = async () => {
 
     try {
-        const confirmed = await confirm( `Are you sure you want to uninstall Battery?` )
-        if( !confirmed ) return false
-        await exec_sudo_async( `${ path_fix } sudo battery uninstall silent` )
-        await alert( `Battery is now uninstalled!` )
+        const confirmed = await confirm(`Are you sure you want to uninstall Battery?`)
+        if (!confirmed) return false
+        await exec_sudo_async(`${path_fix} sudo battery uninstall silent`)
+        await alert(`Battery is now uninstalled!`)
         return true
-    } catch ( e ) {
-        log( 'Error uninstalling battery: ', e )
-        alert( `Error uninstalling battery: ${ e.message }` )
+    } catch (e) {
+        log('Error uninstalling battery: ', e)
+        alert(`Error uninstalling battery: ${e.message}`)
         return false
     }
 
@@ -237,12 +237,28 @@ const uninstall_battery = async () => {
 const is_limiter_enabled = async () => {
 
     try {
-        const message = await exec_async( `${ battery } status` )
-        log( `Limiter status message: `, message )
-        return message?.includes( 'being maintained at' )
-    } catch ( e ) {
-        log( `Error getting battery status: `, e )
-        alert( `Battery limiter error: ${ e.message }` )
+        const message = await exec_async(`${battery} status`)
+        log(`Limiter status message: `, message)
+        return message?.includes('being maintained at')
+    } catch (e) {
+        log(`Error getting battery status: `, e)
+        alert(`Battery limiter error: ${e.message}`)
+    }
+
+}
+
+const enable_battery_limiter_at = async (percent) => {
+
+    try {
+        // Start battery maintainer at a specific percentage
+        const allow_force_discharge = get_force_discharge_setting()
+        await exec_async(`${battery} maintain ${percent}${allow_force_discharge ? ' --force-discharge' : ''}`)
+        log(`enable_battery_limiter_at ${percent} exec complete`)
+        const status = await get_battery_status()
+        return status?.percentage
+    } catch (e) {
+        log('Error enabling battery at custom percentage: ', e)
+        alert(e.message)
     }
 
 }
@@ -250,6 +266,7 @@ const is_limiter_enabled = async () => {
 
 module.exports = {
     enable_battery_limiter,
+    enable_battery_limiter_at,
     disable_battery_limiter,
     initialize_battery,
     is_limiter_enabled,
