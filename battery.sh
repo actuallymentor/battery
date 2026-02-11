@@ -415,6 +415,22 @@ function get_voltage() {
 	echo "$voltage"
 }
 
+function get_cycle_count() {
+	cycle_count=$(ioreg -l -n AppleSmartBattery -r | grep '"CycleCount" =' | awk '{ print $3 }')
+	echo "$cycle_count"
+}
+
+function get_battery_health() {
+	nominal=$(ioreg -l -n AppleSmartBattery -r | grep '"NominalChargeCapacity" =' | awk '{ print $3 }')
+	design=$(ioreg -l -n AppleSmartBattery -r | grep '"DesignCapacity" =' | awk '{ print $3 }')
+	if [[ -n "$nominal" && -n "$design" && "$design" -gt 0 ]]; then
+		health=$(echo "scale=0; $nominal * 100 / $design" | bc)
+		echo "$health"
+	else
+		echo "unknown"
+	fi
+}
+
 ## ###############
 ## Actions
 ## ###############
@@ -984,7 +1000,7 @@ fi
 # Status logger in csv format
 if [[ "$action" == "status_csv" ]]; then
 
-	echo "$(get_battery_percentage),$(get_remaining_time),$(get_smc_charging_status),$(get_smc_discharging_status),$(get_maintain_percentage)"
+	echo "$(get_battery_percentage),$(get_remaining_time),$(get_smc_charging_status),$(get_smc_discharging_status),$(get_maintain_percentage),$(get_cycle_count),$(get_battery_health)"
 
 fi
 
