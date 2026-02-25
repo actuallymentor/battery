@@ -25,7 +25,9 @@ const get_logo_template = ( percent = 100, active ) => {
     const image_path = path.join( asset_path, `/battery-${ active ? 'active' : 'inactive' }-${ display_percentage }-Template.png` )
     const exists = existsSync( image_path )
     log( `${ exists ? 'Found' : '🚨 Missing' } image: ${ image_path }` )
-    return nativeImage.createFromPath( image_path )
+    const image = nativeImage.createFromPath( image_path )
+    image.setTemplateImage( true )
+    return image
 }
 
 /* ///////////////////////////////
