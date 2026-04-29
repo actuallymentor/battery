@@ -2,7 +2,8 @@ const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
 const { log } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
-const { get_force_discharge_setting, update_force_discharge_setting } = require( './settings' )
+const { get_force_discharge_setting, update_force_discharge_setting, get_maintenance_settings } = require( './settings' )
+const { open_limits_window } = require( './limits_window' )
 
 /* ///////////////////////////////
 // Menu helpers
@@ -15,13 +16,15 @@ const generate_app_menu = async () => {
 
     try {
         // Get battery and daemon status
-        const { battery_state, daemon_state, maintain_percentage=80, percentage } = await get_battery_status()
+        const { battery_state, daemon_state, percentage } = await get_battery_status()
 
         // Check if limiter is on
         const limiter_on = await is_limiter_enabled()
 
         // Check force discharge setting
         const allow_discharge = get_force_discharge_setting()
+        const { floor_enabled, floor_percentage, ceiling_percentage } = get_maintenance_settings()
+        const maintenance_label = floor_enabled ? `${ floor_percentage }-${ ceiling_percentage }` : `${ ceiling_percentage }`
 
         // Set tray icon
         log( `Generate app menu percentage: ${ percentage } (discharge ${ allow_discharge ? 'allowed' : 'disallowed' }, limited ${ limiter_on ? 'on' : 'off' })` )
@@ -31,13 +34,17 @@ const generate_app_menu = async () => {
         return Menu.buildFromTemplate( [
 
             {
-                label: `Enable ${ maintain_percentage }% battery limit`,
+                label: `Adjust charging limits…`,
+                click: () => open_limits_window( tray )
+            },
+            {
+                label: `Enable ${ maintenance_label }% battery limit`,
                 type: 'radio',
                 checked: limiter_on,
                 click: enable_limiter
             },
             {
-                label: `Disable ${ maintain_percentage }% battery limit`,
+                label: `Disable ${ maintenance_label }% battery limit`,
                 type: 'radio',
                 checked: !limiter_on,
                 click: disable_limiter

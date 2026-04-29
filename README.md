@@ -23,7 +23,8 @@ The first time you open the app, it will ask for your administator password so i
 - Enables charging when your battery is under 80% charged
 - Keeps the limit engaged even after rebooting
 - Keeps the limit engaged even after closing the tray app
-- Also automatically installs the `battery` command line tool. If you want a custom charging percentage, the CLI is the only way to do that.
+- Also automatically installs the `battery` command line tool. If you want a custom charging percentage, you can use the CLI or the tray popup.
+- The tray app also includes an `Adjust charging limits…` popup with sliders for ceiling-only or floor-and-ceiling charging.
 
 Do you have questions, comments, or feature requests? [Open an issue here](https://github.com/actuallymentor/battery/issues) or [Tweet at me](https://twitter.com/actuallymentor).
 

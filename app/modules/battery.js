@@ -2,7 +2,7 @@
 const { app } = require( 'electron' )
 const { exec } = require( 'node:child_process' )
 const { log, alert, wait, confirm } = require( './helpers' )
-const { get_force_discharge_setting } = require( './settings' )
+const { get_force_discharge_setting, get_maintenance_command } = require( './settings' )
 const { USER } = process.env
 const binfolder = '/usr/local/co.palokaj.battery'
 const battery = `${ binfolder }/battery`
@@ -133,10 +133,11 @@ const enable_battery_limiter = async () => {
     try {
         const status = await get_battery_status()
         const allow_force_discharge = get_force_discharge_setting()
+        const maintenance_command = get_maintenance_command()
         // 'battery maintain' creates a child process, so when the command exits exec_async does not return.
         // That's why here we use a timeout and wait for some time.
         await exec_async(
-            `${ battery } maintain ${ status?.maintain_percentage || 80 }${ allow_force_discharge ? ' --force-discharge' : '' }`,
+            `${ battery } ${ maintenance_command }${ allow_force_discharge ? ' --force-discharge' : '' }`,
             1000    // timeout in milliseconds
         ).catch( e => {
             if ( e.code !== 'ETIMEDOUT' ) throw e;
