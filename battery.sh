@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.3.4"
+BATTERY_CLI_VERSION="v1.3.4_fix"
 
 # If a script may run as root:
 #   - Reset PATH to safe defaults at the very beginning of the script.
@@ -880,13 +880,17 @@ fi
 # Maintain at level
 if [[ "$action" == "maintain_synchronous" ]]; then
 
+	echo $$ >$pidfile
 	log_smc_capabilities
 
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
-		log "🚨 Calibration process have been stopped"
+		if kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o args= 2>/dev/null | grep -q "battery"; then
+			kill $pid &>/dev/null
+			log "🚨 Calibration process have been stopped"
+		fi
+		rm "$calibrate_pidfile" 2>/dev/null
 	fi
 
 	# Recover old maintain status if old setting is found
@@ -1037,15 +1041,21 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Kill old process silently
 	if test -f "$pidfile"; then
-		log "Killing old maintain process at $(cat $pidfile)"
 		pid=$(cat "$pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
+		if kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o args= 2>/dev/null | grep -q "battery"; then
+			log "Killing old maintain process at $pid"
+			kill $pid &>/dev/null
+		fi
+		rm "$pidfile" 2>/dev/null
 	fi
 
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
-		log "🚨 Calibration process have been stopped"
+		if kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o args= 2>/dev/null | grep -q "battery"; then
+			kill $pid &>/dev/null
+			log "🚨 Calibration process have been stopped"
+		fi
+		rm "$calibrate_pidfile" 2>/dev/null
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
@@ -1144,7 +1154,11 @@ if [[ "$action" == "calibrate" ]]; then
 	# Kill old process silently
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
+		if kill -0 "$pid" 2>/dev/null && \
+		ps -p "$pid" -o args= 2>/dev/null | grep -q "battery"; then
+			kill $pid &>/dev/null
+		fi
+		rm "$calibrate_pidfile" 2>/dev/null
 	fi
 	echo $$ >$calibrate_pidfile
 
@@ -1179,7 +1193,9 @@ fi
 if [[ "$action" == "status" ]]; then
 
 	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, smc charging $(get_smc_charging_status)"
-	if test -f $pidfile; then
+	if test -f "$pidfile" && \
+	kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null && \
+	ps -p "$(cat "$pidfile" 2>/dev/null)" -o args= 2>/dev/null | grep -q "battery"; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
 			if valid_percentage_range "$maintain_percentage"; then
