@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.3.4"
+BATTERY_CLI_VERSION="v1.3.5"
 
 # If a script may run as root:
 #   - Reset PATH to safe defaults at the very beginning of the script.
@@ -150,11 +150,13 @@ Cmnd_Alias    CHARGING_ON = $smc_binary -k CH0B -w 00, $smc_binary -k CH0C -w 00
 Cmnd_Alias    FORCE_DISCHARGE_OFF = $smc_binary -k CH0I -w 00, $smc_binary -k CHIE -w 00, $smc_binary -k CH0J -w 00
 Cmnd_Alias    FORCE_DISCHARGE_ON = $smc_binary -k CH0I -w 01, $smc_binary -k CHIE -w 08, $smc_binary -k CH0J -w 01
 Cmnd_Alias    LED_CONTROL = $smc_binary -k ACLC -w 04, $smc_binary -k ACLC -w 03, $smc_binary -k ACLC -w 02, $smc_binary -k ACLC -w 01, $smc_binary -k ACLC -w 00
+Cmnd_Alias    GOLDEN_GATE_CONTROL = $battery_binary golden_gate *
 ALL ALL = NOPASSWD: CHARGING_OFF
 ALL ALL = NOPASSWD: CHARGING_ON
 ALL ALL = NOPASSWD: FORCE_DISCHARGE_OFF
 ALL ALL = NOPASSWD: FORCE_DISCHARGE_ON
 ALL ALL = NOPASSWD: LED_CONTROL
+ALL ALL = NOPASSWD: GOLDEN_GATE_CONTROL
 
 # Temporarily keep passwordless SMC reading commands so the old menubar GUI versions don't ask for password on each launch
 # trying to execute 'battery visudo'. There is no harm in removing this, so do it as soon as you believe users are no
@@ -238,9 +240,46 @@ function smc_write_hex() {
 	return 0
 }
 
+function smc_key_matches() {
+	"$smc_binary" -k "$1" -r 2>/dev/null |
+		grep -Eq "\\[$2[[:space:]]*\\].*\\(bytes( [[:xdigit:]]{2}){$3}\\)[[:space:]]*$"
+}
+
+function golden_gate_write_verified() {
+	local key=$1 expected
+	[[ $EUID -eq 0 ]] || return 1
+	expected=$(echo "$2" | tr '[:lower:]' '[:upper:]')
+	smc_write_hex "$key" "$expected" &&
+		[[ $(smc_read_hex "$key" | tr '[:lower:]' '[:upper:]') == "$expected" ]]
+}
+
+function golden_gate_write_limit() {
+	local upper=$1 lower=$2 upper_hex lower_hex
+	if ! valid_percentage "$upper" || ! valid_percentage "$lower" || [[ $upper -lt 2 || $lower -ge $upper ]]; then
+		log "⚠️ Refusing invalid Golden Gate limits: lower=$lower upper=$upper"
+		return 1
+	fi
+	printf -v upper_hex '%02X000000' "$upper"
+	printf -v lower_hex '%02X000000' "$lower"
+	log "Golden Gate limit: lower=$lower upper=$upper"
+	if ! golden_gate_write_verified bfF0 00 || \
+		! golden_gate_write_verified bfD0 "$upper_hex" || \
+		! golden_gate_write_verified bfE0 "$lower_hex" || \
+		! golden_gate_write_verified bfF0 02; then
+		golden_gate_write_verified bfF0 00 || log "⚠️ Failed to reset bfF0 after a Golden Gate write failure"
+		return 1
+	fi
+}
+
 ## #########################
 ## Detect supported SMC keys
 ## #########################
+macos_major_version=$(sw_vers -productVersion | cut -d. -f1)
+smc_supports_golden_gate=false
+if [[ "$macos_major_version" =~ ^[0-9]+$ && $macos_major_version -ge 27 ]] && \
+	smc_key_matches bfD0 ui32 4 && smc_key_matches bfE0 ui32 4 && smc_key_matches bfF0 ui8 1; then
+	smc_supports_golden_gate=true
+fi
 [[ $($smc_binary -k CHTE -r) =~ "no data" ]] && smc_supports_tahoe=false || smc_supports_tahoe=true;
 [[ $($smc_binary -k CH0B -r) =~ "no data" ]] && smc_supports_legacy=false || smc_supports_legacy=true;
 [[ $($smc_binary -k CHIE -r) =~ "no data" ]] && smc_supports_adapter_chie=false || smc_supports_adapter_chie=true;
@@ -248,7 +287,7 @@ function smc_write_hex() {
 [[ $($smc_binary -k CH0J -r) =~ "no data" || $($smc_binary -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
 
 function log_smc_capabilities() {
-	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
+	log "SMC capabilities: golden_gate=$smc_supports_golden_gate tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
 }
 
 ## #################
@@ -272,6 +311,20 @@ function change_magsafe_led_color() {
 		# Default action: reset. Value 00 is a guess and needs confirmation
 		log "resetting LED"
 		sudo $smc_binary -k ACLC -w 00
+	fi
+}
+
+function enable_charging_smc() {
+	if [[ "$smc_supports_golden_gate" == "true" ]]; then
+		sudo "$battery_binary" golden_gate reset
+	elif [[ "$smc_supports_tahoe" == "true" ]]; then
+		smc_write_hex CHTE 00000000
+	elif [[ "$smc_supports_legacy" == "true" ]]; then
+		smc_write_hex CH0B 00
+		smc_write_hex CH0C 00
+	else
+		log "⚠️ Unable to reset charging state"
+		return 1
 	fi
 }
 
@@ -306,15 +359,8 @@ function disable_discharging() {
 	if ! valid_percentage "$setting"; then
 
 		log "Disabling discharging: No valid maintain percentage set, enabling charging"
-		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		# use the SMC-only helper since enable_charging also calls disable_discharging
+		enable_charging_smc
 		change_magsafe_led_color "orange"
 
 	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
@@ -326,15 +372,8 @@ function disable_discharging() {
 	elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
 		log "Disabling discharging: Charge below $setting, enabling charging"
-		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		# use the SMC-only helper since enable_charging also calls disable_discharging
+		enable_charging_smc
 		change_magsafe_led_color "orange"
 
 	fi
@@ -347,20 +386,24 @@ function disable_discharging() {
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
 function enable_charging() {
 	log "🔌🔋 Enabling battery charging"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
-		smc_write_hex CHTE 00000000
-	elif [[ "$smc_supports_legacy" == "true" ]]; then
-		smc_write_hex CH0B 00
-		smc_write_hex CH0C 00
-	else
-		log "⚠️ Unable to determine SMC keys for enabling charging"
-	fi
+	enable_charging_smc
 	disable_discharging
 }
 
 function disable_charging() {
+	local upper lower
 	log "🔌🪫 Disabling battery charging"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
+	if [[ "$smc_supports_golden_gate" == "true" ]]; then
+		battery_percentage=$(get_battery_percentage)
+		if ! valid_percentage "$battery_percentage"; then
+			log "⚠️ Unable to read battery percentage for Golden Gate charging control"
+			return 1
+		fi
+		upper=$((battery_percentage - 2))
+		[[ $upper -lt 2 ]] && upper=2
+		lower=$((upper - 2))
+		sudo "$battery_binary" golden_gate "$upper" "$lower"
+	elif [[ "$smc_supports_tahoe" == "true" ]]; then
 		smc_write_hex CHTE 01000000
 	elif [[ "$smc_supports_legacy" == "true" ]]; then
 		smc_write_hex CH0B 02
@@ -372,7 +415,9 @@ function disable_charging() {
 
 function get_smc_charging_status() {
 	local status_key="CH0B"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
+	if [[ "$smc_supports_golden_gate" == "true" ]]; then
+		status_key="bfF0"
+	elif [[ "$smc_supports_tahoe" == "true" ]]; then
 		status_key="CHTE"
 	fi
 	hex_status=$(smc_read_hex "$status_key")
@@ -380,7 +425,13 @@ function get_smc_charging_status() {
 		echo "unknown"
 		return
 	fi
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
+	if [[ "$smc_supports_golden_gate" == "true" ]]; then
+		case "$hex_status" in
+			00) echo "enabled" ;;
+			02) echo "disabled" ;;
+			*) echo "unknown" ;;
+		esac
+	elif [[ "$smc_supports_tahoe" == "true" ]]; then
 		if [[ "$hex_status" == "00000000" ]]; then
 			echo "enabled"
 		else
@@ -570,6 +621,19 @@ fi
 # Help message
 if [ -z "$action" ] || [[ "$action" == "help" ]] || [[ "$action" == "--help" ]]; then
 	echo -e "$helpmessage"
+	exit 0
+fi
+
+# Root-only Golden Gate write surface. Validation keeps the sudoers rule from
+# granting unrestricted dynamic writes to the SMC binary.
+if [[ "$action" == "golden_gate" ]]; then
+	assert_running_as_root
+	[[ "$smc_supports_golden_gate" == "true" ]] || { log "Golden Gate SMC keys are unavailable"; exit 1; }
+	if [[ "$setting" == "reset" ]]; then
+		golden_gate_write_verified bfF0 00 || { log "Failed to reset Golden Gate charging control"; exit 1; }
+	else
+		golden_gate_write_limit "$setting" "$subsetting" || exit 1
+	fi
 	exit 0
 fi
 
