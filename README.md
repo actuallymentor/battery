@@ -29,6 +29,8 @@ The first time you open the app, it will ask for your administator password so i
 
 In the tray app, open `Advanced settings` and toggle `Show percentage only in menu bar` to replace the battery icon with a live `NN%` text indicator. The default icon mode stays unchanged. This preference is persisted and takes effect immediately.
 
+The tray app runs as a menu-bar-only utility (`LSUIElement`) and does not appear in the Dock or app switcher.
+
 Do you have questions, comments, or feature requests? [Open an issue here](https://github.com/actuallymentor/battery/issues) or [Tweet at me](https://twitter.com/actuallymentor).
 
 ---
