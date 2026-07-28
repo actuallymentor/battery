@@ -29,7 +29,8 @@
     "start": "development=true electron .",
     "start:watch": "nodemon --watch . --exec 'skipupdate=true development=true electron .'",
     "build": "rm -rf ./dist/* && electron-builder build --mac --arm64",
-    "lint": "eslint --fix src"
+    "lint": "eslint --fix src",
+    "test:tray-display": "node ./scripts/test-tray-display.js"
   },
   "repository": "https://github.com/actuallymentor/battery",
   "keywords": [

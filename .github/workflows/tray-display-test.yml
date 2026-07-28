@@ -1,0 +1,16 @@
+name: Tray display deterministic test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  tray-display-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run tray display test
+        run: node app/scripts/test-tray-display.js

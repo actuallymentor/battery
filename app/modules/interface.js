@@ -1,14 +1,32 @@
-const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
+const { shell, app, Tray, Menu, powerMonitor, nativeTheme, nativeImage } = require( 'electron' )
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
 const { log } = require( "./helpers" )
 const { get_logo_template } = require( './theme' )
-const { get_force_discharge_setting, update_force_discharge_setting } = require( './settings' )
+const { get_force_discharge_setting, update_force_discharge_setting, get_percentage_only_setting, update_percentage_only_setting } = require( './settings' )
+const { get_tray_display_state } = require( './tray-display' )
 
 /* ///////////////////////////////
 // Menu helpers
 // /////////////////////////////*/
 let tray = undefined
 
+const apply_tray_display = ( percentage, limiter_on ) => {
+
+    const display_state = get_tray_display_state( {
+        percentage,
+        limiter_on,
+        show_percentage_only: get_percentage_only_setting()
+    } )
+
+    tray.setTitle( display_state.title )
+    if( display_state.show_percentage_only ) {
+        tray.setImage( nativeImage.createEmpty() )
+        return
+    }
+
+    tray.setImage( get_logo_template( display_state.icon_percentage, display_state.icon_active ) )
+
+}
 
 // Set interface to usable
 const generate_app_menu = async () => {
@@ -20,12 +38,13 @@ const generate_app_menu = async () => {
         // Check if limiter is on
         const limiter_on = await is_limiter_enabled()
 
-        // Check force discharge setting
+        // Check settings
         const allow_discharge = get_force_discharge_setting()
+        const percentage_only_menubar = get_percentage_only_setting()
 
-        // Set tray icon
-        log( `Generate app menu percentage: ${ percentage } (discharge ${ allow_discharge ? 'allowed' : 'disallowed' }, limited ${ limiter_on ? 'on' : 'off' })` )
-        tray.setImage( get_logo_template( percentage, limiter_on ) )
+        // Set tray display
+        log( `Generate app menu percentage: ${ percentage } (discharge ${ allow_discharge ? 'allowed' : 'disallowed' }, limited ${ limiter_on ? 'on' : 'off' }, percentage-only ${ percentage_only_menubar ? 'on' : 'off' })` )
+        apply_tray_display( percentage, limiter_on )
 
         // Build menu
         return Menu.buildFromTemplate( [
@@ -66,6 +85,15 @@ const generate_app_menu = async () => {
                         click: async () => {
                             const success = await update_force_discharge_setting()
                             if( limiter_on && success ) await restart_limiter()
+                        }
+                    },
+                    {
+                        label: `Show percentage only in menu bar`,
+                        type: 'checkbox',
+                        checked: percentage_only_menubar,
+                        click: async () => {
+                            const success = await update_percentage_only_setting()
+                            if( success ) await refresh_tray( true )
                         }
                     }
                 ]
@@ -164,11 +192,12 @@ const refresh_tray = async ( force_interactive_refresh = false ) => {
 const refresh_logo = async ( percent=80, force ) => {
 
     log( `Refresh logo for percentage ${ percent }, force ${ force }` )
-    if( force == 'active' ) return tray.setImage( get_logo_template( percent, true ) )
-    if( force == 'inactive' ) return tray.setImage( get_logo_template( percent, false ) )
+
+    if( force == 'active' ) return apply_tray_display( percent, true )
+    if( force == 'inactive' ) return apply_tray_display( percent, false )
 
     const is_enabled = await is_limiter_enabled()
-    return tray.setImage( get_logo_template( percent, is_enabled ) )
+    return apply_tray_display( percent, is_enabled )
 }
 
 
@@ -193,7 +222,6 @@ async function set_initial_interface() {
     await enable_battery_limiter()
 
     // Set tray styles
-    tray.setTitle( '' )
     await refresh_tray()
 
     // Set tray open listener
