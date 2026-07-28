@@ -1,6 +1,7 @@
 const { app } = require( 'electron' )
 const { alert, log } = require( './modules/helpers' )
 const { set_initial_interface } = require( './modules/interface' )
+const { hide_dock } = require( './modules/app-visibility' )
 
 // Enable auto-updates
 require( 'update-electron-app' )( {
@@ -13,14 +14,13 @@ require( 'update-electron-app' )( {
 // Event listeners
 // /////////////////////////////*/
 
-app.whenReady().then( set_initial_interface )
+app.whenReady().then( async () => {
 
-/* ///////////////////////////////
-// Global config
-// /////////////////////////////*/
+    // LSUIElement handles packaged builds; this remains as a runtime fallback.
+    hide_dock( app )
+    await set_initial_interface()
 
-// Hide dock entry
-app.dock.hide()
+} )
 
 /* ///////////////////////////////
 // Debugging

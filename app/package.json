@@ -19,6 +19,9 @@
     },
     "afterSign": "./build_hooks/afterSign.js",
     "mac": {
+      "extendInfo": {
+        "LSUIElement": true
+      },
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
@@ -29,7 +32,9 @@
     "start": "development=true electron .",
     "start:watch": "nodemon --watch . --exec 'skipupdate=true development=true electron .'",
     "build": "rm -rf ./dist/* && electron-builder build --mac --arm64",
-    "lint": "eslint --fix src"
+    "lint": "eslint --fix src",
+    "test:tray-display": "node ./scripts/test-tray-display.js",
+    "test:app-visibility": "node ./scripts/test-app-visibility.js"
   },
   "repository": "https://github.com/actuallymentor/battery",
   "keywords": [
