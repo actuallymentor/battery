@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.3.4"
+BATTERY_CLI_VERSION="v1.3.5"
 
 # If a script may run as root:
 #   - Reset PATH to safe defaults at the very beginning of the script.
@@ -219,9 +219,12 @@ function valid_voltage() {
 }
 
 function smc_read_hex() {
-	key=$1
-	line=$(echo $($smc_binary -k $key -r))
-	if [[ $line =~ "no data" ]]; then
+	local key=$1
+	local line=$(echo $($smc_binary -k $key -r))
+	# Keys the smc does not implement read back as "no data", keys it refuses to
+	# read back as "Error: SMCReadKey() = ...". Neither carries a byte value, so
+	# anything without a "bytes" section counts as unavailable.
+	if [[ ! $line =~ "bytes" ]]; then
 		echo
 	else
 		echo ${line#*bytes} | tr -d ' ' | tr -d ')'
@@ -241,14 +244,55 @@ function smc_write_hex() {
 ## #########################
 ## Detect supported SMC keys
 ## #########################
-[[ $($smc_binary -k CHTE -r) =~ "no data" ]] && smc_supports_tahoe=false || smc_supports_tahoe=true;
-[[ $($smc_binary -k CH0B -r) =~ "no data" ]] && smc_supports_legacy=false || smc_supports_legacy=true;
-[[ $($smc_binary -k CHIE -r) =~ "no data" ]] && smc_supports_adapter_chie=false || smc_supports_adapter_chie=true;
-[[ $($smc_binary -k CH0I -r) =~ "no data" ]] && smc_supports_adapter_ch0i=false || smc_supports_adapter_ch0i=true;
-[[ $($smc_binary -k CH0J -r) =~ "no data" || $($smc_binary -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
+function smc_key_available() {
+	[[ -n "$(smc_read_hex "$1")" ]]
+}
+
+smc_key_available CHTE && smc_supports_tahoe=true || smc_supports_tahoe=false;
+smc_key_available CH0B && smc_supports_legacy=true || smc_supports_legacy=false;
+smc_key_available CHIE && smc_supports_adapter_chie=true || smc_supports_adapter_chie=false;
+smc_key_available CH0I && smc_supports_adapter_ch0i=true || smc_supports_adapter_ch0i=false;
+smc_key_available CH0J && smc_supports_adapter_ch0j=true || smc_supports_adapter_ch0j=false;
+
+# How this mac can be stopped from charging:
+#   tahoe   the CHTE key introduced with macOS 26
+#   legacy  the CH0B/CH0C keys used on older apple silicon
+#   adapter no charge inhibit key exists at all, which is the case on apple silicon
+#           macs running macOS 27. There the power adapter itself is inhibited
+#           instead, which stops the charge at the cost of running off the battery
+#   none    no usable key was found, charging cannot be influenced
+if [[ "$smc_supports_tahoe" == "true" ]]; then
+	charge_inhibit_method="tahoe"
+elif [[ "$smc_supports_legacy" == "true" ]]; then
+	charge_inhibit_method="legacy"
+elif [[ "$smc_supports_adapter_chie" == "true" || "$smc_supports_adapter_ch0j" == "true" || "$smc_supports_adapter_ch0i" == "true" ]]; then
+	charge_inhibit_method="adapter"
+else
+	charge_inhibit_method="none"
+fi
+
+# The key/value pair that inhibits the power adapter, used both for force-discharging
+# and, on macs without a charge inhibit key, for stopping the charge
+function get_adapter_inhibit_key() {
+	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
+		echo "CHIE"
+	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
+		echo "CH0J"
+	else
+		echo "CH0I"
+	fi
+}
+
+function get_adapter_inhibit_value() {
+	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
+		echo "08"
+	else
+		echo "01"
+	fi
+}
 
 function log_smc_capabilities() {
-	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
+	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j, charge inhibit method: $charge_inhibit_method"
 }
 
 ## #################
@@ -279,27 +323,13 @@ function change_magsafe_led_color() {
 # CH0I seems to be the "disable the adapter" key
 function enable_discharging() {
 	log "🔽🪫 Enabling battery discharging"
-	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
-		smc_write_hex CHIE 08
-	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
-		smc_write_hex CH0J 01
-	else
-		smc_write_hex CH0I 01
-	fi
+	smc_write_hex "$(get_adapter_inhibit_key)" "$(get_adapter_inhibit_value)"
 	sudo $smc_binary -k ACLC -w 01
 }
 
 function disable_discharging() {
 	log "🔼🪫 Disabling battery discharging"
-	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
-		smc_write_hex CHIE 00
-	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
-		smc_write_hex CH0J 00
-	elif [[ "$smc_supports_adapter_ch0i" == "true" ]]; then
-		smc_write_hex CH0I 00
-	else
-		smc_write_hex CH0I 00
-	fi
+	smc_write_hex "$(get_adapter_inhibit_key)" 00
 	# Keep track of status
 	is_charging=$(get_smc_charging_status)
 
@@ -307,14 +337,7 @@ function disable_discharging() {
 
 		log "Disabling discharging: No valid maintain percentage set, enabling charging"
 		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		smc_allow_charging
 		change_magsafe_led_color "orange"
 
 	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
@@ -327,14 +350,7 @@ function disable_discharging() {
 
 		log "Disabling discharging: Charge below $setting, enabling charging"
 		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		smc_allow_charging
 		change_magsafe_led_color "orange"
 
 	fi
@@ -345,48 +361,82 @@ function disable_discharging() {
 # Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
 # but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
-function enable_charging() {
-	log "🔌🔋 Enabling battery charging"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
+
+# Writes only the keys that let the battery charge again, without touching the
+# discharging state. Split off because enable_charging calls disable_discharging,
+# which in turn needs to restore the charging state without causing an eternal loop.
+function smc_allow_charging() {
+	case "$charge_inhibit_method" in
+	tahoe)
 		smc_write_hex CHTE 00000000
-	elif [[ "$smc_supports_legacy" == "true" ]]; then
+		;;
+	legacy)
 		smc_write_hex CH0B 00
 		smc_write_hex CH0C 00
-	else
+		;;
+	adapter)
+		smc_write_hex "$(get_adapter_inhibit_key)" 00
+		;;
+	*)
+		log "⚠️ Unable to reset charging state"
+		;;
+	esac
+}
+
+function enable_charging() {
+	log "🔌🔋 Enabling battery charging"
+	if [[ "$charge_inhibit_method" == "none" ]]; then
 		log "⚠️ Unable to determine SMC keys for enabling charging"
+		return
 	fi
-	disable_discharging
+	smc_allow_charging
+	# In adapter mode releasing the adapter is already the whole operation, and
+	# disable_discharging would only write the same key a second time
+	if [[ "$charge_inhibit_method" != "adapter" ]]; then
+		disable_discharging
+	fi
 }
 
 function disable_charging() {
 	log "🔌🪫 Disabling battery charging"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
+	case "$charge_inhibit_method" in
+	tahoe)
 		smc_write_hex CHTE 01000000
-	elif [[ "$smc_supports_legacy" == "true" ]]; then
+		;;
+	legacy)
 		smc_write_hex CH0B 02
 		smc_write_hex CH0C 02
-	else
+		;;
+	adapter)
+		# This mac has no charge inhibit key, so the adapter is inhibited instead.
+		# The charge stops, but the mac runs off the battery while it does
+		log "No charge inhibit key on this mac, inhibiting the power adapter instead"
+		smc_write_hex "$(get_adapter_inhibit_key)" "$(get_adapter_inhibit_value)"
+		;;
+	*)
 		log "⚠️ Unable to determine SMC keys for disabling charging"
-	fi
+		;;
+	esac
 }
 
 function get_smc_charging_status() {
-	local status_key="CH0B"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
-		status_key="CHTE"
-	fi
+	local status_key
+	case "$charge_inhibit_method" in
+	tahoe) status_key="CHTE" ;;
+	legacy) status_key="CH0B" ;;
+	adapter) status_key="$(get_adapter_inhibit_key)" ;;
+	*)
+		echo "unknown"
+		return
+		;;
+	esac
 	hex_status=$(smc_read_hex "$status_key")
 	if [[ -z "$hex_status" ]]; then
 		echo "unknown"
 		return
 	fi
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
-		if [[ "$hex_status" == "00000000" ]]; then
-			echo "enabled"
-		else
-			echo "disabled"
-		fi
-	elif [[ "$hex_status" == "00" ]]; then
+	# Any non-zero value on the inhibit key means the charge is being held back
+	if [[ "$hex_status" =~ ^0+$ ]]; then
 		echo "enabled"
 	else
 		echo "disabled"
@@ -394,13 +444,7 @@ function get_smc_charging_status() {
 }
 
 function get_smc_discharging_status() {
-	local status_key="CH0I"
-	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
-		status_key="CHIE"
-	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
-		status_key="CH0J"
-	fi
-	hex_status=$(smc_read_hex "$status_key")
+	hex_status=$(smc_read_hex "$(get_adapter_inhibit_key)")
 	if [[ -z "$hex_status" ]]; then
 		echo "unknown"
 		return
@@ -437,7 +481,10 @@ function get_maintain_percentage() {
 }
 
 function get_voltage() {
-	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }' | tr ',' '.')
+	# Read the last field instead of a fixed column: since macOS 27 ioreg draws the
+	# tree prefix ("|") in front of the AppleSmartBattery properties, which shifts
+	# every column along and made this read back as 0V
+	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | head -n1 | awk '{ print $NF/1000 }' | tr ',' '.')
 	echo "$voltage"
 }
 
@@ -955,12 +1002,15 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		if [[ "$battery_percentage" -ge "$upper_bound" && ("$is_charging" == "enabled" || "$ac_attached" == "1") ]]; then
 
 			log "Charge at or above $upper_bound%"
-			if [[ "$is_charging" == "enabled" ]]; then
+			# Compare against "disabled" rather than "enabled": if the charging state
+			# cannot be read we still have to try, otherwise an unreadable status key
+			# silently lets the battery charge past the target
+			if [[ "$is_charging" != "disabled" ]]; then
 				disable_charging
 			fi
 			change_magsafe_led_color "green"
 
-		elif [[ "$battery_percentage" -lt "$lower_bound" && "$is_charging" == "disabled" ]]; then
+		elif [[ "$battery_percentage" -lt "$lower_bound" && "$is_charging" != "enabled" ]]; then
 
 			log "Charge below $lower_bound%"
 			enable_charging
@@ -1009,11 +1059,13 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 	while true; do
 		is_charging=$(get_smc_charging_status)
 
-		if (($(echo "$voltage < $lower_voltage" | bc -l))) && [[ "$is_charging" == "disabled" ]]; then
+		# Compare against the opposite state so that an unreadable charging status
+		# still triggers a write instead of leaving the battery unmanaged
+		if (($(echo "$voltage < $lower_voltage" | bc -l))) && [[ "$is_charging" != "enabled" ]]; then
 			log "Battery at ${voltage}V"
 			enable_charging
 		fi
-		if (($(echo "$voltage >= $upper_voltage" | bc -l))) && [[ "$is_charging" == "enabled" ]]; then
+		if (($(echo "$voltage >= $upper_voltage" | bc -l))) && [[ "$is_charging" != "disabled" ]]; then
 			log "Battery at ${voltage}V"
 			disable_charging
 		fi

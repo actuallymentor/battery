@@ -140,6 +140,10 @@ sudo rm -v "$binfolder/smc" "$binfolder/battery"
 
 Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new/choose) and I'll try to help you fix it.
 
+### Why does my mac run off the battery while the charge is being held?
+
+Charging is normally stopped through a dedicated SMC key (`CH0B`/`CH0C` on older apple silicon, `CHTE` since macOS 26). Some macs running macOS 27 no longer expose any of those keys, so the only remaining way to stop the charge is to inhibit the power adapter itself. On those machines `battery` falls back to that, which means the mac briefly runs off the battery while the level is being held, and charging resumes once the level drops below your target. Run `battery status` — the log line written to `~/.battery/battery.log` states which method was picked as `charge inhibit method: tahoe|legacy|adapter|none`.
+
 ### A note to Little Snitch users
 
 This tool calls a number of urls, blocking all of them will only break auto-updates.
