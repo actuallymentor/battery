@@ -11,6 +11,14 @@ BATTERY_CLI_VERSION="v1.3.4"
 #   - Never include user-owned directories in PATH.
 PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
+# BATTERY_MACOS27_NATIVE_DISPATCH_BEGIN
+# Opt-in backend only: leave the existing CLI unchanged on all other installs.
+if [[ -f /Library/PrivilegedHelperTools/co.palokaj.battery.macos27/active && \
+      -x /Library/PrivilegedHelperTools/co.palokaj.battery.macos27/native-charge ]]; then
+    exec /bin/bash /Library/PrivilegedHelperTools/co.palokaj.battery.macos27/battery-native.sh "$@"
+fi
+# BATTERY_MACOS27_NATIVE_DISPATCH_END
+
 # Ensure Ctrl+C stops the entire script, not just the current command
 trap 'exit 130' INT
 
