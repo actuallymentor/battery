@@ -92,9 +92,11 @@ Usage:
     eg: battery maintain 80           # maintain at 80%
     eg: battery maintain 70-80        # maintain between 70-80%
     eg: battery maintain stop
+    note: on macOS 27 (and newer firmware) charging is limited through the macOS charge limit, which only
+          supports 80-100%, drains the battery to the limit by itself and maintains a range at its upper bound
 
   battery maintain VOLTAGE[${voltage_min}V-${voltage_max}V,stop] (HYSTERESIS[${voltage_hyst_min}V-${voltage_hyst_max}V])
-    reboot-persistent battery level maintenance: keep battery at a certain voltage
+    reboot-persistent battery level maintenance: keep battery at a certain voltage (not available on macOS 27)
   default hysteresis: 0.1V
     eg: battery maintain 11.4V       # keeps battery between 11.3V and 11.5V
     eg: battery maintain 11.4V 0.3V  # keeps battery between 11.1V and 11.7V
@@ -221,7 +223,8 @@ function valid_voltage() {
 function smc_read_hex() {
 	key=$1
 	line=$(echo $($smc_binary -k $key -r))
-	if [[ $line =~ "no data" ]]; then
+	# A key can be absent ("no data") or, since macOS 27, present but gated behind an entitlement ("Error: SMCReadKey() = e00002c1")
+	if [[ $line =~ "no data" || $line =~ "Error" ]]; then
 		echo
 	else
 		echo ${line#*bytes} | tr -d ' ' | tr -d ')'
@@ -247,8 +250,118 @@ function smc_write_hex() {
 [[ $($smc_binary -k CH0I -r) =~ "no data" ]] && smc_supports_adapter_ch0i=false || smc_supports_adapter_ch0i=true;
 [[ $($smc_binary -k CH0J -r) =~ "no data" || $($smc_binary -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
 
+## ##########################################
+## Native charge limit (macOS 27 and newer firmware)
+## ##########################################
+#
+# macOS 27 (and the firmware shipped with the macOS 26.7 / 15.8 updates) removed the SMC charge-inhibit keys:
+# CHTE, CH0B and CH0C read "no data" and their replacements (bfD0/bfE0/bfF0) are gated behind a private Apple
+# entitlement, even for root. See https://github.com/actuallymentor/battery/issues/474 and
+# https://github.com/actuallymentor/battery/pull/469 for the community findings.
+#
+# On that firmware charging is limited through macOS's own charge limit (System Settings > Battery > Charge
+# Limit). PowerUIAgent exposes it to unprivileged clients via the private PowerUI framework, which we reach
+# through the stock JavaScript for Automation runtime (osascript) so no extra binary and no sudo is needed.
+# The firmware enforces the limit (also during sleep and across reboots) and drains a battery that sits above
+# the limit down to it by itself, so no polling loop is needed to keep the level.
+#
+# Limitations of this method:
+# - the firmware only accepts limits between 80% and 100% (100% means "no limit")
+# - the firmware decides the hysteresis, so a range like 70-80 is maintained at its upper bound
+# - voltage based maintenance is not possible
+
+native_limit_min=80
+
+# Client for PowerUIAgent's manual charge limit (MCL). Usage: native_limit_client ACTION [PERCENTAGE]
+# Prints "supported=true|false enabled=0|1" for 'status', "ok" on success, otherwise an error message
+native_limit_client_js='
+ObjC.import("Foundation");
+function run(argv) {
+	var action = argv[0];
+	var loaded = $.NSBundle.bundleWithPath("/System/Library/PrivateFrameworks/PowerUI.framework").load;
+	var cls = loaded ? $.NSClassFromString("PowerUISmartChargeClient") : null;
+	if (!cls || cls.isNil()) return "error: PowerUI charge limit client not available";
+	var client = cls.alloc.initWithClientName($("battery-cli"));
+	var error = Ref();
+	var errorText = function() { return (error[0] && !error[0].isNil()) ? error[0].localizedDescription.js : "unknown error"; };
+	if (action == "status") return "supported=" + client.isMCLSupported + " enabled=" + client.isMCLCurrentlyEnabled(error);
+	if (action == "enable") return client.enableMCL(error) ? "ok" : "error: " + errorText();
+	if (action == "disable") return client.disableMCL(error) ? "ok" : "error: " + errorText();
+	if (action == "set") return client.setMCLLimitError(parseInt(argv[1], 10), error) ? "ok" : "error: " + errorText();
+	return "error: unknown action " + action;
+}
+'
+function native_limit_client() {
+	/usr/bin/osascript -l JavaScript -e "$native_limit_client_js" "$@" 2>&1
+}
+
+function native_limit_supported() {
+	[[ "$(native_limit_client status)" == "supported=true"* ]]
+}
+
+# Prints the manual charge limit currently registered with powerd, or nothing if there is none
+function get_native_limit() {
+	pmset -g battlimit 2>/dev/null | awk '
+		/{/ { reason = ""; soc = "" }
+		/chargeSocLimitReason/ { reason = $3 }
+		/chargeSocLimitSoc/ { gsub(";", "", $3); soc = $3 }
+		/}/ { if (reason ~ /manualChargeLimit/ && soc != "") { print soc; exit } }
+	'
+}
+
+function set_native_limit() {
+	local limit=$1
+	if ! valid_percentage "$limit" || [[ "$limit" -lt "$native_limit_min" ]]; then
+		log "⚠️ The macOS charge limit only supports ${native_limit_min}-100%, cannot set it to ${limit}%"
+		return 1
+	fi
+	# 100% means "no limit" to macOS, a disabled limit is the cleaner way to express that
+	if [[ "$limit" -eq 100 ]]; then
+		clear_native_limit
+		return
+	fi
+	local result
+	result=$(native_limit_client enable)
+	if [[ "$result" != "ok" ]]; then
+		log "⚠️ Failed to enable the macOS charge limit: $result"
+		return 1
+	fi
+	result=$(native_limit_client set "$limit")
+	if [[ "$result" != "ok" ]]; then
+		log "⚠️ Failed to set the macOS charge limit to ${limit}%: $result"
+		return 1
+	fi
+	log "🔒 macOS charge limit set to ${limit}%"
+	return 0
+}
+
+function clear_native_limit() {
+	local result
+	result=$(native_limit_client disable)
+	if [[ "$result" != "ok" ]]; then
+		log "⚠️ Failed to disable the macOS charge limit: $result"
+		return 1
+	fi
+	log "🔓 macOS charge limit disabled"
+	return 0
+}
+
+## #############################
+## Detect charge control method
+## #############################
+# smc: write the SMC charge-inhibit keys directly (macOS 26 and older firmware)
+# native: use the macOS charge limit (macOS 27 and newer firmware, see above)
+# none: no known way to control charging on this machine
+if [[ "$smc_supports_tahoe" == "true" || "$smc_supports_legacy" == "true" ]]; then
+	charge_control_method="smc"
+elif native_limit_supported; then
+	charge_control_method="native"
+else
+	charge_control_method="none"
+fi
+
 function log_smc_capabilities() {
-	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
+	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j, charge control method: $charge_control_method"
 }
 
 ## #################
@@ -306,35 +419,21 @@ function disable_discharging() {
 	if ! valid_percentage "$setting"; then
 
 		log "Disabling discharging: No valid maintain percentage set, enabling charging"
-		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		# use allow_charging since enable_charging also calls disable_discharging, and causes an eternal loop
+		allow_charging
 		change_magsafe_led_color "orange"
 
 	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
 
 		log "Disabling discharging: Charge above $setting, disabling charging"
-		disable_charging
+		disable_charging "$setting"
 		change_magsafe_led_color "green"
 
 	elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
 		log "Disabling discharging: Charge below $setting, enabling charging"
-		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		# use allow_charging since enable_charging also calls disable_discharging, and causes an eternal loop
+		allow_charging
 		change_magsafe_led_color "orange"
 
 	fi
@@ -342,35 +441,64 @@ function disable_discharging() {
 	battery_percentage=$(get_battery_percentage)
 }
 
+# Allow the battery to charge using the detected charge control method, without touching the discharging state.
 # Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
 # but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
-function enable_charging() {
-	log "🔌🔋 Enabling battery charging"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
+function allow_charging() {
+	if [[ "$charge_control_method" == "native" ]]; then
+		clear_native_limit
+	elif [[ "$smc_supports_tahoe" == "true" ]]; then
 		smc_write_hex CHTE 00000000
 	elif [[ "$smc_supports_legacy" == "true" ]]; then
 		smc_write_hex CH0B 00
 		smc_write_hex CH0C 00
 	else
-		log "⚠️ Unable to determine SMC keys for enabling charging"
+		log "⚠️ Unable to determine how to enable charging on this machine"
 	fi
+}
+
+function enable_charging() {
+	log "🔌🔋 Enabling battery charging"
+	allow_charging
 	disable_discharging
 }
 
+# Usage: disable_charging [PERCENTAGE]
+# The native charge limit cannot stop charging outright, it holds the battery at a level: the given percentage
+# or, when none is given, the current one. Both must be at least $native_limit_min.
 function disable_charging() {
+	local hold_at=$1
 	log "🔌🪫 Disabling battery charging"
-	if [[ "$smc_supports_tahoe" == "true" ]]; then
+	if [[ "$charge_control_method" == "native" ]]; then
+		if ! valid_percentage "$hold_at"; then
+			hold_at=$(get_battery_percentage)
+		fi
+		set_native_limit "$hold_at"
+	elif [[ "$smc_supports_tahoe" == "true" ]]; then
 		smc_write_hex CHTE 01000000
 	elif [[ "$smc_supports_legacy" == "true" ]]; then
 		smc_write_hex CH0B 02
 		smc_write_hex CH0C 02
 	else
-		log "⚠️ Unable to determine SMC keys for disabling charging"
+		log "⚠️ Unable to determine how to disable charging on this machine"
 	fi
 }
 
+# Prints "enabled" when the battery is allowed to charge, "disabled" when charging is being held back, "unknown" otherwise
 function get_smc_charging_status() {
+	if [[ "$charge_control_method" == "native" ]]; then
+		local native_limit
+		native_limit=$(get_native_limit)
+		if [[ -z "$native_limit" ]]; then
+			echo "enabled"
+		elif [[ "$(get_battery_percentage)" -ge "$native_limit" ]]; then
+			echo "disabled"
+		else
+			echo "enabled"
+		fi
+		return
+	fi
 	local status_key="CH0B"
 	if [[ "$smc_supports_tahoe" == "true" ]]; then
 		status_key="CHTE"
@@ -437,7 +565,8 @@ function get_maintain_percentage() {
 }
 
 function get_voltage() {
-	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }' | tr ',' '.')
+	# Note: use the last field, newer macOS versions prefix the line with tree characters which shifts the columns
+	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $NF/1000 }' | tr ',' '.')
 	echo "$voltage"
 }
 
@@ -763,7 +892,7 @@ if [[ "$action" == "charging" ]]; then
 	if [[ "$setting" == "on" ]]; then
 		enable_charging
 	elif [[ "$setting" == "off" ]]; then
-		disable_charging
+		disable_charging || exit 1
 	else
 		log "Error: $setting is not \"on\" or \"off\"."
 		exit 1
@@ -803,6 +932,11 @@ if [[ "$action" == "charge" ]]; then
 		exit 1
 	fi
 
+	if [[ "$charge_control_method" == "native" && "$setting" -lt "$native_limit_min" ]]; then
+		log "Error: this Mac limits charging through the macOS charge limit, which only supports ${native_limit_min}-100%. Cannot charge to $setting%"
+		exit 1
+	fi
+
 	# Stop battery maintenance if invoked by user from Terminal
 	if [[ "$BATTERY_HELPER_MODE" != "1" ]]; then
 		$battery_binary maintain stop
@@ -811,7 +945,16 @@ if [[ "$action" == "charge" ]]; then
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 	log "Charging to $setting% from $battery_percentage%"
-	enable_charging # also disables discharging
+	if [[ "$charge_control_method" == "native" ]]; then
+		# The firmware stops charging at the limit itself, so set it up front instead of polling for the target
+		if ! set_native_limit "$setting"; then
+			log "Error: cannot charge to $setting% using the macOS charge limit"
+			exit 1
+		fi
+		disable_discharging
+	else
+		enable_charging # also disables discharging
+	fi
 
 	# Loop until battery charging level is reached
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
@@ -826,7 +969,10 @@ if [[ "$action" == "charge" ]]; then
 
 	done
 
-	disable_charging
+	# The native charge limit is already holding the battery at the target
+	if [[ "$charge_control_method" != "native" ]]; then
+		disable_charging
+	fi
 	log "Charging completed at $battery_percentage%"
 
 	# Try restoring maintenance if invoked by user from Terminal
@@ -925,8 +1071,15 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		exit 1
 	fi
 
+	if [[ "$charge_control_method" == "native" && "$upper_bound" -lt "$native_limit_min" ]]; then
+		log "Error: this Mac limits charging through the macOS charge limit, which only supports ${native_limit_min}-100%. Cannot maintain at $setting%"
+		exit 1
+	fi
+
 	# Check if the user requested that the battery maintenance first discharge to the desired level
-	if [[ "$subsetting" == "--force-discharge" ]]; then
+	if [[ "$charge_control_method" == "native" && "$subsetting" == "--force-discharge" ]]; then
+		log "Not triggering discharge, the macOS charge limit drains the battery to $upper_bound% by itself"
+	elif [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
 		discharge_target="$lower_bound"
 		log "Triggering discharge to $discharge_target before enabling charging limiter"
@@ -943,6 +1096,31 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		log "Maintaining battery between $lower_bound% and $upper_bound% from $battery_percentage%"
 	else
 		log "Charging to and maintaining at $setting% from $battery_percentage%"
+	fi
+
+	# The macOS charge limit is enforced by the firmware (also during sleep), which has its own hysteresis.
+	# All we do is make sure the limit stays in place, e.g. after it was changed in System Settings.
+	if [[ "$charge_control_method" == "native" ]]; then
+
+		if [[ "$is_range" == true ]]; then
+			log "The macOS charge limit decides when to recharge, maintaining at the upper bound of $upper_bound%"
+		fi
+
+		while true; do
+
+			# No registered limit means charging to 100%
+			native_limit=$(get_native_limit)
+			if [[ "${native_limit:-100}" != "$upper_bound" ]]; then
+				log "macOS charge limit is ${native_limit:-not set}, setting it to $upper_bound%"
+				set_native_limit "$upper_bound"
+			fi
+
+			sleep 60
+
+		done
+
+		exit 0
+
 	fi
 
 	# Loop until battery percent is exceeded
@@ -982,6 +1160,11 @@ fi
 if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 
 	log_smc_capabilities
+
+	if [[ "$charge_control_method" == "native" ]]; then
+		log "Error: this Mac limits charging through the macOS charge limit, which cannot maintain a voltage"
+		exit 1
+	fi
 
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
@@ -1032,6 +1215,21 @@ fi
 if [[ "$action" == "maintain" ]]; then
 
 	assert_not_running_as_root
+
+	# The macOS charge limit can only hold the battery between $native_limit_min and 100%, refuse anything else
+	# before the running maintenance is stopped
+	if [[ "$charge_control_method" == "native" ]]; then
+		if valid_voltage "$setting"; then
+			log "Error: this Mac limits charging through the macOS charge limit, which cannot maintain a voltage"
+			exit 1
+		elif valid_percentage_range "$setting" || valid_percentage "$setting"; then
+			# Check the upper bound of a range, or the value itself
+			if [[ "${setting#*-}" -lt "$native_limit_min" ]]; then
+				log "Error: this Mac limits charging through the macOS charge limit, which only supports ${native_limit_min}-100%. Cannot maintain at $setting%"
+				exit 1
+			fi
+		fi
+	fi
 
 	disable_discharging
 
@@ -1179,6 +1377,16 @@ fi
 if [[ "$action" == "status" ]]; then
 
 	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, smc charging $(get_smc_charging_status)"
+	if [[ "$charge_control_method" == "native" ]]; then
+		native_limit=$(get_native_limit)
+		if [[ -n "$native_limit" ]]; then
+			log "Charging is controlled through the macOS charge limit, currently set to ${native_limit}%"
+		else
+			log "Charging is controlled through the macOS charge limit, currently not set"
+		fi
+	elif [[ "$charge_control_method" == "none" ]]; then
+		log "⚠️ No known way to control charging on this Mac, see 'battery logs'"
+	fi
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then

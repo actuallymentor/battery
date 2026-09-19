@@ -8,6 +8,8 @@
 
 This is an app for Apple Silicon Macs. It will not work on Intel macs. Do you have an older Mac? Consider the free version of the [Al Dente](https://apphousekitchen.com/) software package. It is a good alternative and has a premium version with many more features.
 
+On macOS 27 (and the firmware that ships with the macOS 26.7 / 15.8 updates) Apple locked the low-level charging controls, so `battery` uses the charge limit built into macOS instead (the one in System Settings > Battery). This works without a password, but the firmware only allows limits between 80% and 100%. See the [FAQ](#what-changed-on-macos-27) for details.
+
 ### Installation
 
 - Option 1: install the app through brew with `brew install battery`
@@ -150,6 +152,20 @@ This tool calls a number of urls, blocking all of them will only break auto-upda
 1. `electronjs.org` hosts the update server for the GUI
 
 All urls are called over `https` and so not leak data. Unidentified Analytics keeps track of unique ip addresses that open the app, but nothing else.
+
+### What changed on macOS 27?
+
+macOS 27, and the firmware that ships with the macOS 26.7 / 15.8 updates, removed the SMC keys this tool used to stop charging (`CH0B`, `CH0C`, `CHTE`) and locked their replacements behind a private Apple entitlement, even for root. See [#474](https://github.com/actuallymentor/battery/issues/474) and [#469](https://github.com/actuallymentor/battery/pull/469) for the investigation.
+
+On such Macs `battery` detects this and controls charging through macOS's own charge limit (System Settings > Battery > Charge Limit) instead. The differences:
+
+- Limits below 80% are not possible, the firmware refuses them. `battery maintain 70` exits with an error, `battery maintain 70-80` is maintained at 80%.
+- The firmware handles the hysteresis and drains the battery to the limit by itself when it sits above it (while the Mac keeps running from the adapter), so `--force-discharge` and the app's "Allow force-discharging" setting have no effect, and ranges are held at their upper bound.
+- The limit is enforced by the firmware, also during sleep and across reboots.
+- Voltage based maintenance (`battery maintain 11.4V`) is not available.
+- `battery maintain stop` and `battery charging on` switch the macOS charge limit off, also if you had set one yourself in System Settings.
+
+`battery status` shows which method is in use and the currently registered limit.
 
 ### What distinguishes this project from Optimized Charging?
 
