@@ -68,7 +68,7 @@ else
     echo 'Upgrade preserved the active native policy and original Apple recovery snapshot.'
 fi
 "$LEGACY/battery" status
-printf '\nInstalled fixed-ceiling 0.1.1. Original Battery app and its icon are unchanged.\n'
+printf '\nInstalled fixed-ceiling 0.1.4. Original Battery app and its icon are unchanged.\n'
 printf 'Reopen it with: open -b co.palokaj.battery\n'
 printf 'Keep Allow force-discharging OFF; ranges and advanced controls are intentionally unsupported.\n'
 printf 'Rollback: bash "%s/rollback.command"\n' "$DIR"

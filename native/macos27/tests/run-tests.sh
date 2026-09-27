@@ -24,6 +24,9 @@ if [[ $(uname -s) == Darwin ]]; then
     b27_apple_clang -arch arm64 -std=c11 -fobjc-arc -O2 -Wall -Wextra -Werror \
         -framework Foundation -framework IOKit src/native-charge.m -o "$BUILD/native-charge"
     echo 'PASS: Objective-C native compilation on this Mac. Native binary NOT executed.'
+    b27_apple_clang -arch arm64 -std=c11 -fobjc-arc -Wall -Wextra -Werror -fsanitize=address,undefined \
+        -framework Foundation tests/test_native_policy.m -o "$BUILD/test-native-policy"
+    "${B27_BUILD_ENV[@]}" "$BUILD/test-native-policy"
 else
     echo 'SKIP: native Objective-C compilation needs the macOS SDK.'
 fi

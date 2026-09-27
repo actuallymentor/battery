@@ -116,7 +116,7 @@ fi
 printf '#!/bin/bash\nexec /bin/bash %s/uninstall-root.sh --restore-upstream\n' "$ROOT" > "$ROOT/rollback-root.sh"
 /bin/chmod 0755 "$ROOT/rollback-root.sh"
 /bin/mkdir -p "$ROOT/src"; /bin/chmod 0755 "$ROOT/src"
-for f in native-charge.m policy.h; do /usr/bin/install -o root -g wheel -m 0644 "$SOURCE/src/$f" "$ROOT/src/$f"; done
+for f in native-charge.m policy.h native-policy.h; do /usr/bin/install -o root -g wheel -m 0644 "$SOURCE/src/$f" "$ROOT/src/$f"; done
 cat > "$WORK/sudoers" <<RULES
 # Opt-in Battery native backend. The helper validates every argument before use.
 $ACCOUNT ALL=(root) NOPASSWD: $LEGACY/battery update_silent
@@ -141,9 +141,9 @@ cat > "$WORK/job.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>local.battery.macos27</string>
-<key>ProgramArguments</key><array><string>/Library/PrivilegedHelperTools/co.palokaj.battery.macos27/native-charge</string><string>tick</string></array>
+<key>ProgramArguments</key><array><string>/Library/PrivilegedHelperTools/co.palokaj.battery.macos27/native-charge</string><string>daemon</string></array>
 <key>RunAtLoad</key><true/>
-<key>StartInterval</key><integer>15</integer>
+<key>KeepAlive</key><true/>
 <key>ProcessType</key><string>Background</string>
 <key>StandardOutPath</key><string>/var/log/battery-macos27.log</string>
 <key>StandardErrorPath</key><string>/var/log/battery-macos27.log</string>
@@ -159,7 +159,7 @@ else /usr/bin/touch /var/log/battery-macos27.log; fi
 /bin/chmod 0644 /var/log/battery-macos27.log
 "$ROOT/native-charge" probe
 "$ROOT/native-charge" check-state
-printf '0.1.1-ceiling\n' > "$ROOT/active"; /bin/chmod 0644 "$ROOT/active"
+printf '0.1.4-ceiling\n' > "$ROOT/active"; /bin/chmod 0644 "$ROOT/active"
 /usr/bin/install -o root -g wheel -m 0755 "$WORK/battery" "$LEGACY/battery"
 /bin/launchctl enable system/local.battery.macos27
 /bin/launchctl bootstrap system "$PLIST"

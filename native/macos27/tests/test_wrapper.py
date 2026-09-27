@@ -47,5 +47,5 @@ class WrapperTests(unittest.TestCase):
         self.assertIn('not implemented',r.stderr); self.assertNotIn('MOCK',r.stdout)
     def test_extra_args(self): self.assertNotEqual(self.call('status','oops').returncode,0)
     def test_help(self): self.assertIn('sleep',self.call().stdout)
-    def test_local_version(self): self.assertIn('v1.3.4-macos27-local.0.1.1-ceiling',self.call('version').stdout)
+    def test_local_version(self): self.assertIn('v1.3.4-macos27-local.0.1.4-ceiling',self.call('version').stdout)
 if __name__=='__main__': unittest.main()

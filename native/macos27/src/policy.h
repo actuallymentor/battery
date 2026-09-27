@@ -42,4 +42,23 @@ static inline bool b27_decode_current(uint64_t raw, int64_t *out) {
     if (value < -100000 || value > 100000) return false;
     *out = value; return true;
 }
+typedef enum {
+    B27_CHARGE_WARNING_NONE,
+    B27_CHARGE_WARNING_FULL_CHARGE_OVERRIDE,
+    B27_CHARGE_WARNING_ABOVE_CEILING
+} B27ChargeWarning;
+
+/* Registration cannot disprove an override or a measured violation.
+ * Unknown current is not treated as zero. */
+static inline B27ChargeWarning b27_charge_warning(
+    int target, int percentage, bool external, bool charging,
+    bool current_known, int64_t current, bool instant_known, int64_t instant,
+    bool full_charge_override) {
+    if (target < 1 || target >= 100) return B27_CHARGE_WARNING_NONE;
+    if (full_charge_override) return B27_CHARGE_WARNING_FULL_CHARGE_OVERRIDE;
+    if (external && percentage >= target &&
+        (charging || (current_known && current > 0) || (instant_known && instant > 0)))
+        return B27_CHARGE_WARNING_ABOVE_CEILING;
+    return B27_CHARGE_WARNING_NONE;
+}
 #endif

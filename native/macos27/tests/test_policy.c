@@ -33,6 +33,22 @@ int main(void) {
     assert(!b27_decode_current(UINT32_MAX/2+1,&a));
     assert(!b27_decode_current(100001,&a));
     assert(!b27_decode_current(0,NULL));
-    puts("PASS: fixed-ceiling invariants, input validation, signed current parsing.");
+    /* Reproduce the live failure: registered 55%, AC, charging at 62%.
+     * Override detection must win even below the ceiling or at zero current. */
+    assert(b27_charge_warning(55,62,true,true,true,3501,true,3501,true) == B27_CHARGE_WARNING_FULL_CHARGE_OVERRIDE);
+    assert(b27_charge_warning(55,27,true,true,true,3501,true,3501,true) == B27_CHARGE_WARNING_FULL_CHARGE_OVERRIDE);
+    assert(b27_charge_warning(55,55,true,false,true,0,true,0,true) == B27_CHARGE_WARNING_FULL_CHARGE_OVERRIDE);
+    assert(b27_charge_warning(55,62,true,true,true,3501,true,3501,false) == B27_CHARGE_WARNING_ABOVE_CEILING);
+    assert(b27_charge_warning(55,55,true,true,false,0,false,0,false) == B27_CHARGE_WARNING_ABOVE_CEILING);
+    /* Positive current is evidence even when the charging flag is stale. */
+    assert(b27_charge_warning(55,62,true,false,true,3000,false,0,false) == B27_CHARGE_WARNING_ABOVE_CEILING);
+    assert(b27_charge_warning(55,62,true,false,false,0,true,3000,false) == B27_CHARGE_WARNING_ABOVE_CEILING);
+    assert(b27_charge_warning(55,54,true,true,true,3501,true,3501,false) == B27_CHARGE_WARNING_NONE);
+    assert(b27_charge_warning(55,62,false,false,true,-1000,true,-1000,false) == B27_CHARGE_WARNING_NONE);
+    assert(b27_charge_warning(55,55,true,false,true,0,true,0,false) == B27_CHARGE_WARNING_NONE);
+    assert(b27_charge_warning(55,62,true,false,false,3000,false,3000,false) == B27_CHARGE_WARNING_NONE);
+    assert(b27_charge_warning(100,100,true,true,true,100,true,100,true) == B27_CHARGE_WARNING_NONE);
+    assert(b27_charge_warning(0,62,true,true,true,3000,true,3000,true) == B27_CHARGE_WARNING_NONE);
+    puts("PASS: fixed ceilings, validation, signed current, override and overrun detection.");
     return 0;
 }

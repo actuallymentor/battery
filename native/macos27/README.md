@@ -1,191 +1,130 @@
-# Battery: opt-in native fixed ceiling, draft 0.1.1
+# Battery: opt-in native charge policy 0.1.4
 
-An experimental, deliberately limited contribution to `actuallymentor/battery`.
-This package is NOT an upstream Battery release and is NOT feature-complete.
+Experimental compatibility backend for `actuallymentor/battery` 1.3.4 on macOS
+27. The existing Battery app and its menu remain in use. This is a local build,
+not an upstream release.
 
-## Build-tools correction (buildfix1)
+## Behavior
 
-This distribution corrects compiler/linker/SDK selection only. All files under
-`src/`, both privileged install/remove scripts, rollback, and the eight-line
-upstream dispatch hook are unchanged from fixed-ceiling 0.1.1. The runtime
-version string remains `v1.3.4-macos27-local.0.1.1-ceiling`.
+`battery maintain 55` requests a fixed 55% ceiling with native `drain=0` and
+`noChargeToFull=1` flags. The Mac can run on its adapter with the battery resting.
+If the battery is already above 55%, it is held there until normal unplugged use
+lowers it. The backend does not deliberately discharge it to the new ceiling.
+Firmware controls restart hysteresis.
 
-The old test runner started with bare `cc`; in an activated Conda environment
-that can select an incompatible compiler/linker for the installed macOS 27 SDK.
-Mac builds now resolve Apple clang, ld and the SDK through `/usr/bin/xcrun` in a
-clean compiler-child environment, use an explicit sysroot and linker search
-prefix, print the chosen tools, and link a minimal C program before proceeding.
-The test runner and installer share this same build helper. Python and GitHub
-CLI retain the caller's normal environment. No global Xcode/Conda setting is
-modified, and no SDK stub is edited.
+The original preference-only patch could register 55% while Apple's battery
+maintenance overrode enforcement and charged to 100%. Editing the flags on
+PowerUI's own policy also proved unstable: PowerUI rewrote them. This version
+uses a separate policy owned by the resident Battery helper. PowerUI's manual
+limit is disabled during maintenance; its original settings are saved and
+restored on stop. Other clients' native policies are preserved.
 
-For build diagnostics only (no sudo or charge-setting access):
+The helper imports its policy through the current boot's
+`com.apple.powerd.charging` archive and restarts Apple's power service once to
+apply it. It does not restart the service on ordinary 15-second checks. The
+helper's real process ID owns the policy; macOS releases that policy when the
+process exits. Launchd keeps the helper running and it recreates its policy when
+restarted. A root-owned journal records the token and boot session before writes.
+Only that token with the backend's reason can be changed or removed.
 
-```bash
-bash scripts/check-toolchain.command
-```
-
-For compiler verbosity, use `B27_BUILD_VERBOSE=1 bash tests/run-tests.sh`.
-`install.command -v` is NOT a verbosity option; the optional installer argument
-is a percentage. See `BUILD-FIX.md` for the failure and correction details.
-
-## Scope
-
-Preserve the existing Battery app, icon and menu while adding an explicitly
-installed, native fixed-ceiling backend. A ceiling below 80% is requested through
-Apple's charging agent. There is NO SMC adapter-cutoff fallback and NO ratcheting
-of the target based on the current percentage. A 55% policy keeps requesting 55%.
-
-Only `maintain PERCENT`, `maintain stop`, `maintain recover`, status, diagnostics,
-and restoration are implemented. `100` means no native ceiling. Separate lower
-restart thresholds, forced discharge, calibration, immediate charging/adapter
-switches and voltage regulation are intentionally rejected without changing
-settings. This is not a claim that they are impossible, only that they have not
-been implemented with the required behaviour in this draft.
-
-**Firmware still controls restart hysteresis and can drain toward a newly lowered
-ceiling.** No claim is made that changing a ceiling can never cause battery use.
-An explicit native drain is not substituted for an independent restart threshold.
+Automatic repair is bounded to three restart attempts per ten minutes, with a
+one-minute cooldown in the same daemon instance. Explicit target changes reset
+the repair budget. Repeating a confirmed unchanged target does not reload the
+power service. Unavailable or malformed registration readings leave the current
+policy unchanged; repair requires a readable policy list and a second check.
+No adapter-cutoff or sleep-prevention mechanism is installed.
 
 ## Evidence and limitations
 
-`evidence/M3-Pro-27.0.md` contains the user's reported test of predecessor **0.1.0**:
-M3 Pro / Mac15,6, macOS 27.0 / 26A428, firmware 20457.1.29, ceiling 55%.
-The pasted 18 samples include 14 successive observations with AC power, charging
-false, and both current readings zero. These span 131 seconds. This supports
-battery rest during those observations; it is not long-term battery-life data,
-a sleep/reboot test, or a hardware test of this exact 0.1.1 build.
+Tested on Mac15,6 / M3 Pro, macOS 27.0 (26A428), firmware 20457.1.29. Live tests
+cover current measurements, stop/restoration, unlimited charging and returning
+to 55%, repeated requests, and restarting the resident helper. See
+`TEST-REPORT.md` and `evidence/M3-Pro-27.0-owned-2026-09-27.md` for exact results.
 
-The preference write/notification mechanism is retained from 0.1.0. The changes
-remove the range state machine, add measured read-only current telemetry, retain
-the original CLI plus an opt-in dispatch hook, and constrain installation rules.
-This new Objective-C build must still be compiled and exercised on a Mac.
+This is a private, undocumented interface. The no-charge-to-full flag requests
+an exception to Apple's automatic full-charge maintenance; Apple's power service
+checks that flag before suspending the limit. However, the system's full-charge
+override had cleared before these tests. A newly active calibration request,
+charging from below 55% to exactly 55%, sleep/wake, reboot, shutdown, other Macs,
+and future OS versions remain unverified. Apple normally allows occasional
+charges to full to maintain charge estimates:
+https://support.apple.com/en-us/102338 . Stop maintenance to restore the original
+native behavior.
 
-The native interface is private and can change. Below-80% targets are not promised
-by Apple's public UI. A successful preference write is not proof of registration;
-a registered limit is not proof of the physical power flow. Readback and observed
-current are reported separately. Missing readings stay unknown.
+## Install or upgrade
 
-## Upgrade from 0.1.0
-
-1. Disable `Allow force-discharging` in the original Battery menu, then quit it.
-2. Extract this package. Run without sudo:
-
-   ```bash
-   cd ~/Downloads/battery-macos27-fixed-0.1.1-buildfix1
-   bash tests/run-tests.sh
-   bash install.command
-   battery version
-   battery status
-   open -b co.palokaj.battery
-   ```
-
-No rollback of 0.1.0 is required. The installer preserves an existing single
-ceiling (including 55%) and the original native-settings recovery snapshot. It
-builds locally before replacing executable files; Apple's Command Line Tools
-are required. Its probe checks actual API availability, not a macOS major-version
-gate. Only the stated Mac/OS combination has the supplied runtime evidence.
-
-Existing range state, an operation from 0.2.0, or a pending restore must be resolved
-with the installed version before upgrading. The installer refuses to silently
-convert those states. Do not install the withdrawn 0.2.0 package.
-
-For a fresh install over upstream Battery, pass the target explicitly:
+Requires upstream Battery 1.3.4, Apple Silicon, and Apple Command Line Tools or
+Xcode. Quit Battery first and turn off its `Allow force-discharging` option.
 
 ```bash
+bash tests/run-tests.sh
 bash install.command 55
-```
-
-The app bundle is NOT replaced or re-signed. On the machine, the original
-`/usr/local/co.palokaj.battery/battery` is recovered from the original backup and
-gets the small hook in `src/dispatch-snippet.sh`. `BATTERY_CLI_VERSION` remains
-`v1.3.4`; the opt-in dispatcher reports a separate local build string.
-
-Without the opt-in marker, the upstream CLI continues on its original code path.
-Legacy SMC commands are not modified or called by the active native backend.
-Source files are retained alongside the installed helper for inspection.
-
-## Verify the NEW build
-
-After reopening the original app, observe it again with:
-
-```bash
 battery version
 battery status
-bash evidence/read-only-power-check.command
+open -b co.palokaj.battery
 ```
 
-Look at actual external power, charging state, and both current readings as well
-as the target. Reopening the original GUI can stop/restart maintenance as part
-of its existing initialization. A transient charge report is not the same as a
-repeated discharge/recharge pattern. Do not deliberately cycle the battery just
-to test this contribution. Negative sustained battery current on AC needs
-investigation, including whether the adapter is sufficient for the workload.
+An upgrade without a percentage preserves an existing single target and original
+settings snapshot. A range, pending restoration, withdrawn 0.2.0 operation, or
+unfinished 0.1.3 experimental flag journal must be resolved with that version
+before upgrading. No app bundle is replaced or re-signed.
 
-`status_csv` retains five fields. Its fourth field is **unknown**: the legacy
-forced-discharge state must not masquerade as a measured current. The old GUI
-does not display detailed current; `battery status` and the read-only script do.
-The unchanged GUI's labels do not constitute an independent verification.
+The compiler, linker and SDK are selected together in a clean child environment.
+No SDK files or global developer-tool settings change. For build diagnostics,
+use `bash scripts/check-toolchain.command`; `BUILD-FIX.md` is historical context.
 
-The launchd helper runs every 15 seconds and exits; `not running` with exit code
-0 between invocations is expected. It does not block normal sleep. Sleep-time
-behaviour and power-off/reconnect cases remain unverified.
-
-## Stop or roll back
+## Controls and verification
 
 ```bash
-battery maintain stop
+battery maintain 55       # Fixed native ceiling
+battery maintain 100      # Release the ceiling and allow charging
+battery maintain stop     # Restore the original native settings
+battery maintain recover  # Re-enable the saved single ceiling
+battery status
+battery diagnose
 ```
 
-Requests restoration of the original native preferences via the agent and
-retains recovery data on failure. Verify the result in status and System Settings.
-To remove this native backend and restore the upstream CLI, quit Battery and run:
+Requests wake the resident daemon and are asynchronous. Its launchd service is
+normally `running`. Status distinguishes the requested target, live registrations
+and measured battery current. Look for a confirmed no-charge-to-full/no-drain
+policy, AC connected, charging off, and both current readings at zero. Telemetry
+may lag a change by about one minute; check fresh readings over time.
 
-```bash
-bash rollback.command
-```
+The original GUI's five-field status format is preserved. Its enabled indicator
+means the policy is configured, not a separate hardware verification. Independent
+restart thresholds, force discharge, calibration, voltage regulation, and
+immediate adapter switches remain unsupported and return an error.
 
-This is rollback to upstream, not a downgrade to 0.1.0; upstream itself still has
-the macOS 27 limitation. Installation failure attempts to restore the prior
-executables/rules. A failure after a target request must be inspected; don't
-assume the policy is enforced or restored merely because files were installed.
+## Recovery
 
-## Draft pull request
+Stopping removes only this helper's journaled native policy, reloads the power
+service if required, and restores the original PowerUI settings. Recovery data
+is retained if any step fails. To remove the backend and restore the upstream
+CLI, quit Battery and run `bash rollback.command`. Restoration must succeed
+before removal. Upstream itself retains its macOS 27 limitation.
 
-The separate `publish.command` is included in the download, not added to the
-upstream project. It uses the user's GitHub CLI authentication and never handles
-a pasted token. `contribution/upstream.patch` and `contribution/PR.md` are also
-included in the download. See `PR-INSTRUCTIONS.md`.
+Root commands and percentage arguments are explicitly restricted; the journal
+is protected and locked. Archive parsing is bounded and does not instantiate
+archived classes. Its tests cover token isolation, changed owners, cancellation,
+malformed references, and preservation of unrelated policies. Shared system
+preferences are not transactional: optimistic readback checks reduce, but do
+not eliminate, concurrent-write risks. This is not an independent security audit.
 
-The first PR is for **fixed native ceilings**, not full feature parity. It leaves
-upstream release versions and automatic rollout unchanged. The old app's CLI
-update calls are intercepted only on machines that explicitly installed this
-backend, so they do not silently replace the experimental component.
+## Contribution
 
-## Privileged operations
+Only explicitly opted-in machines use this backend. Upstream release versions,
+legacy SMC commands and the app bundle stay unchanged. Automatic upstream CLI
+replacement is paused while the experimental backend is active.
 
-The installed helper has fixed paths, argument validation before state access,
-a root-owned recovery state and locking. The installer validates executable and
-parent path ownership/modes/ACLs and checks sudoers syntax. Maintenance is exposed
-as 100 exact `maintain N` sudo rules, not a wildcard or unrestricted shell.
-This remains privileged software requiring security review; those checks are
-not a claim of a completed independent security audit.
-
-## Upstream feedback addressed
-
-- PR #478: do not disconnect the adapter to imitate a resting charge limit.
-- PR #469: leave release version control to the maintainer and detect usable
-  native capabilities rather than relying only on a macOS version label.
-- Do not describe a saved setting, synthetic test, or absent current reading as
-  a successful physical hardware test.
-- Do not claim a validated wrapper is categorically disallowed: the reviewer
-  later accepted that principle, while preferring a small reviewable surface.
+BattOpt's public macOS 27 support provided a research lead; the native mechanism
+was then examined on the test Mac and independently implemented here. No vendor
+binary or disassembly is distributed in this package.
 
 References:
-- https://github.com/actuallymentor/battery/pull/478
-- https://github.com/actuallymentor/battery/pull/469
-- https://github.com/actuallymentor/battery/blob/main/CONTRIBUTING
-- https://github.com/az-code-lab/ampere/blob/v0.0.65/Sources/Shared/NativeChargeLimit.swift
-- https://github.com/az-code-lab/ampere/blob/v0.0.65/Sources/SMCWriter/main.swift
+- https://github.com/actuallymentor/battery/pull/479
+- https://github.com/js4jiang5/BattOpt
+- https://github.com/AppHouseKitchen/AlDente-Battery_Care_and_Monitoring/discussions/1814
+- https://support.apple.com/en-us/102338
 
-See `THIRD-PARTY-NOTICES.md` for attribution and licensing.
+See `THIRD-PARTY-NOTICES.md` for the earlier native preference mechanism's
+attribution and licensing.
