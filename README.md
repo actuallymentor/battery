@@ -1,3 +1,9 @@
+> **Local firmware build**
+>
+> Install this checkout with `./install-local.sh`. It adds input-based firmware charge limits and observed bypass status. See [the local implementation and verification guide](docs/firmware-charge-limit.md).
+>
+> The upstream installation instructions below describe the official release and do not install this local controller. This build disables upstream automatic replacement.
+
 # Battery charge limiter for Apple Silicon Macbook devices
 
 <img width="300px" align="right" src="./screenshots/tray.png"/>This tool makes it possible to keep a chronically plugged in Apple Silicon Macbook at `80%` battery, since that will prolong the longevity of the battery. It is free and open-source and will remain that way.

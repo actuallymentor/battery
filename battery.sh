@@ -4,7 +4,9 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.3.4"
+BATTERY_CLI_VERSION="v1.3.5-local-firmware.1"
+# Local builds must never be replaced by the upstream automatic updater.
+BATTERY_LOCAL_BUILD=1
 
 # If a script may run as root:
 #   - Reset PATH to safe defaults at the very beginning of the script.
@@ -70,7 +72,8 @@ touch $logfile
 logsize=$(stat -f%z "$logfile")
 max_logsize_bytes=5000000
 if ((logsize > max_logsize_bytes)); then
-	tail -n 100 $logfile >$logfile
+	trimfile=$(mktemp "$configfolder/log-trim.XXXXXX")
+	tail -n 2000 "$logfile" > "$trimfile" && mv -f "$trimfile" "$logfile"
 fi
 
 # CLI help message
@@ -87,7 +90,9 @@ Usage:
     eg: battery logs 100
 
   battery maintain PERCENTAGE[1-100,stop] or RANGE[lower-upper]
-    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
+    reboot-persistent maintenance; firmware backend: upper N, recharge threshold max(0,N-2)
+    firmware backend accepts a single integer target; range/voltage commands remain legacy-only
+    100 allows full charging; stop disables the policy; recover preserves stopped state
     it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
     eg: battery maintain 80           # maintain at 80%
     eg: battery maintain 70-80        # maintain between 70-80%
@@ -176,11 +181,10 @@ function log() {
 }
 
 function valid_percentage() {
-	if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 0 ]] || [[ "$1" -gt 100 ]]; then
-		return 1
-	else
-		return 0
-	fi
+    local value="$1"
+    [[ "$value" =~ ^[0-9]+$ ]] || return 1
+    while [[ ${#value} -gt 1 && "$value" == 0* ]]; do value=${value#0}; done
+    [[ ${#value} -le 3 ]] && ((10#$value <= 100))
 }
 
 function valid_percentage_range() {
@@ -219,13 +223,10 @@ function valid_voltage() {
 }
 
 function smc_read_hex() {
-	key=$1
-	line=$(echo $($smc_binary -k $key -r))
-	if [[ $line =~ "no data" ]]; then
-		echo
-	else
-		echo ${line#*bytes} | tr -d ' ' | tr -d ')'
-	fi
+    local output pattern='\(bytes ([0-9a-fA-F ]+)\)'
+    output=$("$smc_binary" -k "$1" -r 2>&1) || return 1
+    [[ "$output" != *Error* && "$output" != *'no data'* && "$output" =~ $pattern ]] || return 1
+    printf '%s\n' "${BASH_REMATCH[1]}" | tr -d ' ' | tr 'A-F' 'a-f'
 }
 
 function smc_write_hex() {
@@ -241,11 +242,16 @@ function smc_write_hex() {
 ## #########################
 ## Detect supported SMC keys
 ## #########################
-[[ $($smc_binary -k CHTE -r) =~ "no data" ]] && smc_supports_tahoe=false || smc_supports_tahoe=true;
-[[ $($smc_binary -k CH0B -r) =~ "no data" ]] && smc_supports_legacy=false || smc_supports_legacy=true;
-[[ $($smc_binary -k CHIE -r) =~ "no data" ]] && smc_supports_adapter_chie=false || smc_supports_adapter_chie=true;
-[[ $($smc_binary -k CH0I -r) =~ "no data" ]] && smc_supports_adapter_ch0i=false || smc_supports_adapter_ch0i=true;
-[[ $($smc_binary -k CH0J -r) =~ "no data" || $($smc_binary -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
+smc_supports_tahoe=false
+[[ "$(smc_read_hex CHTE)" =~ ^[0-9a-f]{8}$ ]] && smc_supports_tahoe=true
+smc_supports_legacy=false
+[[ "$(smc_read_hex CH0B)" =~ ^[0-9a-f]{2}$ && "$(smc_read_hex CH0C)" =~ ^[0-9a-f]{2}$ ]] && smc_supports_legacy=true
+smc_supports_adapter_chie=false
+[[ "$(smc_read_hex CHIE)" =~ ^[0-9a-f]{2}$ ]] && smc_supports_adapter_chie=true
+smc_supports_adapter_ch0i=false
+[[ "$(smc_read_hex CH0I)" =~ ^[0-9a-f]{2}$ ]] && smc_supports_adapter_ch0i=true
+smc_supports_adapter_ch0j=false
+[[ "$(smc_read_hex CH0J)" =~ ^[0-9a-f]{2}$ ]] && smc_supports_adapter_ch0j=true
 
 function log_smc_capabilities() {
 	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
@@ -560,6 +566,87 @@ if [[ $EUID -eq 0 ]]; then
 		fixup_installation_owner_mode "$username"
 	fi
 fi
+
+# The firmware controller is part of this local installation, not a user plugin.
+firmware_module="$binfolder/firmware.sh"
+if [[ -L "$binfolder" || "$(stat -f %u "$binfolder" 2>/dev/null)" != 0 ]]; then
+    echo 'Battery installation directory must be root-owned and not a symlink.' >&2; exit 1
+fi
+binfolder_mode=$(stat -f %Lp "$binfolder")
+if (( (8#$binfolder_mode & 022) != 0 )); then
+    echo 'Battery installation directory must not be writable by group or others.' >&2; exit 1
+fi
+if [[ -L "$firmware_module" || ! -f "$firmware_module" || "$(stat -f %u "$firmware_module" 2>/dev/null)" != 0 ]]; then
+    echo "Missing trusted firmware controller. Run ./install-local.sh from the checkout." >&2
+    exit 1
+fi
+firmware_mode=$(stat -f %Lp "$firmware_module")
+if (( (8#$firmware_mode & 022) != 0 )); then
+    echo "Firmware controller must not be writable by group or others." >&2
+    exit 1
+fi
+source "$firmware_module"
+visudoconfig="$visudoconfig
+$(fw_visudo)"
+
+# Firmware requests are dispatched before any legacy command can reset charging.
+case "$action" in
+    firmware_synchronous)
+        assert_not_running_as_root
+        fw_worker "$setting"; exit $? ;;
+    status_json)
+        if fw_selected; then fw_status_json
+        else
+            percentage=$(get_battery_percentage)
+            [[ "$percentage" =~ ^[0-9]{1,3}$ ]] || percentage=null
+            target=$(fw_decimal "$(get_maintain_percentage)") || target=null
+            mode=stopped
+            fw_pid_is_controller "$(cat "$pidfile" 2>/dev/null)" && mode=enabled
+            printf '{"schema":1,"backend":"legacy","target":%s,"mode":"%s","applied":"unknown","power":"unknown","percentage":%s}\n' "$target" "$mode" "$percentage"
+        fi
+        exit $? ;;
+    update_silent)
+        if [[ "$setting" != is_enabled ]]; then echo "Local firmware build: upstream automatic updates are disabled."; exit 0; fi ;;
+    update|reinstall)
+        echo "Local firmware build: update this checkout and run ./install-local.sh. Upstream replacement is disabled." >&2
+        exit 1 ;;
+    maintain|maintain_synchronous)
+        if fw_selected; then
+            [[ $# -le 3 ]] || { echo 'Too many maintain arguments; existing policy preserved.' >&2; exit 1; }
+            assert_not_running_as_root
+            fw_request "$setting" "$subsetting"; exit $?
+        elif [[ "$smc_supports_tahoe" != true && "$smc_supports_legacy" != true ]]; then
+            echo 'No usable charging backend; existing state preserved.' >&2; exit 1
+        fi ;;
+    uninstall)
+        if [[ $EUID -eq 0 ]] && fw_selected && [[ "$(fw_read bfF0 ui8 2)" != 00 ]]; then
+            echo 'First run battery maintain stop as the policy owner, then uninstall. No files were removed.' >&2
+            exit 1
+        fi ;;
+    maintain_voltage_synchronous|charge|discharge|calibrate|charging|adapter)
+        if fw_selected; then
+            echo "This command is not yet supported by the firmware backend; the current policy was preserved." >&2
+            exit 1
+        fi ;;
+    status)
+        if fw_selected; then fw_status_json; exit $?; fi ;;
+    status_csv)
+        if fw_selected; then
+            charging=unknown; discharging=unknown
+            if fw_load_policy; then
+                target=$fw_target
+                if [[ -f "$fw_status_file" ]]; then
+                    read -r generation observed applied power percentage current sensor < "$fw_status_file"
+                    now=$(date +%s)
+                    if [[ "$generation" == "$fw_generation" && "$sensor" =~ ^[0-9]+$ ]] && ((now-sensor>=0 && now-sensor<=120)); then
+                        case "$power" in charging) charging=enabled; discharging='not discharging' ;; bypass_verified|external_verifying) charging=disabled; discharging='not discharging' ;; initial_discharge) discharging=discharging ;; esac
+                    fi
+                fi
+            else target=$(get_maintain_percentage); fi
+            printf '%s,%s,%s,%s,%s\n' "$(get_battery_percentage)" "$(get_remaining_time)" "$charging" "$discharging" "$target"
+            exit 0
+        fi ;;
+esac
 
 # Version message
 if [[ "$action" == "version" ]] || [[ "$action" == "--version" ]]; then

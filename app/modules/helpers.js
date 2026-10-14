@@ -23,7 +23,7 @@ const log = async ( ...messages ) => {
     try {
         if( HOME ) {
             await fs.mkdir( `${ HOME }/.battery/`, { recursive: true } )
-            const line = util.format(...messages) + "\n";
+            const line = new Date().toISOString() + " " + util.format(...messages) + "\n";
             await fs.appendFile( `${ HOME }/.battery/gui.log`, line, 'utf8' )
         } else if( !has_alerted_user_no_home ) {
             alert( `No HOME variable set, this should never happen` )

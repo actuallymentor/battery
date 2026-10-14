@@ -15,6 +15,8 @@ const get_logo_template = ( percent = 100, active ) => {
     // Image sizes available in /assets/
     log( `Get active logo for ${ percent }` )
     percent = Number( percent )
+    if( !Number.isFinite( percent ) ) { percent = 0; active = false }
+    percent = Math.max( 0, Math.min( 100, percent ) )
 
     // Image sizes available
     // see assets/modules/compile-images.je for values

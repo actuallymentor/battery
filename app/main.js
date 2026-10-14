@@ -2,18 +2,14 @@ const { app } = require( 'electron' )
 const { alert, log } = require( './modules/helpers' )
 const { set_initial_interface } = require( './modules/interface' )
 
-// Enable auto-updates
-require( 'update-electron-app' )( {
-    logger: {
-        log: ( ...data ) => log( `[ update-electron-app ] `, ...data )
-    }
-} )
+// This is a local firmware build. Updates are installed from the same checkout;
+// the upstream GUI updater would otherwise replace the matching local UI.
 
 /* ///////////////////////////////
 // Event listeners
 // /////////////////////////////*/
 
-app.whenReady().then( set_initial_interface )
+app.whenReady().then( set_initial_interface ).catch( error => { log( 'Startup failed', error ); app.quit() } )
 
 /* ///////////////////////////////
 // Global config
