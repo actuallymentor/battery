@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.3.4"
+BATTERY_CLI_VERSION="v1.3.5"
 
 # If a script may run as root:
 #   - Reset PATH to safe defaults at the very beginning of the script.
@@ -209,6 +209,18 @@ function valid_percentage_range() {
 	fi
 
 	return 0
+}
+
+function should_disable_charging_in_range() {
+	local is_range="$1"
+	local battery_percentage="$2"
+	local lower_bound="$3"
+	local upper_bound="$4"
+	local is_charging="$5"
+	[[ "$is_range" == "true" \
+		&& "$battery_percentage" -ge "$lower_bound" \
+		&& "$battery_percentage" -lt "$upper_bound" \
+		&& "$is_charging" == "enabled" ]]
 }
 
 function valid_voltage() {
@@ -958,6 +970,12 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 			if [[ "$is_charging" == "enabled" ]]; then
 				disable_charging
 			fi
+			change_magsafe_led_color "green"
+
+		elif should_disable_charging_in_range "$is_range" "$battery_percentage" "$lower_bound" "$upper_bound" "$is_charging"; then
+
+			log "Charge within range $lower_bound%-$upper_bound%, waiting until below $lower_bound%"
+			disable_charging
 			change_magsafe_led_color "green"
 
 		elif [[ "$battery_percentage" -lt "$lower_bound" && "$is_charging" == "disabled" ]]; then
