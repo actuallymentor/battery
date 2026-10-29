@@ -86,6 +86,9 @@ Usage:
     output logs of the battery CLI and GUI
     eg: battery logs 100
 
+  battery dump_controls
+    display SMC controls
+
   battery maintain PERCENTAGE[1-100,stop] or RANGE[lower-upper]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
     it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
@@ -1299,6 +1302,36 @@ if [[ "$action" == "logs" ]]; then
 	echo -e "\n⚙️	Battery data:\n"
 	$battery_binary status
 	$battery_binary | grep -E "v\d.*"
+
+	exit 0
+
+fi
+
+# Display SMC controls
+if [[ "$action" == "dump_controls" ]]; then
+
+	function print_smc_control() {
+		local key="$1" description="$2" output byte hex=""
+		output=$("$smc_binary" -k "$key" -r 2>&1)
+		if [[ "$output" =~ \(bytes\ ([[:xdigit:]]{2}(\ [[:xdigit:]]{2})*)\) ]]; then
+			for byte in ${BASH_REMATCH[1]}; do hex="$byte$hex"; done    # Reverse the little-endian
+			description="$description, current decimal value: $((16#$hex))"
+		fi
+		output=${output//$'\n'/ }
+		printf '  %-4s  %-48s  %s\n' "$key" "${output:-(no output)}" "$description"
+	}
+
+	printf 'SMC state:\n'
+	print_smc_control bfD0 "Upper charge limit value (stop charging)"
+	print_smc_control bfE0 "Lower charge limit value (resume charging)"
+	print_smc_control bfF0 "Charge limit control (00: limit disabled; 02: limit enabled)"
+	print_smc_control CHTE "Legacy charging control (00000000: enabled; 01000000: disabled)"
+	print_smc_control CH0B "Legacy charging control (00: enabled; 02: disabled)"
+	print_smc_control CH0C "Legacy charging control (00: enabled; 02: disabled)"
+	print_smc_control CHIE "Forced discharge control (00: adapter enabled; 08: adapter disabled)"
+	print_smc_control CH0I "Forced discharge control (00: adapter enabled; 01: adapter disabled)"
+	print_smc_control CH0J "Forced discharge control (00: adapter enabled; 01: adapter disabled)"
+	print_smc_control ACLC "MagSafe LED control (00: reset; 01: off; 03: green; 04: orange)"
 
 	exit 0
 
