@@ -1134,13 +1134,31 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 	while true; do
 		is_charging=$(get_charging_control_status)
 
-		if (($(echo "$voltage < $lower_voltage" | bc -l))) && [[ "$is_charging" == "disabled" ]]; then
-			log "Battery at ${voltage}V"
-			enable_charging
-		fi
-		if (($(echo "$voltage >= $upper_voltage" | bc -l))) && [[ "$is_charging" == "enabled" ]]; then
-			log "Battery at ${voltage}V"
-			disable_charging
+		if (($(echo "$voltage >= $upper_voltage" | bc -l))); then
+
+			log "Battery voltage (${voltage}V) is at or above upper bound (${upper_voltage}V)"
+			if [[ "$is_charging" == "enabled" ]]; then
+				disable_charging
+			fi
+			mcl_maintain_disabled_charging "$percentage_min" "80" "$(get_battery_percentage)"
+			change_magsafe_led_color "green"
+
+		elif (($(echo "$voltage >= $lower_voltage" | bc -l))); then
+
+			log "Battery voltage (${voltage}V) is in betweeen ${lower_voltage}V and ${upper_voltage}V"
+			if [[ "$is_charging" == "disabled" ]]; then
+				mcl_maintain_disabled_charging "$percentage_min" "80" "$(get_battery_percentage)"
+				change_magsafe_led_color "green"
+			fi
+
+		else
+
+			log "Battery voltage (${voltage}V) is below lower bound (${lower_voltage}V)"
+			if [[ "$is_charging" == "disabled" ]]; then
+				enable_charging
+			fi
+			change_magsafe_led_color "orange"
+
 		fi
 
 		sleep 60
