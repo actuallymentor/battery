@@ -49,6 +49,11 @@ binfolder="/usr/local/co.palokaj.battery"
 battery_binary="$binfolder/battery"
 smc_binary="$binfolder/smc"
 
+# Fixed absolute paths to system tools.
+sw_vers_binary="/usr/bin/sw_vers"
+defaults_binary="/usr/bin/defaults"
+notifyutil_binary="/usr/bin/notifyutil"
+
 # GitHub URLs for setup and updates.
 # Temporarily set to your username and branch to test update functionality with your fork.
 # Security note: Do NOT allow github_user or github_branch to be injected via environment
@@ -90,7 +95,7 @@ Usage:
     eg: battery logs 100
 
   battery dump_controls
-    display SMC controls
+    display SMC controls and, on macOS Tahoe 26 and later, native charge-limit preferences
 
   battery maintain PERCENTAGE[${percentage_min}-100,stop] or RANGE[lower-upper]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
@@ -144,7 +149,7 @@ Usage:
 # Purpose:
 # - Allows this script to execute 'sudo smc -w' commands without requiring a user password.
 # - Allows passwordless updates.
-# - Allows passwordless mcl_smc charge-limit actions.
+# - Allows passwordless mcl_smc and mcl_prefs charge-limit actions and scoped preference reads.
 visudoconfig="
 # Visudo settings for the battery utility installed from https://github.com/actuallymentor/battery
 # intended to be placed in $visudo_file on a mac
@@ -156,6 +161,12 @@ ALL ALL = NOPASSWD: $battery_binary update_silent is_enabled
 # Allow passwordless mcl_smc charge-limit actions
 ALL ALL = NOPASSWD: $battery_binary _set_charge_limit_mcl_smc *
 ALL ALL = NOPASSWD: $battery_binary _reset_charge_limit_mcl_smc
+
+# Allow passwordless mcl_prefs charge-limit actions and root preference reads
+ALL ALL = NOPASSWD: $battery_binary _set_charge_limit_mcl_prefs *
+ALL ALL = NOPASSWD: $battery_binary _reset_charge_limit_mcl_prefs
+ALL ALL = NOPASSWD: $defaults_binary read com.apple.smartcharging.topoffprotection MCLFeatureState
+ALL ALL = NOPASSWD: $defaults_binary read com.apple.smartcharging.topoffprotection mclLimitValue
 
 # Allow passwordless battery-charging–related SMC write commands
 Cmnd_Alias    CHARGING_OFF = $smc_binary -k CH0B -w 02, $smc_binary -k CH0C -w 02, $smc_binary -k CHTE -w 01000000
@@ -269,9 +280,19 @@ function smc_write_hex() {
 ## Detect charging control backend
 ## ###############################
 
+# On macOS Tahoe 26 and later:
+#   - Try using mcl_smc and fall back to mcl_prefs if mcl_smc is unavailable.
+# On macOS Sequoia 15 and earlier:
+#   - Try using mcl_smc and fall back to legacy controls if mcl_smc is unavailable.
 function detect_charging_backend() {
+	local macos_version macos_major
+	macos_version=$("$sw_vers_binary" -productVersion) || macos_version=""
+	macos_major="${macos_version%%.*}"
+
 	if [[ "$smc_supports_bfF0" == "true" ]]; then
 		echo "mcl_smc"
+	elif [[ "$macos_major" =~ ^[0-9]+$ ]] && [[ "$macos_major" -ge 26 ]]; then
+		echo "mcl_prefs"
 	elif [[ "$smc_supports_CHTE" == "true" ]]; then
 		echo "CHTE"
 	elif [[ "$smc_supports_CH0B" == "true" ]]; then
@@ -286,15 +307,30 @@ function log_system_capabilities() {
 	log "SMC capabilities: bfF0=$smc_supports_bfF0 CHTE=$smc_supports_CHTE CH0B=$smc_supports_CH0B CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
 }
 
-## #################################
+## ####################################################
 ## Manual Charge Limit (MCL) helpers
-## #################################
+##   mcl_smc - using bfF0 smc registers family
+##   mcl_prefs - Using macOS defaults and notifications
+## ####################################################
 
-# With Manual Charge Limit (MCL) backends, we disable charging by setting the charge limit
+# With the "mcl_smc" and "mcl_prefs" backends, we disable charging by setting the charge limit
 # to the current battery charge level. Setting the limit below the current charge level causes
 # the firmware to discharge the battery, even when the power adapter is connected. To keep the
 # battery in pass-through mode, we set the charge limit to the current charge level and adjust
 # it whenever the charge level changes.
+#
+# By default, the Manual Charge Limit (MCL) is restricted to the range of ${percentage_min}% to 80%.
+# The 80% upper bound can be explicitly overridden by setting a higher maintenance percentage.
+# This default upper bound accounts for occasional macOS battery calibration, during which MCL
+# temporarily stops working and the battery may charge to 100%. Once calibration is completed,
+# the 80% upper bound allows the battery to discharge back to 80%, preventing it from remaining
+# at a high charge level for an extended period without the user noticing. The downside is that
+# the battery may be unnecessarily discharged to 80% after calibration. This is an intentional
+# trade-off to minimize the risk of battery swelling.
+#
+# The limit follows the current charge level between the maintenance range's lower bound and its
+# effective upper bound (at least 80%). Outside this range, the limit is clamped to the nearest
+# bound, allowing the battery to charge or discharge toward it.
 #
 # The charge limit is calculated from the current charge level and the maintenance range using
 # the following formula:
@@ -326,20 +362,35 @@ function apply_mcl_smc_charge_limit() {
 	return 0
 }
 
+function apply_mcl_prefs_charge_limit() {
+	if ! sudo -n "$battery_binary" _set_charge_limit_mcl_prefs "$1"; then
+		log "⚠️ Action execution has failed: _set_charge_limit_mcl_prefs $1"
+		return 1
+	fi
+	return 0
+}
+
 # Maintain disabled charging using the caller's bounds and charge reading.
 function mcl_maintain_disabled_charging() {
-	if [[ "$charging_backend" != "mcl_smc" ]]; then
+	if [[ "$charging_backend" != "mcl_smc" && "$charging_backend" != "mcl_prefs" ]]; then
 		return 0
 	fi
 
-	apply_mcl_smc_charge_limit "$(calc_mcl_charge_limit "$1" "$2" "$3")" || return 1
+	local limit
+	limit=$(calc_mcl_charge_limit "$1" "$2" "$3")
+
+	if [[ "$charging_backend" == "mcl_prefs" ]]; then
+		apply_mcl_prefs_charge_limit "$limit" || return 1
+	elif [[ "$charging_backend" == "mcl_smc" ]]; then
+		apply_mcl_smc_charge_limit "$limit" || return 1
+	fi
 
 	return 0
 }
 
-## #################
-## SMC Manipulation
-## #################
+## ###########################################
+## Charging/Discharging Controls Manipulations
+## ###########################################
 
 # Change magsafe color
 # see community sleuthing: https://github.com/actuallymentor/battery/issues/71
@@ -392,6 +443,8 @@ function enable_charging() {
 	log "🔌🔋 Enabling battery charging"
 	if [[ "$charging_backend" == "mcl_smc" ]]; then
 		sudo -n "$battery_binary" _reset_charge_limit_mcl_smc
+	elif [[ "$charging_backend" == "mcl_prefs" ]]; then
+		sudo -n "$battery_binary" _reset_charge_limit_mcl_prefs
 	elif [[ "$charging_backend" == "CHTE" ]]; then
 		smc_write_hex CHTE 00000000
 	elif [[ "$charging_backend" == "CH0B" ]]; then
@@ -410,6 +463,8 @@ function disable_charging() {
 	log "🔌🪫 Disabling battery charging"
 	if [[ "$charging_backend" == "mcl_smc" ]]; then
 		apply_mcl_smc_charge_limit "$(calc_mcl_charge_limit "$percentage_min" 80 "$(get_battery_percentage)")"
+	elif [[ "$charging_backend" == "mcl_prefs" ]]; then
+		apply_mcl_prefs_charge_limit "$(calc_mcl_charge_limit "$percentage_min" 80 "$(get_battery_percentage)")"
 	elif [[ "$charging_backend" == "CHTE" ]]; then
 		smc_write_hex CHTE 01000000
 	elif [[ "$charging_backend" == "CH0B" ]]; then
@@ -424,7 +479,15 @@ function disable_charging() {
 # Reports configured charging-control intent, not observed charging activity.
 function get_charging_control_status() {
 	local hex_status
-	if [[ "$charging_backend" == "mcl_smc" ]]; then
+	if [[ "$charging_backend" == "mcl_prefs" ]]; then
+		local state
+		state=$(sudo -n "$defaults_binary" read "com.apple.smartcharging.topoffprotection" MCLFeatureState 2>/dev/null) || state=""
+		case "$state" in
+			0) echo "enabled" ;;
+			1) echo "disabled" ;;
+			*) echo "unknown" ;;
+		esac
+	elif [[ "$charging_backend" == "mcl_smc" ]]; then
 		hex_status=$(smc_read_hex bfF0)
 		case "$hex_status" in
 			00) echo "enabled" ;;
@@ -862,6 +925,73 @@ if [[ "$action" == "_reset_charge_limit_mcl_smc" ]]; then
 	fi
 	log "❌ $action: Failed to disable MCL charge limit. Write sequence stopped."
 	exit 1
+fi
+
+if [[ "$action" == "_set_charge_limit_mcl_prefs" || "$action" == "_reset_charge_limit_mcl_prefs" ]]; then
+
+	assert_running_as_root
+
+	function mcl_prefs_limit_is_already_set() {
+		local applied_state applied_limit
+		applied_state=$("$defaults_binary" read "com.apple.smartcharging.topoffprotection" MCLFeatureState)
+		applied_limit=$("$defaults_binary" read "com.apple.smartcharging.topoffprotection" mclLimitValue)
+		[[ "$applied_state" == "$1" && "$applied_limit" == "$2" ]]
+	}
+
+	function mcl_prefs_write_integer() {
+		local key="$1" value="$2"
+		if ! "$defaults_binary" write "com.apple.smartcharging.topoffprotection" "$key" -int "$value"; then
+			log "⚠️ Failed to write mcl_prefs preference $key=$value"
+		fi
+		return 0
+	}
+
+	function notify_mcl_prefs_changed() {
+		# Initiate a delayed notification without blocking the caller.
+		(
+			trap '' HUP
+			sleep 1
+			local output result
+			output=$("$notifyutil_binary" -p "com.apple.smartcharging.defaultschanged" 2>&1)
+			result=$?
+			# Apple's notifyutil can report a posting error on stdout and still exit 0.
+			if [[ "$result" -ne 0 || -n "$output" ]]; then
+				log "⚠️ mcl_prefs notification failed (exit $result): $output"
+			fi
+		) </dev/null >>"$logfile" 2>&1 &
+		disown "$!"
+		return 0
+	}
+
+	# Set an explicit mcl_prefs charge limit in the root preference scope.
+	if [[ "$action" == "_set_charge_limit_mcl_prefs" ]]; then
+		if [[ $# -ne 2 ]] || ! [[ "$setting" =~ ^(0|[1-9][0-9]?|100)$ ]] || [[ "$setting" -lt "$percentage_min" ]]; then
+			log " ❌ Error: battery $action requires exactly one integer from ${percentage_min} to 100"
+			exit 2
+		fi
+		if mcl_prefs_limit_is_already_set 1 "$setting"; then
+			log "☑️ $action: requested charge limit ("$setting") is already set. Do nothing."
+			exit 0
+		fi
+		mcl_prefs_write_integer mclLimitValue "$setting"
+		mcl_prefs_write_integer MCLFeatureState 1
+		notify_mcl_prefs_changed
+		log "✅ $action: MCL charge limit is set to ("$setting")."
+		exit 0
+	fi
+
+	# Disable MCL and set its percentage setting to 100 (System Settings app does the same when limit is set to 100%)
+	if [[ "$action" == "_reset_charge_limit_mcl_prefs" ]]; then
+		if mcl_prefs_limit_is_already_set 0 100; then
+			log "☑️ $action: requested reset settings are already set. Do nothing."
+			exit 0
+		fi
+		mcl_prefs_write_integer MCLFeatureState 0
+		mcl_prefs_write_integer mclLimitValue 100
+		notify_mcl_prefs_changed
+		log "✅ $action: MCL charge limit is dissabled. Charging requested."
+		exit 0
+	fi
 fi
 
 # Charging on/off controller
@@ -1449,7 +1579,7 @@ if [[ "$action" == "logs" ]]; then
 
 fi
 
-# Display SMC controls
+# Display SMC controls and native charge-limit preferences.
 if [[ "$action" == "dump_controls" ]]; then
 
 	function print_smc_control() {
@@ -1474,6 +1604,16 @@ if [[ "$action" == "dump_controls" ]]; then
 	print_smc_control CH0I "Forced discharge control (00: adapter enabled; 01: adapter disabled)"
 	print_smc_control CH0J "Forced discharge control (00: adapter enabled; 01: adapter disabled)"
 	print_smc_control ACLC "MagSafe LED control (00: reset; 01: off; 03: green; 04: orange)"
+
+	function print_mcl_prefs_control() {
+		local key="$1" description="$2" value
+		value=$(sudo -n "$defaults_binary" read com.apple.smartcharging.topoffprotection "$key" 2>/dev/null) || value="failed to read the key"
+		printf '  %-16s  %-36s  %s\n' "$key" "$value" "$description"
+	}
+
+	printf '\nPreferences: com.apple.smartcharging.topoffprotection.plist (root scope)\n'
+	print_mcl_prefs_control MCLFeatureState "Charge limit feature state (0: disabled; 1: enabled)"
+	print_mcl_prefs_control mclLimitValue "Charge limit percentage"
 
 	exit 0
 
