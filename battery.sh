@@ -1190,6 +1190,11 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		log "Charging to and maintaining at $setting% from $battery_percentage%"
 	fi
 
+	# Stop charging if current charge level is within specified range
+	if [[ "$battery_percentage" -ge "$lower_bound" && "$battery_percentage" -lt "$upper_bound" ]]; then
+		disable_charging
+	fi
+
 	# Maintenance Loop
 	while true; do
 
@@ -1259,6 +1264,11 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 	lower_voltage=$(echo "$setting - $subsetting" | bc -l)
 	upper_voltage=$(echo "$setting + $subsetting" | bc -l)
 	log "Keeping voltage between ${lower_voltage}V and ${upper_voltage}V"
+
+	# Stop charging if current voltage is already within specified range
+	if (($(echo "$voltage >= $lower_voltage && $voltage < $upper_voltage" | bc -l))); then
+		disable_charging
+	fi
 
 	# Loop
 	while true; do
