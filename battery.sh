@@ -28,6 +28,10 @@ daemon_path=$HOME/Library/LaunchAgents/battery.plist
 calibrate_pidfile=$configfolder/calibrate.pid
 path_configfile=/etc/paths.d/50-battery
 
+# The firmware charge limit discharges a battery that is above the limit, even with the adapter connected,
+# so limits below this value are refused on Macs that use it (a typo should not drain the battery)
+firmware_limit_min="20"
+
 # Voltage limits
 voltage_min="10.5"
 voltage_max="12.6"
@@ -89,6 +93,8 @@ Usage:
   battery maintain PERCENTAGE[1-100,stop] or RANGE[lower-upper]
     reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
     it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
+    on Macs where the firmware enforces the limit (macOS 15.8, 26.7 and later) the battery is also discharged down to the limit
+    when it is above it, even without --force-discharge, and limits below ${firmware_limit_min}% are refused
     eg: battery maintain 80           # maintain at 80%
     eg: battery maintain 70-80        # maintain between 70-80%
     eg: battery maintain stop
@@ -131,11 +137,29 @@ Usage:
 
 "
 
+# Firmware charge limit SMC commands.
+# Newer firmware (shipped with macOS 15.8, 26.7 and later) no longer has the CHTE/CH0B/CH0C keys that switch charging
+# off. Instead, the firmware enforces a charge range by itself, configured through these keys:
+#   bfD0 (ui32, little-endian): upper limit in percent, charging stops at this level. 80% is "50000000"
+#   bfE0 (ui32, little-endian): lower limit in percent, charging resumes below this level. 78% is "4E000000"
+#   bfF0 (ui8):                 "02" activates the limit, "00" deactivates it (default charging behavior)
+# The visudo rules below must list every command in full: no wildcards, and no wrapper commands that
+# would run this script as root, so that sudo can never run smc with arbitrary arguments.
+firmware_limit_switch="$smc_binary -k bfF0 -w 00, $smc_binary -k bfF0 -w 02"
+firmware_limit_upper=""
+firmware_limit_lower=""
+for ((firmware_percent = 0; firmware_percent <= 100; firmware_percent++)); do
+	printf -v firmware_hex '%02X000000' "$firmware_percent"
+	firmware_limit_upper+="${firmware_limit_upper:+, }$smc_binary -k bfD0 -w $firmware_hex"
+	firmware_limit_lower+="${firmware_limit_lower:+, }$smc_binary -k bfE0 -w $firmware_hex"
+done
+
 # Visudo instructions
 # File location: /etc/sudoers.d/battery
 # Purpose:
 # - Allows this script to execute 'sudo smc -w' commands without requiring a user password.
 # - Allows passwordless updates.
+# Maintainers: only ever add 'smc -k KEY -w VALUE' commands that are spelled out in full here.
 visudoconfig="
 # Visudo settings for the battery utility installed from https://github.com/actuallymentor/battery
 # intended to be placed in $visudo_file on a mac
@@ -150,11 +174,17 @@ Cmnd_Alias    CHARGING_ON = $smc_binary -k CH0B -w 00, $smc_binary -k CH0C -w 00
 Cmnd_Alias    FORCE_DISCHARGE_OFF = $smc_binary -k CH0I -w 00, $smc_binary -k CHIE -w 00, $smc_binary -k CH0J -w 00
 Cmnd_Alias    FORCE_DISCHARGE_ON = $smc_binary -k CH0I -w 01, $smc_binary -k CHIE -w 08, $smc_binary -k CH0J -w 01
 Cmnd_Alias    LED_CONTROL = $smc_binary -k ACLC -w 04, $smc_binary -k ACLC -w 03, $smc_binary -k ACLC -w 02, $smc_binary -k ACLC -w 01, $smc_binary -k ACLC -w 00
+Cmnd_Alias    FIRMWARE_LIMIT_SWITCH = $firmware_limit_switch
+Cmnd_Alias    FIRMWARE_LIMIT_UPPER = $firmware_limit_upper
+Cmnd_Alias    FIRMWARE_LIMIT_LOWER = $firmware_limit_lower
 ALL ALL = NOPASSWD: CHARGING_OFF
 ALL ALL = NOPASSWD: CHARGING_ON
 ALL ALL = NOPASSWD: FORCE_DISCHARGE_OFF
 ALL ALL = NOPASSWD: FORCE_DISCHARGE_ON
 ALL ALL = NOPASSWD: LED_CONTROL
+ALL ALL = NOPASSWD: FIRMWARE_LIMIT_SWITCH
+ALL ALL = NOPASSWD: FIRMWARE_LIMIT_UPPER
+ALL ALL = NOPASSWD: FIRMWARE_LIMIT_LOWER
 
 # Temporarily keep passwordless SMC reading commands so the old menubar GUI versions don't ask for password on each launch
 # trying to execute 'battery visudo'. There is no harm in removing this, so do it as soon as you believe users are no
@@ -221,11 +251,26 @@ function valid_voltage() {
 function smc_read_hex() {
 	key=$1
 	line=$(echo $($smc_binary -k $key -r))
-	if [[ $line =~ "no data" ]]; then
+	# Keys without data and keys that can not be read ("Error: SMCReadKey() = ...") have no value
+	if [[ $line =~ "no data" || $line =~ "Error" ]]; then
 		echo
 	else
 		echo ${line#*bytes} | tr -d ' ' | tr -d ')'
 	fi
+}
+
+# Succeeds if the SMC key $1 holds data. Newer firmware keeps some old keys as empty "no data" placeholders,
+# and keys that macOS does not let us access answer with "Error: SMCReadKey() = ...".
+function smc_key_has_data() {
+	local output
+	output=$("$smc_binary" -k "$1" -r 2>&1)
+	[[ -n "$output" && ! "$output" =~ "no data" && ! "$output" =~ "Error" ]]
+}
+
+# Succeeds if the SMC key $1 has the data type $2 (for example ui32) and a value of exactly $3 bytes
+function smc_key_matches() {
+	"$smc_binary" -k "$1" -r 2>/dev/null |
+		grep -Eq "\\[$2[[:space:]]*\\].*\\(bytes( [[:xdigit:]]{2}){$3}\\)[[:space:]]*$"
 }
 
 function smc_write_hex() {
@@ -241,14 +286,23 @@ function smc_write_hex() {
 ## #########################
 ## Detect supported SMC keys
 ## #########################
-[[ $($smc_binary -k CHTE -r) =~ "no data" ]] && smc_supports_tahoe=false || smc_supports_tahoe=true;
-[[ $($smc_binary -k CH0B -r) =~ "no data" ]] && smc_supports_legacy=false || smc_supports_legacy=true;
+smc_key_has_data CHTE && smc_supports_tahoe=true || smc_supports_tahoe=false;
+smc_key_has_data CH0B && smc_supports_legacy=true || smc_supports_legacy=false;
 [[ $($smc_binary -k CHIE -r) =~ "no data" ]] && smc_supports_adapter_chie=false || smc_supports_adapter_chie=true;
 [[ $($smc_binary -k CH0I -r) =~ "no data" ]] && smc_supports_adapter_ch0i=false || smc_supports_adapter_ch0i=true;
 [[ $($smc_binary -k CH0J -r) =~ "no data" || $($smc_binary -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
 
+# Firmware charge limit: used when the keys that directly switch charging off are gone, which is determined by
+# the keys present in the SMC and not by the macOS version, as the new firmware also ships with macOS 15.8.
+# Where CHTE or CH0B/CH0C work they remain the method of choice.
+smc_supports_firmware_limit=false
+if [[ "$smc_supports_tahoe" == "false" && "$smc_supports_legacy" == "false" ]] &&
+	smc_key_matches bfD0 ui32 4 && smc_key_matches bfE0 ui32 4 && smc_key_matches bfF0 ui8 1; then
+	smc_supports_firmware_limit=true
+fi
+
 function log_smc_capabilities() {
-	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
+	log "SMC capabilities: tahoe=$smc_supports_tahoe legacy=$smc_supports_legacy firmware_limit=$smc_supports_firmware_limit CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
 }
 
 ## #################
@@ -272,6 +326,79 @@ function change_magsafe_led_color() {
 		# Default action: reset. Value 00 is a guess and needs confirmation
 		log "resetting LED"
 		sudo $smc_binary -k ACLC -w 00
+	fi
+}
+
+## Firmware charge limit helpers. The comment above 'firmware_limit_switch' explains what the SMC keys mean.
+
+# Prints "<active|inactive> <lower> <upper>" for the limit that is currently set in the firmware.
+# Fails if the keys can not be read.
+function get_firmware_limit() {
+	local switch_hex upper_hex lower_hex
+	switch_hex=$(smc_read_hex bfF0)
+	upper_hex=$(smc_read_hex bfD0)
+	lower_hex=$(smc_read_hex bfE0)
+	if [[ ! "$switch_hex" =~ ^[0-9A-Fa-f]{2}$ || ! "$upper_hex" =~ ^[0-9A-Fa-f]{8}$ || ! "$lower_hex" =~ ^[0-9A-Fa-f]{8}$ ]]; then
+		return 1
+	fi
+	# A percentage fits in the first (least significant) byte of the little-endian value
+	if [[ "$switch_hex" == "02" ]]; then
+		echo "active $((16#${lower_hex:0:2})) $((16#${upper_hex:0:2}))"
+	else
+		echo "inactive $((16#${lower_hex:0:2})) $((16#${upper_hex:0:2}))"
+	fi
+}
+
+# Activate a firmware charge limit: charging stops at $2% and resumes below $1%
+function set_firmware_limit() {
+	local lower=$1 upper=$2
+
+	if ! valid_percentage "$lower" || ! valid_percentage "$upper" || [[ "$lower" -gt "$upper" ]]; then
+		log "⚠️ Refusing invalid firmware charge limit: lower=$lower upper=$upper"
+		return 1
+	fi
+
+	# The firmware needs the limit to be deactivated while it is being edited. Order: deactivate, upper, lower, activate
+	if smc_write_hex bfF0 00 &&
+		smc_write_hex bfD0 "$(printf '%02X000000' "$upper")" &&
+		smc_write_hex bfE0 "$(printf '%02X000000' "$lower")" &&
+		smc_write_hex bfF0 02 &&
+		[[ "$(get_firmware_limit)" == "active $lower $upper" ]]; then
+		log "🔒 Firmware charge limit active: charging stops at $upper% and resumes below $lower%"
+		return 0
+	fi
+
+	log "⚠️ Failed to set the firmware charge limit to $lower%-$upper%, deactivating it"
+	smc_write_hex bfF0 00
+	return 1
+}
+
+# Set the firmware charge limit only if it is not in place yet, so a limit that works is never interrupted by rewriting it
+function ensure_firmware_limit() {
+	local lower=$1 upper=$2
+	if [[ "$(get_firmware_limit)" == "active $lower $upper" ]]; then
+		return 0
+	fi
+	set_firmware_limit "$lower" "$upper"
+}
+
+# Refuse maintain targets (single value or lower-upper range) whose upper bound is too low for the firmware charge limit
+function firmware_limit_target_allowed() {
+	local upper=${1#*-}
+	[[ "$upper" =~ ^[0-9]+$ ]] && ((10#$upper >= firmware_limit_min))
+}
+
+# Prints the real charge percentage of the battery (SMC key BRSC), which is what the firmware charge limit works with.
+# macOS shows a higher percentage: it shows 100% from a real charge of 95%, and up to 5% more below that.
+function get_firmware_battery_percentage() {
+	local real percentage
+	real=$(smc_read_hex BRSC)
+	if [[ "$real" =~ ^[0-9A-Fa-f]{2}$ ]]; then
+		echo $((16#$real))
+	else
+		# Not readable as a single byte on this Mac, so assume the lowest real charge that matches what macOS shows
+		percentage=$(get_battery_percentage)
+		echo $((percentage > 5 ? percentage - 5 : 0))
 	fi
 }
 
@@ -306,15 +433,8 @@ function disable_discharging() {
 	if ! valid_percentage "$setting"; then
 
 		log "Disabling discharging: No valid maintain percentage set, enabling charging"
-		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		# use allow_charging since enable_charging also calls disable_discharging, and causes an eternal loop
+		allow_charging
 		change_magsafe_led_color "orange"
 
 	elif [[ "$battery_percentage" -ge "$setting" && "$is_charging" == "enabled" ]]; then
@@ -326,15 +446,8 @@ function disable_discharging() {
 	elif [[ "$battery_percentage" -lt "$setting" && "$is_charging" == "disabled" ]]; then
 
 		log "Disabling discharging: Charge below $setting, enabling charging"
-		# use direct commands since enable_charging also calls disable_discharging, and causes an eternal loop
-		if [[ "$smc_supports_tahoe" == "true" ]]; then
-			smc_write_hex CHTE 00000000
-		elif [[ "$smc_supports_legacy" == "true" ]]; then
-			smc_write_hex CH0B 00
-			smc_write_hex CH0C 00
-		else
-			log "⚠️ Unable to reset charging state"
-		fi
+		# use allow_charging since enable_charging also calls disable_discharging, and causes an eternal loop
+		allow_charging
 		change_magsafe_led_color "orange"
 
 	fi
@@ -342,19 +455,26 @@ function disable_discharging() {
 	battery_percentage=$(get_battery_percentage)
 }
 
+# Lets the battery charge without restrictions. Does not touch the adapter (discharging) state, unlike enable_charging.
 # Re:charging, Aldente uses CH0B https://github.com/davidwernhart/AlDente/blob/0abfeafbd2232d16116c0fe5a6fbd0acb6f9826b/AlDente/Helper.swift#L227
 # but @joelucid uses CH0C https://github.com/davidwernhart/AlDente/issues/52#issuecomment-1019933570
 # so I'm using both since with only CH0B I noticed sometimes during sleep it does trigger charging
-function enable_charging() {
-	log "🔌🔋 Enabling battery charging"
+function allow_charging() {
 	if [[ "$smc_supports_tahoe" == "true" ]]; then
 		smc_write_hex CHTE 00000000
 	elif [[ "$smc_supports_legacy" == "true" ]]; then
 		smc_write_hex CH0B 00
 		smc_write_hex CH0C 00
+	elif [[ "$smc_supports_firmware_limit" == "true" ]]; then
+		smc_write_hex bfF0 00
 	else
 		log "⚠️ Unable to determine SMC keys for enabling charging"
 	fi
+}
+
+function enable_charging() {
+	log "🔌🔋 Enabling battery charging"
+	allow_charging
 	disable_discharging
 }
 
@@ -365,6 +485,16 @@ function disable_charging() {
 	elif [[ "$smc_supports_legacy" == "true" ]]; then
 		smc_write_hex CH0B 02
 		smc_write_hex CH0C 02
+	elif [[ "$smc_supports_firmware_limit" == "true" ]]; then
+		# The firmware has no switch to stop charging right now, it only enforces a charge range.
+		# Stop charging at the current level by setting that range at the real charge of the battery.
+		local level
+		level=$(get_firmware_battery_percentage)
+		if ! valid_percentage "$level"; then
+			log "⚠️ Unable to read the battery percentage to disable charging"
+			return 1
+		fi
+		set_firmware_limit "$((level > 2 ? level - 2 : 0))" "$level"
 	else
 		log "⚠️ Unable to determine SMC keys for disabling charging"
 	fi
@@ -375,6 +505,22 @@ function get_smc_charging_status() {
 	if [[ "$smc_supports_tahoe" == "true" ]]; then
 		status_key="CHTE"
 	fi
+
+	if [[ "$smc_supports_tahoe" == "false" && "$smc_supports_legacy" == "false" && "$smc_supports_firmware_limit" == "true" ]]; then
+		# The firmware limit only blocks charging once the battery reached its upper limit. Charging was seen to stop
+		# 1% below it, and the battery is discharged to the limit itself when it is above it.
+		local firmware_limit
+		firmware_limit=($(get_firmware_limit))
+		if [[ "${#firmware_limit[@]}" -ne 3 ]]; then
+			echo "unknown"
+		elif [[ "${firmware_limit[0]}" == "active" && "$(get_firmware_battery_percentage)" -ge "$((firmware_limit[2] - 1))" ]]; then
+			echo "disabled"
+		else
+			echo "enabled"
+		fi
+		return
+	fi
+
 	hex_status=$(smc_read_hex "$status_key")
 	if [[ -z "$hex_status" ]]; then
 		echo "unknown"
@@ -882,6 +1028,10 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 	log_smc_capabilities
 
+	if [[ "$smc_supports_tahoe" == "false" && "$smc_supports_legacy" == "false" && "$smc_supports_firmware_limit" == "false" ]]; then
+		log "⚠️ No SMC keys found that can stop charging, the charge limit of this Mac can not be enforced"
+	fi
+
 	# Checking if the calibration process is running
 	if test -f "$calibrate_pidfile"; then
 		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
@@ -925,6 +1075,24 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		exit 1
 	fi
 
+	if [[ "$smc_supports_firmware_limit" == "true" ]] && ! firmware_limit_target_allowed "$upper_bound"; then
+		log " ❌ Error: $setting is too low, this Mac discharges the battery down to the limit. Please use a limit of at least ${firmware_limit_min}%"
+		exit 1
+	fi
+
+	# With the firmware charge limit, the firmware stops and resumes charging by itself. The limit is put in place up
+	# front, so that the battery does not charge again when the adapter comes back after a forced discharge.
+	# A single value gets a small hysteresis of 2%, a range is passed on as is.
+	if [[ "$smc_supports_firmware_limit" == "true" ]]; then
+		firmware_upper="$upper_bound"
+		if [[ "$is_range" == true ]]; then
+			firmware_lower="$lower_bound"
+		else
+			firmware_lower=$((upper_bound > 2 ? upper_bound - 2 : 0))
+		fi
+		ensure_firmware_limit "$firmware_lower" "$firmware_upper"
+	fi
+
 	# Check if the user requested that the battery maintenance first discharge to the desired level
 	if [[ "$subsetting" == "--force-discharge" ]]; then
 		# Before we start maintaining the battery level, first discharge to the target level
@@ -946,7 +1114,27 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	fi
 
 	# Loop until battery percent is exceeded
+	firmware_led_color=""
 	while true; do
+
+		# The firmware stops and resumes charging by itself, so charging is not switched on and off from here: the
+		# percentage macOS shows is not the real charge the firmware works with, and acting on it could undo the limit.
+		# Only make sure that the limit stays in place.
+		if [[ "$smc_supports_firmware_limit" == "true" ]]; then
+
+			ensure_firmware_limit "$firmware_lower" "$firmware_upper"
+
+			if [[ "$(get_charger_state)" == "1" ]]; then led_color="green"; else led_color="orange"; fi
+			if [[ "$led_color" != "$firmware_led_color" ]]; then
+				change_magsafe_led_color "$led_color"
+				firmware_led_color="$led_color"
+			fi
+
+			sleep 60
+			battery_percentage=$(get_battery_percentage)
+			continue
+
+		fi
 
 		# Keep track of status
 		is_charging=$(get_smc_charging_status)
@@ -1032,6 +1220,14 @@ fi
 if [[ "$action" == "maintain" ]]; then
 
 	assert_not_running_as_root
+
+	# Check this first, so that a refused value leaves the running maintenance untouched
+	if [[ "$smc_supports_firmware_limit" == "true" ]] &&
+		{ valid_percentage "$setting" || valid_percentage_range "$setting"; } &&
+		! firmware_limit_target_allowed "$setting"; then
+		log " ❌ Error: $setting is too low, this Mac discharges the battery down to the limit. Please use a limit of at least ${firmware_limit_min}%"
+		exit 1
+	fi
 
 	disable_discharging
 

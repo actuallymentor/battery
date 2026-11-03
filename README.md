@@ -140,6 +140,21 @@ sudo rm -v "$binfolder/smc" "$binfolder/battery"
 
 Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new/choose) and I'll try to help you fix it.
 
+### Charging does not stop at my limit on macOS 15.8, 26.7 or later
+
+Apple changed the Mac firmware that ships with macOS 15.8 and 26.7 (and later). The SMC keys `CHTE`, `CH0B` and `CH0C` that used to switch charging off are gone, so the limit was silently ignored and `battery status` reported `smc charging unknown`.
+
+The firmware now enforces a charge range by itself. When the old keys are missing, `battery` uses this firmware charge limit (SMC keys `bfD0`, `bfE0` and `bfF0`) instead. This is detected from the SMC keys, not from the macOS version. What to expect:
+
+- `battery maintain 80` sets the range 78%-80%: charging stops at 80% and resumes below 78%. `battery maintain 70-80` sets the range 70%-80%.
+- A battery that is above the limit is discharged by the firmware to the limit, even while the charger is connected and without `--force-discharge`. Limits below 20% are refused for this reason.
+- The firmware works with the real charge of the battery, which is lower than the percentage macOS shows (macOS shows 100% from a real 95%, and up to 5% more below that). After charging up to the limit macOS shows the limit, a battery that was discharged down to it can show up to 4% more.
+- The limit is enforced by the firmware, `battery` only checks every minute that it is still in place.
+- `battery charging off` stops charging at the current level of the battery.
+- Not every Mac exposes these keys to third party tools. If `battery` logs `No SMC keys found that can stop charging`, use the Charge Limit of macOS (System Settings > Battery) if your macOS version has it.
+
+Run `battery logs` and look for the `SMC capabilities` line to see what your Mac supports.
+
 ### A note to Little Snitch users
 
 This tool calls a number of urls, blocking all of them will only break auto-updates.
