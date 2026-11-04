@@ -1374,6 +1374,9 @@ if [[ "$action" == "maintain" ]]; then
 
 		is_voltage=true
 
+	elif [[ "$setting" == "recover" && -f "$maintain_voltage_tracker_file" ]]; then
+		is_voltage=true
+
 	# Check if setting is a percentage range or single value
 	elif ! valid_maintenance_percentage "$setting" && ! valid_maintenance_percentage_range "$setting"; then
 		log "Called with $setting $action"
@@ -1387,7 +1390,11 @@ if [[ "$action" == "maintain" ]]; then
 
 	# Start maintenance script
 	if [ "$is_voltage" = true ]; then
-		log "Starting battery maintenance at ${setting}V ±${subsetting}V"
+		if [[ "$setting" == "recover" ]]; then
+			log "Starting voltage maintenance recovery"
+		else
+			log "Starting battery maintenance at ${setting}V ±${subsetting}V"
+		fi
 		nohup $battery_binary maintain_voltage_synchronous $setting $subsetting >>$logfile &
 	else
 		if valid_maintenance_percentage_range "$setting"; then
@@ -1402,7 +1409,7 @@ if [[ "$action" == "maintain" ]]; then
 	echo $! >$pidfile
 	pid=$(cat "$pidfile" 2>/dev/null)
 
-	if ! [[ "$setting" == "recover" ]]; then
+	if [[ "$setting" != "recover" ]]; then
 
 		rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2>/dev/null
 
@@ -1504,11 +1511,6 @@ if [[ "$action" == "create_daemon" ]]; then
 
 	assert_not_running_as_root
 
-	call_action="maintain_synchronous"
-	if test -f "$maintain_voltage_tracker_file"; then
-		call_action="maintain_voltage_synchronous"
-	fi
-
 	daemon_definition="
 <?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -1519,7 +1521,7 @@ if [[ "$action" == "create_daemon" ]]; then
 		<key>ProgramArguments</key>
 		<array>
 			<string>$battery_binary</string>
-			<string>$call_action</string>
+			<string>maintain</string>
 			<string>recover</string>
 		</array>
 		<key>StandardOutPath</key>
@@ -1527,6 +1529,10 @@ if [[ "$action" == "create_daemon" ]]; then
 		<key>StandardErrorPath</key>
 		<string>$logfile</string>
 		<key>RunAtLoad</key>
+		<true/>
+		<key>KeepAlive</key>
+		<false/>
+		<key>AbandonProcessGroup</key>
 		<true/>
 	</dict>
 </plist>
