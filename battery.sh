@@ -272,6 +272,7 @@ function smc_write_hex() {
 [[ $($smc_binary -k CHIE -r) =~ "no data" ]] && smc_supports_adapter_chie=false || smc_supports_adapter_chie=true;
 [[ $($smc_binary -k CH0I -r) =~ "no data" ]] && smc_supports_adapter_ch0i=false || smc_supports_adapter_ch0i=true;
 [[ $($smc_binary -k CH0J -r) =~ "no data" || $($smc_binary -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
+[[ $($smc_binary -k ACLC -r) == *"(bytes "* ]] && smc_supports_ACLC=true || smc_supports_ACLC=false;
 [[ $($smc_binary -k bfD0 -r) == *"(bytes "* &&
    $($smc_binary -k bfE0 -r) == *"(bytes "* &&
    $($smc_binary -k bfF0 -r) == *"(bytes "* ]] && smc_supports_bfF0=true || smc_supports_bfF0=false;
@@ -304,7 +305,7 @@ charging_backend="$(detect_charging_backend)"
 
 function log_system_capabilities() {
 	log "Battery ${BATTERY_CLI_VERSION}; macOS=$($sw_vers_binary -productVersion); Charging backend=$charging_backend"
-	log "SMC capabilities: bfF0=$smc_supports_bfF0 CHTE=$smc_supports_CHTE CH0B=$smc_supports_CH0B CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j"
+	log "SMC capabilities: bfF0=$smc_supports_bfF0 CHTE=$smc_supports_CHTE CH0B=$smc_supports_CH0B CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j ACLC=$smc_supports_ACLC"
 }
 
 ## ####################################################
@@ -392,23 +393,26 @@ function mcl_maintain_disabled_charging() {
 ## Charging/Discharging Controls Manipulations
 ## ###########################################
 
-# Change magsafe color
+# Synchronize MagSafe LED state with the current state of charging and discharging controls.
 # see community sleuthing: https://github.com/actuallymentor/battery/issues/71
-function change_magsafe_led_color() {
-	local color=$1
+function update_magsafe_led_color() {
+	[[ "$smc_supports_ACLC" == "true" ]] || return 0
 
-	log "💡 Setting magsafe color to $color"
-
-	if [[ "$color" == "green" ]]; then
-		log "setting LED to green"
-		sudo $smc_binary -k ACLC -w 03
-	elif [[ "$color" == "orange" ]]; then
-		log "setting LED to orange"
-		sudo $smc_binary -k ACLC -w 04
+	if [[ "$(get_discharging_control_status)" == "discharging" ]]; then
+		# Turn the LED off if forced discharging is enabled.
+		smc_write_hex ACLC 01
 	else
-		# Default action: reset. Value 00 is a guess and needs confirmation
-		log "resetting LED"
-		sudo $smc_binary -k ACLC -w 00
+		case "$(get_charging_control_status)" in
+			disabled)
+				# Show green if charging is disabled
+				smc_write_hex ACLC 03 ;;
+			enabled)
+				# Show orange if charging is enabled
+				smc_write_hex ACLC 04 ;;
+			*)
+				# Reset the LED if charging status is unknown
+				smc_write_hex ACLC 00 ;;
+		esac
 	fi
 }
 
@@ -423,7 +427,7 @@ function enable_discharging() {
 	else
 		smc_write_hex CH0I 01
 	fi
-	sudo $smc_binary -k ACLC -w 01
+	update_magsafe_led_color
 }
 
 function disable_discharging() {
@@ -437,6 +441,7 @@ function disable_discharging() {
 	else
 		smc_write_hex CH0I 00
 	fi
+	update_magsafe_led_color
 }
 
 function enable_charging() {
@@ -457,6 +462,7 @@ function enable_charging() {
 		log "⚠️ Unable to reset charging state"
 	fi
 	disable_discharging
+	update_magsafe_led_color
 }
 
 function disable_charging() {
@@ -474,6 +480,7 @@ function disable_charging() {
 		log "⚠️ Unable to determine a backend for disabling charging"
 		return 1
 	fi
+	update_magsafe_led_color
 }
 
 # Reports configured charging-control intent, not observed charging activity.
@@ -1013,6 +1020,7 @@ if [[ "$action" == "charging" ]]; then
 		exit 1
 	fi
 
+	update_magsafe_led_color
 	exit 0
 
 fi
@@ -1035,6 +1043,7 @@ if [[ "$action" == "adapter" ]]; then
 		exit 1
 	fi
 
+	update_magsafe_led_color
 	exit 0
 
 fi
@@ -1060,6 +1069,7 @@ if [[ "$action" == "charge" ]]; then
 	# Loop until battery charging level is reached
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
+		update_magsafe_led_color
 		if [[ "$battery_percentage" -ge "$((setting - 3))" ]]; then
 			sleep 20
 		else
@@ -1071,6 +1081,7 @@ if [[ "$action" == "charge" ]]; then
 	done
 
 	disable_charging
+	update_magsafe_led_color
 	log "Charging completed at $battery_percentage%"
 
 	# Try restoring maintenance if invoked by user from Terminal
@@ -1104,6 +1115,7 @@ if [[ "$action" == "discharge" ]]; then
 	while [[ "$battery_percentage" -gt "$setting" ]]; do
 
 		log "Battery at $battery_percentage% (target $setting%)"
+		update_magsafe_led_color
 		caffeinate -is sleep 60
 		battery_percentage=$(get_battery_percentage)
 
@@ -1111,7 +1123,7 @@ if [[ "$action" == "discharge" ]]; then
 
 	disable_charging
 	disable_discharging
-	change_magsafe_led_color "green"
+	update_magsafe_led_color
 	log "Discharging completed at $battery_percentage%"
 
 	# Try restoring maintenance if invoked by user from Terminal
@@ -1209,14 +1221,12 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 				disable_charging
 			fi
 			mcl_maintain_disabled_charging "$lower_bound" "$upper_bound" "$battery_percentage"
-			change_magsafe_led_color "green"
 
 		elif [[ "$battery_percentage" -ge "$lower_bound"  ]]; then
 
 			log "Charge level ($battery_percentage%) is in betweeen $lower_bound% and $upper_bound%"
 			if [[ "$is_charging" == "disabled" ]]; then
 				mcl_maintain_disabled_charging "$lower_bound" "$upper_bound" "$battery_percentage"
-				change_magsafe_led_color "green"
 			fi
 
 		else
@@ -1225,10 +1235,10 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 			if [[ "$is_charging" == "disabled" ]]; then
 				enable_charging
 			fi
-			change_magsafe_led_color "orange"
 
 		fi
 
+		update_magsafe_led_color
 		sleep 60
 
 		battery_percentage=$(get_battery_percentage)
@@ -1282,14 +1292,12 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 				disable_charging
 			fi
 			mcl_maintain_disabled_charging "$percentage_min" "80" "$(get_battery_percentage)"
-			change_magsafe_led_color "green"
 
 		elif (($(echo "$voltage >= $lower_voltage" | bc -l))); then
 
 			log "Battery voltage (${voltage}V) is in betweeen ${lower_voltage}V and ${upper_voltage}V"
 			if [[ "$is_charging" == "disabled" ]]; then
 				mcl_maintain_disabled_charging "$percentage_min" "80" "$(get_battery_percentage)"
-				change_magsafe_led_color "green"
 			fi
 
 		else
@@ -1298,10 +1306,10 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 			if [[ "$is_charging" == "disabled" ]]; then
 				enable_charging
 			fi
-			change_magsafe_led_color "orange"
 
 		fi
 
+		update_magsafe_led_color
 		sleep 60
 
 		voltage=$(get_voltage)
