@@ -598,6 +598,12 @@ function determine_unprivileged_user() {
 	echo "$username"
 }
 
+function exit_on_error() {
+	[[ "$1" -eq 0 ]] && return 0
+	log "❌ $2"
+	exit 1
+}
+
 function assert_unprivileged_user() {
 	local username="$1"
 	if [[ -z "$username" || "$username" == "root" ]]; then
@@ -1072,12 +1078,14 @@ if [[ "$action" == "charge" ]]; then
 	# Loop until battery charging level is reached
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
 
+		log "Battery at $battery_percentage% (target $setting%)"
 		update_magsafe_led_color
 		if [[ "$battery_percentage" -ge "$((setting - 3))" ]]; then
 			sleep 20
 		else
 			caffeinate -is sleep 60
 		fi
+		exit_on_error "$?" "Error: Charging wait failed; charging stopped."
 
 		battery_percentage=$(get_battery_percentage)
 
@@ -1120,6 +1128,7 @@ if [[ "$action" == "discharge" ]]; then
 		log "Battery at $battery_percentage% (target $setting%)"
 		update_magsafe_led_color
 		caffeinate -is sleep 60
+		exit_on_error "$?" "Error: Discharging wait failed; discharging stopped."
 		battery_percentage=$(get_battery_percentage)
 
 	done
@@ -1454,16 +1463,20 @@ if [[ "$action" == "calibrate" ]]; then
 
 	echo "[ 1 ] Discharging battery to 15%"
 	BATTERY_HELPER_MODE=1 $battery_binary discharge 15 &>/dev/null
+	exit_on_error "$?" "Error: Calibration stopped: discharging to 15% failed."
 
 	echo "[ 2 ] Charging to 100%"
 	BATTERY_HELPER_MODE=1 $battery_binary charge 100 &>/dev/null
+	exit_on_error "$?" "Error: Calibration stopped: charging to 100% failed."
 
 	echo "[ 3 ] Reached 100%, waiting for 1 hour"
 	enable_charging &>/dev/null
 	sleep 3600
+	exit_on_error "$?" "Error: Calibration stopped: one-hour wait failed."
 
 	echo "[ 4 ] Discharging battery to 80%"
 	BATTERY_HELPER_MODE=1 $battery_binary discharge 80 &>/dev/null
+	exit_on_error "$?" "Error: Calibration stopped: discharging to 80% failed."
 
 	# Remove pidfile
 	rm -f $calibrate_pidfile
