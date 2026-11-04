@@ -542,8 +542,9 @@ function get_battery_percentage() {
 }
 
 function get_remaining_time() {
-	time_remaining=$(pmset -g batt | tail -n1 | awk '{print $5}')
-	echo "$time_remaining"
+	pmset -g batt | awk '{
+			for (i = 1; i < NF; i++) if ($i ~ /^[0-9]+:[0-5][0-9]$/ && $(i + 1) == "remaining") remaining = $i
+		} END { print (remaining == "" ? "unknown" : remaining) }'
 }
 
 function get_charger_state() {
@@ -557,7 +558,7 @@ function get_maintain_percentage() {
 }
 
 function get_voltage() {
-	voltage=$(ioreg -l -n AppleSmartBattery -r | grep "\"Voltage\" =" | awk '{ print $3/1000 }' | tr ',' '.')
+	voltage=$(ioreg -l -n AppleSmartBattery -r | LC_ALL=C awk -F= '/^[[:space:]|]*"Voltage"[[:space:]]*=/ { print $2 / 1000 }')
 	echo "$voltage"
 }
 
@@ -1461,7 +1462,7 @@ fi
 # Status logger
 if [[ "$action" == "status" ]]; then
 
-	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, smc charging $(get_charging_control_status)"
+	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, charging set to '$(get_charging_control_status)'"
 	if test -f $pidfile; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
