@@ -236,6 +236,21 @@ function valid_voltage() {
 	return 1
 }
 
+function read_and_validate_pidfile() {
+	local pidfile="$1" argument_pattern="$2" pid command
+	[[ -f "$pidfile" ]] || return 1
+	pid=$(cat "$pidfile") || return 1
+	if [[ "$pid" =~ ^[1-9][0-9]*$ && "$pid" != "1" ]]; then
+		command=$(ps -ww -p "$pid" -o command=)
+		if [[ "$command" =~ ^/bin/bash[[:space:]]+.*/battery[[:space:]]+$argument_pattern ]]; then
+			echo "$pid"
+			return 0
+		fi
+	fi
+	rm -f "$pidfile"
+	return 1
+}
+
 function smc_read_hex() {
 	local key=$1 line
 	line=$(echo $($smc_binary -k $key -r))
@@ -570,6 +585,14 @@ function get_maintain_percentage() {
 function get_voltage() {
 	voltage=$(ioreg -l -n AppleSmartBattery -r | LC_ALL=C awk -F= '/^[[:space:]|]*"Voltage"[[:space:]]*=/ { print $2 / 1000 }')
 	echo "$voltage"
+}
+
+function is_maintenance_running() {
+	read_and_validate_pidfile "$pidfile" 'maintain_'
+}
+
+function is_calibration_running() {
+	read_and_validate_pidfile "$calibrate_pidfile" 'calibrate([[:space:]]|$)'
 }
 
 ## ##################
@@ -1153,10 +1176,9 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	log_system_capabilities
 
 	# Checking if the calibration process is running
-	if test -f "$calibrate_pidfile"; then
-		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
-		log "🚨 Calibration process have been stopped"
+	if pid=$(is_calibration_running); then
+		kill "$pid"
+		log "🚨 Calibration process has been stopped"
 	fi
 
 	# Recover old maintain status if old setting is found
@@ -1340,21 +1362,19 @@ if [[ "$action" == "maintain" ]]; then
 	disable_discharging
 
 	# Kill old process silently
-	if test -f "$pidfile"; then
-		log "Killing old maintain process at $(cat $pidfile)"
-		pid=$(cat "$pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
+	if pid=$(is_maintenance_running); then
+		log "Killing old maintain process at $pid"
+		kill "$pid"
 	fi
 
-	if test -f "$calibrate_pidfile"; then
-		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
-		log "🚨 Calibration process have been stopped"
+	if pid=$(is_calibration_running); then
+		kill "$pid"
+		log "🚨 Calibration process has been stopped"
 	fi
 
 	if [[ "$setting" == "stop" ]]; then
 		log "Killing running maintain daemons & enabling charging as default state"
-		rm $pidfile 2>/dev/null
+		rm -f "$pidfile"
 		$battery_binary disable_daemon
 		enable_charging
 		$battery_binary status
@@ -1453,9 +1473,8 @@ if [[ "$action" == "calibrate" ]]; then
 	$battery_binary maintain stop &>/dev/null
 
 	# Kill old process silently
-	if test -f "$calibrate_pidfile"; then
-		pid=$(cat "$calibrate_pidfile" 2>/dev/null)
-		kill $pid &>/dev/null
+	if pid=$(is_calibration_running); then
+		kill "$pid"
 	fi
 	echo $$ >$calibrate_pidfile
 
@@ -1494,19 +1513,24 @@ fi
 if [[ "$action" == "status" ]]; then
 
 	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, charging set to '$(get_charging_control_status)'"
-	if test -f $pidfile; then
+	if is_maintenance_running >/dev/null; then
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
 			if valid_maintenance_percentage_range "$maintain_percentage"; then
-				maintain_level="${maintain_percentage/-/% - }%"
+				maintain_level="between ${maintain_percentage/-/% and }%"
 			else
-				maintain_level="$maintain_percentage%"
+				maintain_level="at $maintain_percentage%"
 			fi
 		else
 			maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
-			maintain_level=$(echo "$maintain_level" | awk '{print $1 "V ±" $2 "V"}')
+			maintain_level=$(echo "$maintain_level" | awk '{print "at " $1 " V ±" $2 " V"}')
 		fi
-		log "Your battery is currently being maintained at $maintain_level"
+		log "Your battery is being maintained $maintain_level."
+	else
+		log "Your battery is not being maintained."
+	fi
+	if is_calibration_running >/dev/null; then
+		log "Battery calibration using 'battery calibrate' is in progress."
 	fi
 	exit 0
 
