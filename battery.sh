@@ -267,15 +267,18 @@ function smc_write_hex() {
 ## #########################
 ## Detect supported SMC keys
 ## #########################
-[[ $($smc_binary -k CHTE -r) =~ "no data" ]] && smc_supports_CHTE=false || smc_supports_CHTE=true;
-[[ $($smc_binary -k CH0B -r) =~ "no data" ]] && smc_supports_CH0B=false || smc_supports_CH0B=true;
-[[ $($smc_binary -k CHIE -r) =~ "no data" ]] && smc_supports_adapter_chie=false || smc_supports_adapter_chie=true;
-[[ $($smc_binary -k CH0I -r) =~ "no data" ]] && smc_supports_adapter_ch0i=false || smc_supports_adapter_ch0i=true;
-[[ $($smc_binary -k CH0J -r) =~ "no data" || $($smc_binary -k CH0J -r) =~ "Error" ]] && smc_supports_adapter_ch0j=false || smc_supports_adapter_ch0j=true;
-[[ $($smc_binary -k ACLC -r) == *"(bytes "* ]] && smc_supports_ACLC=true || smc_supports_ACLC=false;
-[[ $($smc_binary -k bfD0 -r) == *"(bytes "* &&
-   $($smc_binary -k bfE0 -r) == *"(bytes "* &&
-   $($smc_binary -k bfF0 -r) == *"(bytes "* ]] && smc_supports_bfF0=true || smc_supports_bfF0=false;
+function smc_key_available() {
+	[[ $("$smc_binary" -k "$1" -r) == *"(bytes "* ]]
+}
+smc_key_available CHTE && smc_supports_CHTE=true || smc_supports_CHTE=false
+smc_key_available CH0B && smc_supports_CH0B=true || smc_supports_CH0B=false
+smc_key_available CHIE && smc_supports_adapter_chie=true || smc_supports_adapter_chie=false
+smc_key_available CH0I && smc_supports_adapter_ch0i=true || smc_supports_adapter_ch0i=false
+smc_key_available CH0J && smc_supports_adapter_ch0j=true || smc_supports_adapter_ch0j=false
+smc_key_available ACLC && smc_supports_ACLC=true || smc_supports_ACLC=false
+smc_key_available bfD0 &&
+smc_key_available bfE0 &&
+smc_key_available bfF0 && smc_supports_bfF0=true || smc_supports_bfF0=false
 
 ## ###############################
 ## Detect charging control backend
