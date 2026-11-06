@@ -407,6 +407,13 @@ function mcl_maintain_disabled_charging() {
 	return 0
 }
 
+# Returns success only when the shared notification action detects calibration.
+function mcl_prefs_detect_macos_calibration() {
+	[[ "$charging_backend" == "mcl_prefs" ]] || return 1
+	"$battery_binary" _notify_mcl_prefs_changed >/dev/null 2>&1
+	[[ "$?" -eq 2 ]]
+}
+
 ## ###########################################
 ## Charging/Discharging Controls Manipulations
 ## ###########################################
@@ -986,23 +993,6 @@ if [[ "$action" == "_set_charge_limit_mcl_prefs" || "$action" == "_reset_charge_
 		return 0
 	}
 
-	function notify_mcl_prefs_changed() {
-		# Initiate a delayed notification without blocking the caller.
-		(
-			trap '' HUP
-			sleep 1
-			local output result
-			output=$("$notifyutil_binary" -p "com.apple.smartcharging.defaultschanged" 2>&1)
-			result=$?
-			# Apple's notifyutil can report a posting error on stdout and still exit 0.
-			if [[ "$result" -ne 0 || -n "$output" ]]; then
-				log "⚠️ mcl_prefs notification failed (exit $result): $output"
-			fi
-		) </dev/null >>"$logfile" 2>&1 &
-		disown "$!"
-		return 0
-	}
-
 	# Set an explicit mcl_prefs charge limit in the root preference scope.
 	if [[ "$action" == "_set_charge_limit_mcl_prefs" ]]; then
 		if [[ $# -ne 2 ]] || ! [[ "$setting" =~ ^(0|[1-9][0-9]?|100)$ ]] || [[ "$setting" -lt "$percentage_min" ]]; then
@@ -1015,7 +1005,7 @@ if [[ "$action" == "_set_charge_limit_mcl_prefs" || "$action" == "_reset_charge_
 		fi
 		mcl_prefs_write_integer mclLimitValue "$setting"
 		mcl_prefs_write_integer MCLFeatureState 1
-		notify_mcl_prefs_changed
+		"$battery_binary" _notify_mcl_prefs_changed 0.5
 		log "✅ $action: MCL charge limit is set to ("$setting")."
 		exit 0
 	fi
@@ -1028,10 +1018,35 @@ if [[ "$action" == "_set_charge_limit_mcl_prefs" || "$action" == "_reset_charge_
 		fi
 		mcl_prefs_write_integer MCLFeatureState 0
 		mcl_prefs_write_integer mclLimitValue 100
-		notify_mcl_prefs_changed
+		"$battery_binary" _notify_mcl_prefs_changed 0.5
 		log "✅ $action: MCL charge limit is dissabled. Charging requested."
 		exit 0
 	fi
+fi
+
+# Exits 0 on success, 1 on failure, and 2 when macOS battery calibration is detected.
+if [[ "$action" == "_notify_mcl_prefs_changed" ]]; then
+	sleep "${setting:-0}"
+	output=$("$notifyutil_binary" -p "com.apple.smartcharging.defaultschanged" 2>&1)
+	result=$?
+	if [[ "$result" -ne 0 || -n "$output" ]]; then
+		# Apple's notifyutil can report a posting error on stdout and still exit 0.
+		log "❌ Failed to send the charge limit notification (exit status $result): $output"
+		exit 1
+	fi
+	if ! sleep 1; then
+		log "❌ The wait before checking for macOS battery calibration failed."
+		exit 1
+	fi
+	if ! output=$(/usr/bin/log show --last 2s --style compact --predicate 'process == "PowerUIAgent"'); then
+		log "❌ Failed to read PowerUIAgent logs while checking for macOS battery calibration."
+		exit 1
+	fi
+	if grep -Fiq 'ChargingUpForGauging' <<<"$output"; then
+		log "❌ macOS battery calibration detected. macOS may temporarily override the charge limit and charge the battery to 100%."
+		exit 2
+	fi
+	exit 0
 fi
 
 # Charging on/off controller
@@ -1532,6 +1547,9 @@ if [[ "$action" == "status" ]]; then
 	if is_calibration_running >/dev/null; then
 		log "Battery calibration using 'battery calibrate' is in progress."
 	fi
+	if mcl_prefs_detect_macos_calibration; then
+		printf '\033[93m⚠️  macOS battery calibration detected. macOS may temporarily override the charge limit and charge the battery to 100%%.\033[0m\n'
+	fi
 	exit 0
 
 fi
@@ -1679,6 +1697,11 @@ if [[ "$action" == "dump_controls" ]]; then
 	printf '\nPreferences: com.apple.smartcharging.topoffprotection.plist (root scope)\n'
 	print_mcl_prefs_control MCLFeatureState "Charge limit feature state (0: disabled; 1: enabled)"
 	print_mcl_prefs_control mclLimitValue "Charge limit percentage"
+
+	printf '\n'
+	if mcl_prefs_detect_macos_calibration; then
+		printf '\033[93m⚠️  macOS battery calibration detected.\033[0m\n'
+	fi
 
 	exit 0
 
