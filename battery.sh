@@ -78,7 +78,10 @@ touch $logfile
 logsize=$(stat -f%z "$logfile")
 max_logsize_bytes=5000000
 if ((logsize > max_logsize_bytes)); then
-	tail -n 100 $logfile >$logfile
+	if log_tail=$(tail -n 1000 "$logfile"); then
+		printf '%s\n' "$log_tail" >"$logfile"
+	fi
+	unset log_tail
 fi
 
 # CLI help message
@@ -191,7 +194,16 @@ subsetting=$3
 ## ###############
 
 function log() {
-	echo -e "$(date +%D-%T) [$$]: $*"
+	local line="$(date +%D-%T) [$$]: $*"
+	printf '%s\n' "$line" || return
+
+	# Write also to the log file if stdout is not already redirected to the log file.
+	{
+		# Compare both descriptors: macOS may report different device for the pathname.
+		if [[ ! /dev/fd/1 -ef /dev/fd/3 ]]; then
+			printf '%s\n' "$line" >&3
+		fi
+	} 3>>"$logfile"
 }
 
 function valid_percentage() {
@@ -265,7 +277,7 @@ function smc_write_hex() {
 	local key=$1
 	local hex_value=$2
 	local actual expected
-	if ! sudo $smc_binary -k "$key" -w "$hex_value" >/dev/null 2>&1; then
+	if ! sudo $smc_binary -k "$key" -w "$hex_value" >/dev/null; then
 		log "⚠️ Failed to write $hex_value to $key"
 		return 1
 	fi
@@ -322,7 +334,8 @@ function detect_charging_backend() {
 charging_backend="$(detect_charging_backend)"
 
 function log_system_capabilities() {
-	log "Battery ${BATTERY_CLI_VERSION}; macOS=$($sw_vers_binary -productVersion); Charging backend=$charging_backend"
+	local script_hash=$(set -o pipefail; shasum -a 256 "$battery_binary" 2>/dev/null | cut -c1-8) || script_hash="not installed"
+	log "Battery ${BATTERY_CLI_VERSION} (${script_hash}); macOS=$($sw_vers_binary -productVersion); Charging backend=$charging_backend"
 	log "SMC capabilities: bfF0=$smc_supports_bfF0 CHTE=$smc_supports_CHTE CH0B=$smc_supports_CH0B CHIE=$smc_supports_adapter_chie CH0I=$smc_supports_adapter_ch0i CH0J=$smc_supports_adapter_ch0j ACLC=$smc_supports_ACLC"
 }
 
@@ -719,6 +732,11 @@ function is_latest_version_installed() {
 ## Actions
 ## ###############
 
+case "$action" in
+	status_csv) ;;
+	*) log "🔋 Running '$(basename "$0") $*'" >>"$logfile" ;;
+esac
+
 # If the config folder or log file were just created by the code above while
 # running as root, set the correct ownership and permissions.
 if [[ $EUID -eq 0 ]]; then
@@ -941,21 +959,21 @@ if [[ "$action" == "_set_charge_limit_mcl_smc" ]]; then
 		  "$applied_upper" =~ ^[[:xdigit:]]{8}$ &&
 		  "$applied_lower" =~ ^[[:xdigit:]]{8}$ ]]; then
 		if [[ "$applied_state" == "02" && "$applied_upper" == "$upper_hex" && "$applied_lower" == "$lower_hex" ]]; then
-			log "☑️ $action: requested charge limit ("$setting") is already set. Do nothing."
+			log "☑️ Requested charge limit ("$setting") is already set. Do nothing."
 			exit 0
 		fi
 	else
-		log "⚠️ $action: Unable to read mcl_smc charge-control settings; attempting to apply desired limits"
+		log "⚠️ Unable to read mcl_smc charge-control settings; attempting to apply desired limits"
 	fi
 
 	if smc_write_hex bfF0 00 &&
 	   smc_write_hex bfE0 "$lower_hex" &&
 	   smc_write_hex bfD0 "$upper_hex" &&
 	   smc_write_hex bfF0 02; then
-		log "✅ $action: MCL charge limit is set to $setting%."
+		log "✅ MCL charge limit is set to $setting%."
 		exit 0
 	fi
-	log "❌ $action: Failed to set MCL charge limit to $setting%. Write sequence stopped."
+	log "❌ Failed to set MCL charge limit to $setting%. Write sequence stopped."
 	exit 1
 fi
 
@@ -967,10 +985,10 @@ if [[ "$action" == "_reset_charge_limit_mcl_smc" ]]; then
 	if smc_write_hex bfF0 00 &&
 	   smc_write_hex bfD0 00000000 &&
 	   smc_write_hex bfE0 00000000; then
-		log "✅ $action: MCL charge limit is disabled. Charging requested."
+		log "✅ MCL charge limit is disabled. Charging requested."
 		exit 0
 	fi
-	log "❌ $action: Failed to disable MCL charge limit. Write sequence stopped."
+	log "❌ Failed to disable MCL charge limit. Write sequence stopped."
 	exit 1
 fi
 
@@ -1000,26 +1018,26 @@ if [[ "$action" == "_set_charge_limit_mcl_prefs" || "$action" == "_reset_charge_
 			exit 2
 		fi
 		if mcl_prefs_limit_is_already_set 1 "$setting"; then
-			log "☑️ $action: requested charge limit ("$setting") is already set. Do nothing."
+			log "☑️ Requested charge limit ("$setting") is already set. Do nothing."
 			exit 0
 		fi
 		mcl_prefs_write_integer mclLimitValue "$setting"
 		mcl_prefs_write_integer MCLFeatureState 1
 		"$battery_binary" _notify_mcl_prefs_changed 0.5
-		log "✅ $action: MCL charge limit is set to ("$setting")."
+		log "✅ MCL charge limit is set to ("$setting")."
 		exit 0
 	fi
 
 	# Disable MCL and set its percentage setting to 100 (System Settings app does the same when limit is set to 100%)
 	if [[ "$action" == "_reset_charge_limit_mcl_prefs" ]]; then
 		if mcl_prefs_limit_is_already_set 0 100; then
-			log "☑️ $action: requested reset settings are already set. Do nothing."
+			log "☑️ Requested reset settings are already set. Do nothing."
 			exit 0
 		fi
 		mcl_prefs_write_integer MCLFeatureState 0
 		mcl_prefs_write_integer mclLimitValue 100
 		"$battery_binary" _notify_mcl_prefs_changed 0.5
-		log "✅ $action: MCL charge limit is dissabled. Charging requested."
+		log "✅ MCL charge limit is dissabled. Charging requested."
 		exit 0
 	fi
 fi
@@ -1199,9 +1217,6 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
 
-		# Before doing anything, log out environment details as a debugging trail
-		log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
-
 		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
 		if [[ $maintain_percentage ]]; then
 			log "Recovering maintenance percentage $maintain_percentage"
@@ -1305,9 +1320,6 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 
 	# Recover old maintain status if old setting is found
 	if [[ "$setting" == "recover" ]]; then
-
-		# Before doing anything, log out environment details as a debugging trail
-		log "Debug trail. User: $USER, config folder: $configfolder, logfile: $logfile, file called with 1: $1, 2: $2"
 
 		maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
 		if [[ $maintain_voltage ]]; then
@@ -1439,14 +1451,14 @@ if [[ "$action" == "maintain" ]]; then
 		else
 			log "Starting battery maintenance at ${setting}V ±${subsetting}V"
 		fi
-		nohup $battery_binary maintain_voltage_synchronous $setting $subsetting >>$logfile &
+		nohup $battery_binary maintain_voltage_synchronous $setting $subsetting >>"$logfile" 2>&1 &
 	else
 		if valid_maintenance_percentage_range "$setting"; then
 			log "Starting battery maintenance between ${setting/-/% and }%"
 		else
 			log "Starting battery maintenance at $setting% $subsetting"
 		fi
-		nohup $battery_binary maintain_synchronous $setting $subsetting >>$logfile &
+		nohup $battery_binary maintain_synchronous $setting $subsetting >>"$logfile" 2>&1 &
 	fi
 
 	# Store pid of maintenance process and setting
@@ -1458,12 +1470,12 @@ if [[ "$action" == "maintain" ]]; then
 		rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2>/dev/null
 
 		if [[ "$is_voltage" = true ]]; then
-			log "Writing new setting $setting $subsetting to $maintain_voltage_tracker_file"
+			log "Saving voltage maintenance setting $setting $subsetting"
 			echo "$setting $subsetting" >$maintain_voltage_tracker_file
 			log "Maintaining battery at ${setting}V ±${subsetting}V"
 
 		else
-			log "Writing new setting $setting to $maintain_percentage_tracker_file"
+			log "Saving percentage maintenance setting $setting"
 			echo $setting >$maintain_percentage_tracker_file
 			if valid_maintenance_percentage_range "$setting"; then
 				log "Maintaining battery between ${setting/-/% and }%"
@@ -1598,26 +1610,26 @@ if [[ "$action" == "create_daemon" ]]; then
 	# check if daemon already exists
 	if test -f "$daemon_path"; then
 
-		log "Daemon already exists, checking for differences"
+		log "LaunchAgent configuration file already exists, checking for differences"
 		daemon_definition_difference=$(diff --brief --ignore-space-change --strip-trailing-cr --ignore-blank-lines <(cat "$daemon_path" 2>/dev/null) <(echo "$daemon_definition"))
 
 		# remove leading and trailing whitespaces
 		daemon_definition_difference=$(echo "$daemon_definition_difference" | xargs)
 		if [[ "$daemon_definition_difference" != "" ]]; then
 
-			log "daemon_definition changed: replace with new definitions"
+			log "Updating LaunchAgent configuration file"
 			echo "$daemon_definition" >"$daemon_path"
 
 		fi
 	else
 
 		# daemon not available, create new launch deamon
-		log "Daemon does not yet exist, creating daemon file at $daemon_path"
+		log "Creating LaunchAgent configuration file"
 		echo "$daemon_definition" >"$daemon_path"
 
 	fi
 
-	# enable daemon
+	log "Enabling battery LaunchAgent"
 	launchctl enable "gui/$(id -u $USER)/com.battery.app"
 	exit 0
 
@@ -1626,7 +1638,7 @@ fi
 # Disable daemon
 if [[ "$action" == "disable_daemon" ]]; then
 
-	log "Disabling daemon at gui/$(id -u $USER)/com.battery.app"
+	log "Disabling battery LaunchAgent"
 	launchctl disable "gui/$(id -u $USER)/com.battery.app"
 	exit 0
 
@@ -1652,7 +1664,7 @@ if [[ "$action" == "logs" ]]; then
 	tail -n $amount "$configfolder/gui.log"
 
 	echo -e "\n📁 Config folder details:\n"
-	ls -lah $configfolder
+	ls -lahn "$configfolder"
 
 	echo -e "\n⚙️	Battery data:\n"
 	$battery_binary status
