@@ -44,7 +44,7 @@ public enum MaintainTarget: Equatable, Sendable {
 		}
 
 		// Single value: "80"
-		guard let level = Int( setting ), ( 0...100 ).contains( level ) else { throw BatteryError.invalidMaintain( setting ) }
+		guard let level = Int( setting ), ( Limits.minMaintain...100 ).contains( level ) else { throw BatteryError.invalidMaintain( setting ) }
 		self = .level( lower: level, upper: level )
 
 	}
@@ -64,6 +64,15 @@ public enum MaintainTarget: Equatable, Sendable {
 	public init( persisted: String ) throws {
 		let parts = persisted.split( separator: " " ).map( String.init )
 		try self.init( parsing: parts.first ?? "", hysteresis: parts.count > 1 ? parts[ 1 ] : nil )
+	}
+
+	/// On-disk form in the daemon: the target plus an optional `--force-discharge` suffix.
+	public func persistedLine( force: Bool ) -> String { persisted + ( force ? " --force-discharge" : "" ) }
+
+	public static func parseLine( _ line: String ) -> ( target: MaintainTarget, force: Bool )? {
+		let force = line.contains( "--force-discharge" )
+		let setting = line.replacingOccurrences( of: " --force-discharge", with: "" ).trimmingCharacters( in: .whitespacesAndNewlines )
+		return ( try? MaintainTarget( persisted: setting ) ).map { ( $0, force ) }
 	}
 
 	/// Human form: "80%", "70% - 80%", "11.4V ±0.1V"

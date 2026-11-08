@@ -55,7 +55,6 @@ final class DaemonClient {
 	func charge( _ percent: Int ) async throws { _ = try await call { $0.charge( percent, reply: $1 ) } }
 	func discharge( _ percent: Int ) async throws { _ = try await call { $0.discharge( percent, reply: $1 ) } }
 	func calibrate() async throws { _ = try await call { $0.calibrate( reply: $1 ) } }
-	func recover() async throws { _ = try await call { $0.recover( reply: $1 ) } }
 	func setSchedule( _ days: Int ) async throws { _ = try await call { $0.setSchedule( days, reply: $1 ) } }
 	func installCLI() async throws { _ = try await call { $0.installCLI( reply: $1 ) } }
 	func uninstallCLI() async throws { _ = try await call { $0.uninstallCLI( reply: $1 ) } }

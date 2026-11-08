@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import BatteryCore
 
 /// UserDefaults-backed settings. Keys live here so views and the model agree.
 enum Pref {
@@ -30,9 +31,29 @@ extension UserDefaults {
 			Pref.limit: 80,
 			Pref.lower: 75,
 			Pref.forceDischarge: false,
-			Pref.presets: [ 60, 70, 80, 90 ],
+			Pref.presets: LimitSettings.defaultPresets.map( String.init ).joined( separator: "," ),
 			Pref.lowBatteryAlert: true,
 			Pref.lowBatteryLevel: 15,
 		] )
 	}
+}
+
+extension LimitSettings {
+
+	/// Edits survive restarts (the daemon's target still wins on contact, see AppModel.adoptOutsideChanges).
+	static func load() -> LimitSettings {
+		UserDefaults.registerBatteryDefaults()
+		let d = UserDefaults.standard
+		return LimitSettings( limit: d.integer( forKey: Pref.limit ), lower: d.integer( forKey: Pref.lower ), force: d.bool( forKey: Pref.forceDischarge ),
+		                      presets: presets( from: d.string( forKey: Pref.presets ) ?? "" ) )
+	}
+
+	func save() {
+		let d = UserDefaults.standard
+		d.set( limit, forKey: Pref.limit )
+		d.set( lower, forKey: Pref.lower )
+		d.set( force, forKey: Pref.forceDischarge )
+		d.set( presetsString, forKey: Pref.presets )
+	}
+
 }

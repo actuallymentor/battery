@@ -24,18 +24,29 @@ func remote( _ call: ( BatteryDaemonXPC, @escaping ( Bool, String ) -> Void ) ->
 	dispatchMain()
 }
 
+/// `status` and `status_csv`: the daemon sends one snapshot, formatting happens here (less code running as root)
+func remoteStatus( _ render: @escaping ( BatteryStatus ) -> String ) -> Never {
+	remote { proxy, reply in
+		proxy.snapshot { ok, text in
+			guard ok else { return reply( false, text ) }
+			guard let status = BatteryStatus.decode( text ) else { return reply( false, "Unreadable status from the helper (version mismatch? update Battery.app)" ) }
+			reply( true, render( status ) )
+		}
+	}
+}
+
 // Dev-only probe, not part of the v1 command set
 if args.first == "probe" { remote { $0.probe( reply: $1 ) } }
 
 do {
 	switch try Command( arguments: args ) {
 	case .help: print( Report.help )
-	case .status: remote { $0.status( reply: $1 ) }
+	case .status: remoteStatus { Report.status( $0 ) }
 	case .charge( let n ): remote { $0.charge( n, reply: $1 ) }
 	case .discharge( let n ): remote { $0.discharge( n, reply: $1 ) }
 	case .schedule( let days ): remote { $0.setSchedule( days, reply: $1 ) }
 	case .calibrate: remote { $0.calibrate( reply: $1 ) }
-	case .maintain( .recover ): remote { $0.recover( reply: $1 ) }
+	case .maintain( .recover ): remote { $0.resetAll( reply: $1 ) }
 	case .version: print( batteryVersion )
 	case .uninstall:
 		remote { proxy, reply in
@@ -48,7 +59,7 @@ do {
 	case .logs( let lines ):
 		let text = ( try? String( contentsOfFile: batteryLogPath, encoding: .utf8 ) ) ?? ""
 		print( text.split( separator: "\n" ).suffix( lines ).joined( separator: "\n" ) )
-	case .statusCSV: remote { $0.statusCSV( reply: $1 ) }
+	case .statusCSV: remoteStatus { Report.csv( $0 ) }
 	case .maintain( .stop ): remote { $0.stopMaintain( reply: $1 ) }
 	case .maintain( .set( let target, let force ) ): remote { $0.maintain( target.persisted, forceDischarge: force, reply: $1 ) }
 	case .charging( let on ): remote { $0.setCharging( on, reply: $1 ) }

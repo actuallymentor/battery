@@ -14,15 +14,12 @@ let batteryDaemonName = "co.palokaj.battery.daemon"
 	/// JSON of BatteryStatus
 	func snapshot( reply: @escaping ( Bool, String ) -> Void )
 	func probe( reply: @escaping ( Bool, String ) -> Void )
-	func status( reply: @escaping ( Bool, String ) -> Void )
 	func setCharging( _ on: Bool, reply: @escaping ( Bool, String ) -> Void )
 	func maintain( _ setting: String, forceDischarge: Bool, reply: @escaping ( Bool, String ) -> Void )
 	func stopMaintain( reply: @escaping ( Bool, String ) -> Void )
-	func statusCSV( reply: @escaping ( Bool, String ) -> Void )
 	func charge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void )
 	func discharge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void )
 	func calibrate( reply: @escaping ( Bool, String ) -> Void )
-	func recover( reply: @escaping ( Bool, String ) -> Void )
 	/// v1 (shell + sudoers + LaunchAgent) leftovers present? Reply text: comma list of what was found, empty = none.
 	func legacyFound( reply: @escaping ( Bool, String ) -> Void )
 	func removeLegacy( reply: @escaping ( Bool, String ) -> Void )

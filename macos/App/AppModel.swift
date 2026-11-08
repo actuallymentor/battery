@@ -14,7 +14,12 @@ final class AppModel {
 	private( set ) var status: BatteryStatus?
 	private( set ) var helper: Helper = .unknown
 	private( set ) var error: String?
-	private( set ) var busy = false
+	/// Actions in flight. Polling pauses while > 0 so an old snapshot can't overwrite a fresh change.
+	private var inFlight = 0
+	var busy: Bool { inFlight > 0 }
+
+	/// What the popover edits. Persisted per user; the daemon's own target wins on first contact and on outside changes.
+	var settings = LimitSettings.load() { didSet { settings.save() } }
 	private( set ) var legacyLeftovers: [ String ] = []
 
 	/// Launch at login for the menu bar app itself
@@ -25,7 +30,9 @@ final class AppModel {
 	private let defaults = UserDefaults.standard
 	private var poll: Task<Void, Never>?
 	private var alertedLow = false
-	private var adopted = false
+	/// Last target we adopted or sent: a different one in the daemon means someone else (CLI, reboot) changed it.
+	private var knownTarget: String?
+	private var actionTail: Task<Void, Never>?
 
 	init() {
 		UserDefaults.registerBatteryDefaults()
@@ -46,10 +53,13 @@ final class AppModel {
 
 	func refresh() async {
 		launchAtLogin = SMAppService.mainApp.status == .enabled
+		guard inFlight == 0 else { return }
 
 		do {
-			status = try await client.snapshot()
-			adoptDaemonLimitOnce()
+			let fresh = try await client.snapshot()
+			guard inFlight == 0 else { return }     // an action started while we waited: this snapshot is already stale
+			status = fresh
+			adoptOutsideChanges()
 			helper = .ready
 			error = nil
 			checkLowBattery()
@@ -101,16 +111,14 @@ final class AppModel {
 
 	// MARK: Limit
 
-	var limit: Int { get { defaults.integer( forKey: Pref.limit ) } set { defaults.set( newValue, forKey: Pref.limit ) } }
-	var lower: Int { get { defaults.integer( forKey: Pref.lower ) } set { defaults.set( newValue, forKey: Pref.lower ) } }
-	var forceDischarge: Bool { get { defaults.bool( forKey: Pref.forceDischarge ) } set { defaults.set( newValue, forKey: Pref.forceDischarge ) } }
-
 	func applyLimit( enabled: Bool ) {
 		perform { [ self ] in
 			if enabled {
-				let t: MaintainTarget = lower < limit ? .level( lower: max( lower, 10 ), upper: limit ) : .level( lower: limit, upper: limit )
-				try await client.maintain( t, force: forceDischarge )
+				let t = settings.target
+				knownTarget = t.persisted
+				try await client.maintain( t, force: settings.force )
 			} else {
+				knownTarget = nil
 				try await client.stopMaintain()
 			}
 		}
@@ -119,11 +127,13 @@ final class AppModel {
 	/// Re-send the band after a value changed while the limit is on.
 	func commitLimitChange() { if status?.maintain != nil { applyLimit( enabled: true ) } }
 
-	/// The daemon owns the real limit (it persists across reboots). First contact: show that, not stale prefs.
-	private func adoptDaemonLimitOnce() {
-		guard !adopted else { return }
-		adopted = true
-		if case .level( let l, let u )? = status?.maintainTarget { limit = u; lower = l; forceDischarge = status?.forceDischarge ?? false }
+	/// The daemon owns the real limit (it persists across reboots, the CLI can change it). When its target differs from the
+	/// last one we know, show that instead of stale edits.
+	private func adoptOutsideChanges() {
+		let current = status?.maintain
+		guard current != knownTarget else { return }
+		knownTarget = current
+		if let t = status?.maintainTarget { settings.adopt( t, force: status?.forceDischarge ?? false ) }
 	}
 
 	// MARK: Jobs
@@ -132,7 +142,7 @@ final class AppModel {
 	func chargeTo( _ n: Int ) { perform { [ self ] in try await client.charge( n ) } }
 	func dischargeTo( _ n: Int ) { perform { [ self ] in try await client.discharge( n ) } }
 	func calibrate() { perform { [ self ] in try await client.calibrate() } }
-	func recover() { perform { [ self ] in try await client.recover() } }
+	func recover() { perform { [ self ] in try await client.resetAll() } }
 
 	// MARK: Command line
 
@@ -189,12 +199,14 @@ final class AppModel {
 
 	// MARK: Plumbing
 
-	/// Run a daemon action, surface failures, then refresh.
+	/// Run a daemon action: actions execute strictly in the order issued, failures surface, polling resumes afterwards.
 	private func perform( _ action: @escaping () async throws -> Void ) {
-		busy = true
-		Task {
+		inFlight += 1
+		let previous = actionTail
+		actionTail = Task { [ self ] in
+			await previous?.value
 			do { try await action(); error = nil } catch { self.error = error.localizedDescription }
-			busy = false
+			inFlight -= 1
 			await refresh()
 		}
 	}

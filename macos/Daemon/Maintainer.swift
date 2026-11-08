@@ -4,19 +4,22 @@ import BatteryCore
 /// `battery maintain`: holds the battery inside a band. Persisted, so it resumes after reboot / daemon restart.
 /// Firmware backend: hands the band to the firmware and only re-asserts it. Other backends: re-evaluated on a
 /// timer, on plug/unplug and on wake, flipping charging via the SMC.
+/// Main-queue only (see `Service.onMain`).
 final class Maintainer {
 
 	private let control: ChargeControl
 	private let file = URL( fileURLWithPath: "/var/db/co.palokaj.battery/maintain" )
 	private var timer: Timer?
 	private var refilling = false
-	private var adapterCut = false
 
 	/// When we last asked the hardware to hold. Used to judge "requested vs effective" after a grace period.
 	private var heldSince: Date?
 
 	private( set ) var target: MaintainTarget?
 	private( set ) var forceDischarge = false
+
+	/// A job owns the hardware: keep the target, do nothing until the job hands back (`resume`) or is replaced (`release`).
+	private var suspended = false
 
 	init( control: ChargeControl ) {
 		self.control = control
@@ -27,29 +30,27 @@ final class Maintainer {
 
 	/// Pick up the persisted target after a reboot / daemon restart.
 	private func load() {
-		guard let raw = try? String( contentsOf: file, encoding: .utf8 ) else { return }
-		let force = raw.contains( "--force-discharge" )
-		let setting = raw.replacingOccurrences( of: " --force-discharge", with: "" ).trimmingCharacters( in: .whitespacesAndNewlines )
-		if let t = try? MaintainTarget( persisted: setting ) { _ = start( t, force: force, persist: false ) }
+		guard let raw = try? String( contentsOf: file, encoding: .utf8 ), let saved = MaintainTarget.parseLine( raw ) else { return }
+		_ = start( saved.target, force: saved.force, persist: false )
 	}
 
 	/// Nil on success, otherwise why this Mac can't do it.
 	func start( _ t: MaintainTarget, force: Bool, persist: Bool = true ) -> String? {
-
-		if control.backend == .none { return control.unsupportedMessage }
-		if control.backend == .firmwareLimit, case .voltage = t { return "Voltage targets aren't available on this Mac (firmware limit). Use a percentage." }
-		if control.backend == .firmwareLimit, case .level( _, let upper ) = t, upper < SMCPlan.firmwareFloor { return "This Mac's firmware can't hold below \( SMCPlan.firmwareFloor )%." }
-		if force, !control.caps.canCutAdapter { return "Force discharge isn't available on this Mac (no adapter-cut key)." }
+		if let why = Limits.check( maintain: t, force: force, caps: control.caps ) { return why }
 
 		log( "maintain start \( t.display ) [\( control.backend.rawValue )]\( force ? " force-discharge" : "" )" )
 		target = t
 		forceDischarge = force
+		suspended = false
 		refilling = false
 		heldSince = nil
 
+		// A replaced job may have left the adapter cut; only force-discharge is allowed to keep it that way
+		if !force, control.adapterCutByUs { control.adapter( on: true ) }
+
 		if persist {
 			try? FileManager.default.createDirectory( at: file.deletingLastPathComponent(), withIntermediateDirectories: true )
-			try? ( t.persisted + ( force ? " --force-discharge" : "" ) ).write( to: file, atomically: true, encoding: .utf8 )
+			try? t.persistedLine( force: force ).write( to: file, atomically: true, encoding: .utf8 )
 		}
 
 		timer?.invalidate()
@@ -58,57 +59,57 @@ final class Maintainer {
 		return nil
 	}
 
-	/// Stop and hand charging back to macOS.
+	/// Drop the target. Hardware goes back to stock unless a job is running: that one owns it.
 	func stop() {
 		log( "maintain stop" )
 		timer?.invalidate(); timer = nil
 		target = nil
 		heldSince = nil
 		try? FileManager.default.removeItem( at: file )
-		restore()
+		if !suspended { restore() }
 	}
 
 	/// A job (charge/discharge/calibrate) takes over charging; the target is kept.
-	func suspend() { timer?.invalidate(); timer = nil }
+	func suspend() { timer?.invalidate(); timer = nil; suspended = true }
+
+	/// The job was replaced by something that now owns the hardware (new target, manual override): just stop waiting for it.
+	func release() { suspended = false }
 
 	/// Back to maintaining after a job. Without a target: `restoring` hands charging back to macOS, otherwise leave it as the job set it.
 	func resume( restoring: Bool ) {
+		suspended = false
 		if let target { _ = start( target, force: forceDischarge, persist: false ) } else if restoring { restore() }
 	}
 
 	private func restore() {
 		control.resetAll()
-		adapterCut = false
 		refilling = false
+		heldSince = nil
 	}
 
 	// MARK: Events
 
 	/// Plug/unplug, wake: re-evaluate now instead of waiting for the timer.
-	func reconcile() { if target != nil { tick() } }
+	func reconcile() { if target != nil, !suspended { tick() } }
 
-	/// Going to sleep: never sleep with the adapter cut by us.
+	/// Going to sleep: never sleep with the adapter cut by us (covers jobs too: one flag in ChargeControl).
 	func willSleep() {
 		guard control.adapterCutByUs else { return }
 		control.adapter( on: true )
-		adapterCut = false
 		log( "sleep: adapter restored" )
 	}
 
 	/// Observed effect problem, for the UI. Nil = fine or unknown.
 	func warning( _ p: Power.Reading ) -> String? {
 		guard target != nil else { return nil }
-		guard let since = heldSince, Date().timeIntervalSince( since ) > 120 else { return nil }
-		if control.chargingEnabled == false, p.snapshot.acAttached, p.isCharging == true, ( p.amperage ?? 0 ) > 100 {
-			return "macOS is still charging even though the limit is set. This Mac may be ignoring the charge control."
-		}
-		return nil
+		return Controller.effectWarning( heldFor: heldSince.map { Date().timeIntervalSince( $0 ) }, chargingEnabled: control.chargingEnabled,
+		                                 acAttached: p.snapshot.acAttached, isCharging: p.isCharging, amperage: p.amperage )
 	}
 
 	// MARK: Loop
 
 	private func tick() {
-		guard let target, let reading = Power.read() else { return }
+		guard let target, !suspended, let reading = Power.read() else { return }
 		let percent = reading.snapshot.percent
 
 		// Firmware: the limit lives in the SMC. Just make sure it is still there.
@@ -124,17 +125,15 @@ final class Maintainer {
 		let state = BatteryState( percent: percent, voltage: reading.voltage, chargingEnabled: control.chargingEnabled,
 		                          acAttached: reading.snapshot.acAttached, refilling: refilling )
 
-		// --force-discharge: above the band on AC, cut the adapter until we are back inside it
 		if forceDischarge, case .level( _, let upper ) = target {
-			let over = percent > upper && state.acAttached
-			if over != adapterCut {
-				control.adapter( on: !over )
-				adapterCut = over
-			}
+			let cut = control.adapterCutByUs
+			let want = Controller.forceDischargeCut( percent: percent, upper: upper, acAttached: state.acAttached, currentlyCut: cut )
+			if want != cut { control.adapter( on: !want ) }
 		}
 
 		let d = Controller.decide( target, state )
 		if let r = d.refilling { refilling = r }
+		if let led = d.led { control.led( led ) }
 
 		switch d.action {
 		case .enableCharging:

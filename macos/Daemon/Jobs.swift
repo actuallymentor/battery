@@ -1,101 +1,73 @@
 import Foundation
 import BatteryCore
 
-/// One-shot jobs: `charge N`, `discharge N`, `calibrate`. Maintenance pauses while one runs, then resumes.
+/// Runs one-shot jobs (`charge N`, `discharge N`, `calibrate`) on a timer. The rules live in `JobPlanner`
+/// (pure, tested); this only turns intents into SMC writes. Maintenance pauses while a job runs, then resumes.
+/// Main-queue only.
 final class Jobs {
-
-	enum Kind {
-		case charge( Int )
-		case discharge( Int )
-		case calibrate( Calibration )
-	}
 
 	private let control: ChargeControl
 	private let maintainer: Maintainer
 	private var timer: Timer?
-	private( set ) var kind: Kind?
+	private( set ) var job: Job?
 
 	init( control: ChargeControl, maintainer: Maintainer ) {
 		self.control = control
 		self.maintainer = maintainer
 	}
 
-	/// Human line for `status`, nil when idle.
-	var activity: String? {
-		switch kind {
-		case .charge( let n ): return "Charging to \( n )%"
-		case .discharge( let n ): return "Discharging to \( n )%"
-		case .calibrate( let c ): return "Calibrating: \( c.phase.message )"
-		case nil: return nil
-		}
-	}
+	/// Line for `status`, nil when idle.
+	var activity: String? { job?.activity }
 
-	func start( _ k: Kind ) {
-		cancel()
+	func start( _ j: Job ) {
+		abort()
 		maintainer.suspend()
-		kind = k
-		log( "job start: \( activity ?? "" )" )
-		apply( k )
+		job = j
+		log( "job start: \( j.activity )" )
+		run( JobPlanner.start( j ) )
 		timer = Timer.scheduledTimer( withTimeInterval: 20, repeats: true ) { [ weak self ] _ in self?.tick() }
 		tick()
 	}
 
-	/// After wake the adapter was restored for sleep: put the job's state back.
-	func reconcile() { if let kind { apply( kind ) } }
-
-	/// Abort: back to normal charging
+	/// User cancel: back to normal charging (or the maintain target).
 	func cancel() { end( restoring: true ) }
 
-	/// Job reached its goal: keep what it set (e.g. charging held off after `charge N`)
-	private func finish() { end( restoring: false ) }
+	/// Replaced by a new owner of the hardware (a new maintain target, a manual override): no hardware writes, no resume.
+	func abort() {
+		timer?.invalidate(); timer = nil
+		guard job != nil else { return }
+		log( "job replaced" )
+		job = nil
+		maintainer.release()
+	}
+
+	/// After wake the adapter was restored for sleep: put the job's state back.
+	func reconcile() { if let job { run( JobPlanner.start( job ) ) } }
 
 	private func end( restoring: Bool ) {
 		timer?.invalidate(); timer = nil
-		guard kind != nil else { return }
+		guard job != nil else { return }
 		log( "job end (\( restoring ? "cancelled" : "done" ))" )
-		kind = nil
+		job = nil
 		maintainer.resume( restoring: restoring )
 	}
 
-	/// Side effects for the phase a job just entered
-	private func apply( _ k: Kind ) {
-		switch k {
-		case .charge: control.adapter( on: true ); control.charging( true )
-		case .discharge: control.adapter( on: false )
-		case .calibrate( let c ): applyPhase( c.phase )
-		}
-	}
-
-	private func applyPhase( _ p: Calibration.Phase ) {
-		switch p {
-		case .discharging15, .discharging80: control.adapter( on: false )
-		case .charging100, .holding: control.adapter( on: true ); control.charging( true )
-		case .done: break
-		}
-	}
-
 	private func tick() {
-		guard let kind, let percent = Power.read()?.snapshot.percent else { return }
+		guard let current = job, let percent = Power.read()?.snapshot.percent else { return }
+		let step = JobPlanner.step( current, percent: percent, now: Date() )
 
-		switch kind {
-		case .charge( let n ):
-			if percent >= n {
-				// Below 100 hold at the reached level (v1 behaviour). At 100 there is nothing to hold: leave charging normal.
-				if n >= 100 { control.charging( true ) } else { control.charging( false, level: percent ) }
-				finish()
-			}
+		job = step.job
+		if case .calibrate( let before ) = current, case .calibrate( let after ) = step.job, before.phase != after.phase { log( "calibrate: \( after.phase.message )" ) }
 
-		case .discharge( let n ):
-			if percent <= n { control.adapter( on: true ); finish() }
+		run( step.intents )
+		if step.finished { end( restoring: false ) }
+	}
 
-		case .calibrate( var c ):
-			if c.advance( percent: percent, now: Date() ) {
-				self.kind = .calibrate( c )
-				log( "calibrate: \( c.phase.message )" )
-				applyPhase( c.phase )
-				if c.phase == .done { control.adapter( on: true ); control.charging( true ); finish() }
-			} else {
-				self.kind = .calibrate( c )   // holdStart lives inside the struct
+	private func run( _ intents: [ Intent ] ) {
+		for intent in intents {
+			switch intent {
+			case .adapter( let on ): control.adapter( on: on )
+			case .charging( let on, let level ): control.charging( on, level: level )
 			}
 		}
 	}

@@ -5,12 +5,7 @@ import BatteryCore
 struct MenuContent: View {
 
 	@Bindable var model: AppModel
-	@AppStorage( Pref.limit ) private var limit = 80
-	@AppStorage( Pref.lower ) private var lower = 75
-	@AppStorage( Pref.forceDischarge ) private var force = false
-	@AppStorage( Pref.presets ) private var presetsRaw = "60,70,80,90"
 	@State private var confirmCalibrate = false
-	@State private var customPreset = ""
 
 	var body: some View {
 		VStack( alignment: .leading, spacing: 14 ) {
@@ -45,7 +40,7 @@ struct MenuContent: View {
 				Label( w, systemImage: "exclamationmark.triangle.fill" )
 					.font( .caption ).foregroundStyle( .orange ).fixedSize( horizontal: false, vertical: true )
 			}
-			if s.backend != "none" {
+			if s.canLimit {
 				limitSection( s )
 				actions( s )
 			}
@@ -83,35 +78,35 @@ struct MenuContent: View {
 			.disabled( model.busy )
 
 			HStack {
-				ForEach( presets, id: \.self ) { p in
-					Button( "\( p )%" ) { limit = p; lower = min( lower, p - 1 ); model.commitLimitChange() }
+				ForEach( model.settings.presets, id: \.self ) { p in
+					Button( "\( p )%" ) { model.settings.setLimit( p ); model.commitLimitChange() }
 						.buttonStyle( .bordered )
-						.tint( limit == p ? .accentColor : .secondary )
+						.tint( model.settings.limit == p ? .accentColor : .secondary )
 						.controlSize( .small )
-						.contextMenu { Button( "Remove preset" ) { removePreset( p ) } }
+						.contextMenu { Button( "Remove preset" ) { model.settings.removePreset( p ) } }
 				}
 				Spacer()
 				Menu {
-					Button( "Add current (\( limit )%) as preset" ) { addPreset( limit ) }
+					Button( "Add current (\( model.settings.limit )%) as preset" ) { model.settings.addPreset( model.settings.limit ) }
 					Divider()
-					Button( "Reset presets" ) { presetsRaw = "60,70,80,90" }
+					Button( "Reset presets" ) { model.settings.resetPresets() }
 				} label: { Image( systemName: "ellipsis.circle" ) }
 				.menuStyle( .borderlessButton ).fixedSize()
 			}
 
-			Slider( value: Binding( get: { Double( limit ) }, set: { limit = Int( $0 ); lower = min( lower, limit - 1 ) } ), in: 20...100, step: 1,
+			Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.settings.setLimit( Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
 			        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
 
 			HStack {
-				Text( "Stop at \( limit )%" )
+				Text( "Stop at \( model.settings.limit )%" )
 				Spacer()
-				Stepper( "Resume below \( lower )%", value: Binding( get: { lower }, set: { lower = min( max( $0, 10 ), limit ); model.commitLimitChange() } ), in: 10...100 )
+				Stepper( "Resume below \( model.settings.lower )%", value: Binding( get: { model.settings.lower }, set: { model.settings.setLower( $0 ); model.commitLimitChange() } ), in: Limits.minMaintain...model.settings.limit )
 					.font( .caption )
 			}
 			.font( .caption )
 
-			if canCutAdapter( s ) {
-				Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { force }, set: { force = $0; model.commitLimitChange() } ) )
+			if s.canCutAdapter {
+				Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { model.settings.force }, set: { model.settings.force = $0; model.commitLimitChange() } ) )
 					.font( .caption )
 					.help( "Uses the battery instead of the adapter while above the limit. Can conflict with clamshell mode." )
 			}
@@ -129,11 +124,11 @@ struct MenuContent: View {
 			} else {
 				HStack {
 					Button { model.chargeTo( 100 ) } label: { Label( "Charge to 100%", systemImage: "bolt.fill" ) }
-					if canCutAdapter( s ) {
-						Button { model.dischargeTo( max( limit - 10, 20 ) ) } label: { Label( "Discharge to \( max( limit - 10, 20 ) )%", systemImage: "arrow.down.circle" ) }
+					if s.canCutAdapter {
+						Button { model.dischargeTo( model.settings.dischargeTarget ) } label: { Label( "Discharge to \( model.settings.dischargeTarget )%", systemImage: "arrow.down.circle" ) }
 					}
 				}
-				if canCutAdapter( s ) { Button { confirmCalibrate = true } label: { Label( "Calibrate battery…", systemImage: "gauge.with.dots.needle.bottom.50percent" ) }
+				if s.canCutAdapter { Button { confirmCalibrate = true } label: { Label( "Calibrate battery…", systemImage: "gauge.with.dots.needle.bottom.50percent" ) }
 					.confirmationDialog( "Calibrate battery?", isPresented: $confirmCalibrate ) {
 						Button( "Calibrate", role: .destructive ) { model.calibrate() }
 					} message: { Text( "Discharges to 15%, charges to 100%, holds for an hour, then returns to your limit. Takes several hours. Keep the Mac awake and plugged in." ) } }
@@ -143,9 +138,6 @@ struct MenuContent: View {
 		.controlSize( .small )
 		.disabled( model.busy )
 	}
-
-	/// Adapter cut keys exist: force discharge, discharge-to and calibrate depend on them
-	private func canCutAdapter( _ s: BatteryStatus ) -> Bool { !Set( s.smcKeys ).isDisjoint( with: [ "CHIE", "CH0J", "CH0I" ] ) }
 
 	// MARK: Footer
 
@@ -158,16 +150,6 @@ struct MenuContent: View {
 		}
 		.buttonStyle( .plain ).font( .caption ).foregroundStyle( .secondary )
 	}
-
-	// MARK: Presets (#462)
-
-	private var presets: [ Int ] { presetsRaw.split( separator: "," ).compactMap { Int( $0 ) }.sorted() }
-
-	private func addPreset( _ p: Int ) {
-		presetsRaw = Array( Set( presets + [ p ] ) ).sorted().prefix( 6 ).map( String.init ).joined( separator: "," )
-	}
-
-	private func removePreset( _ p: Int ) { presetsRaw = presets.filter { $0 != p }.map( String.init ).joined( separator: "," ) }
 
 }
 

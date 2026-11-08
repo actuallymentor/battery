@@ -51,6 +51,12 @@ final class ChargeControl {
 		return ok
 	}
 
+	/// MagSafe LED. Only where the key exists (absent on Macs without MagSafe and on 26.1): silently skipped elsewhere (#343).
+	func led( _ color: LEDColor ) {
+		guard caps.keys.contains( "ACLC" ) else { return }
+		apply( [ SMCPlan.led( color ) ] )
+	}
+
 	/// Firmware backend: hand a band to the firmware, which then enforces it by itself (also asleep and before login).
 	@discardableResult
 	func firmwareLimit( upper: Int, lower: Int ) -> Bool {
@@ -71,6 +77,7 @@ final class ChargeControl {
 		if backend == .firmwareLimit { apply( SMCPlan.firmwareReset ) }
 		else { charging( true ) }
 		if caps.canCutAdapter { adapter( on: true ) }
+		led( .off )
 	}
 
 	// MARK: Unsupported

@@ -16,8 +16,8 @@ public enum BatteryError: Error, Equatable, CustomStringConvertible {
 
 	public var description: String {
 		switch self {
-		case .invalidPercentage( let v ): return "\(v) is not a valid percentage. Use a number between 0 and 100"
-		case .invalidMaintain( let v ): return "\(v) is not a valid setting for battery maintain. Use a number between 0 and 100, a range like 70-80, a voltage like 11.4V, or 'stop' / 'recover'"
+		case .invalidPercentage( let v ): return "\(v) is not a valid percentage. charge takes 1-100, discharge 5-100"
+		case .invalidMaintain( let v ): return "\(v) is not a valid setting for battery maintain. Use a number between 10 and 100, a range like 70-80, a voltage like 11.4V, or 'stop' / 'recover'"
 		case .invalidVoltage( let v ): return "\(v) is not a valid voltage. Use a value between \(Voltage.range.lowerBound)V and \(Voltage.range.upperBound)V"
 		case .invalidHysteresis( let v ): return "\(v) is not a valid hysteresis. Use a value between \(Voltage.hysteresisRange.lowerBound)V and \(Voltage.hysteresisRange.upperBound)V"
 		case .invalidOnOff( let v ): return "\(v) is not \"on\" or \"off\""

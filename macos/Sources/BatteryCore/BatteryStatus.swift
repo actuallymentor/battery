@@ -68,6 +68,12 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 		self.daemonVersion = daemonVersion
 	}
 
+	/// Force discharge, discharge-to and calibrate depend on an adapter-cut key
+	public var canCutAdapter: Bool { SMCCapabilities( keys: Set( smcKeys ) ).canCutAdapter }
+
+	/// This Mac has some way to hold charging
+	public var canLimit: Bool { backend != "none" }
+
 	public var maintainTarget: MaintainTarget? { maintain.flatMap { try? MaintainTarget( persisted: $0 ) } }
 
 	/// One-line state for the popover header

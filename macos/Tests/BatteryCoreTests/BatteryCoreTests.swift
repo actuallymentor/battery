@@ -5,7 +5,9 @@ final class MaintainTargetTests: XCTestCase {
 
 	func testParsesSingleLevel() throws {
 		XCTAssertEqual( try MaintainTarget( parsing: "80" ), .level( lower: 80, upper: 80 ) )
-		XCTAssertEqual( try MaintainTarget( parsing: "0" ), .level( lower: 0, upper: 0 ) )
+		XCTAssertThrowsError( try MaintainTarget( parsing: "0" ) )   // would drain with force-discharge
+		XCTAssertThrowsError( try MaintainTarget( parsing: "9" ) )
+		XCTAssertEqual( try MaintainTarget( parsing: "10" ), .level( lower: 10, upper: 10 ) )
 	}
 
 	func testParsesRange() throws {
@@ -194,7 +196,10 @@ final class CommandTests: XCTestCase {
 
 	func testChargeDischarge() throws {
 		XCTAssertEqual( try parse( "charge 90" ), .charge( 90 ) )
-		XCTAssertEqual( try parse( "discharge 0" ), .discharge( 0 ) )
+		XCTAssertThrowsError( try parse( "discharge 0" ) )
+		XCTAssertThrowsError( try parse( "discharge 4" ) )
+		XCTAssertEqual( try parse( "discharge 5" ), .discharge( 5 ) )
+		XCTAssertThrowsError( try parse( "charge 0" ) )
 		XCTAssertThrowsError( try parse( "charge 101" ) )
 		XCTAssertThrowsError( try parse( "charge" ) )
 	}
@@ -376,4 +381,230 @@ final class ScheduleCommandTests: XCTestCase {
 		XCTAssertThrowsError( try Command( arguments: [ "schedule", "400" ] ) )
 		XCTAssertThrowsError( try Command( arguments: [ "schedule" ] ) )
 	}
+}
+
+
+final class LimitsTests: XCTestCase {
+
+	func testChargeAndDischargeBounds() {
+		XCTAssertNil( Limits.check( charge: 100 ) )
+		XCTAssertNotNil( Limits.check( charge: 0 ) )
+		XCTAssertNotNil( Limits.check( charge: 101 ) )
+		XCTAssertNil( Limits.check( discharge: 5 ) )
+		XCTAssertNotNil( Limits.check( discharge: -1 ) )   // a hostile client: never reaches its goal, runs flat
+		XCTAssertNotNil( Limits.check( discharge: 4 ) )
+	}
+
+	func testMaintainBoundsEvenForHandBuiltTargets() {
+		XCTAssertNil( Limits.check( maintain: .level( lower: 80, upper: 80 ) ) )
+		XCTAssertNotNil( Limits.check( maintain: .level( lower: 0, upper: 0 ) ) )
+		XCTAssertNotNil( Limits.check( maintain: .level( lower: 5, upper: 50 ) ) )
+		XCTAssertNotNil( Limits.check( maintain: .level( lower: 60, upper: 50 ) ) )
+		XCTAssertNotNil( Limits.check( maintain: .voltage( center: 30, hysteresis: 0.1 ) ) )
+	}
+
+}
+
+final class StatusRenderingTests: XCTestCase {
+
+	func testStatusFromSnapshot() {
+		let s = BatteryStatus( percent: 81, voltage: 12.4, remaining: "1:05", acAttached: true, chargingEnabled: false, maintain: "70-80", activity: "Charging to 90%", warning: "x" )
+		let text = Report.status( s )
+		XCTAssertTrue( text.hasPrefix( "Battery at 81% (1:05 remaining), 12.4V, smc charging disabled" ) )
+		XCTAssertTrue( text.contains( "maintained at 70% - 80%" ) )
+		XCTAssertTrue( text.contains( "Charging to 90%" ) )
+		XCTAssertTrue( text.contains( "Warning: x" ) )
+	}
+
+	func testCSVFromSnapshot() {
+		let s = BatteryStatus( percent: 50, remaining: "no estimate", acAttached: true, chargingEnabled: true, discharging: false, maintain: "80" )
+		XCTAssertEqual( Report.csv( s ), "50,no estimate,enabled,not discharging,80" )
+	}
+
+}
+
+// MARK: Refactor extractions
+
+final class JobPlannerTests: XCTestCase {
+
+	private let t0 = Date( timeIntervalSince1970: 1_000_000 )
+
+	func testChargeBelowHundredHoldsAtReachedLevel() {
+		XCTAssertEqual( JobPlanner.start( .charge( 90 ) ), [ .adapter( on: true ), .charging( on: true, holdAtLevel: nil ) ] )
+		XCTAssertFalse( JobPlanner.step( .charge( 90 ), percent: 89, now: t0 ).finished )
+		let done = JobPlanner.step( .charge( 90 ), percent: 91, now: t0 )
+		XCTAssertTrue( done.finished )
+		XCTAssertEqual( done.intents, [ .charging( on: false, holdAtLevel: 91 ) ] )
+	}
+
+	func testChargeToHundredLeavesChargingNormal() {
+		// the bug: holding charging off at 100% with no limit set meant the Mac never charged again
+		XCTAssertEqual( JobPlanner.step( .charge( 100 ), percent: 100, now: t0 ).intents, [ .charging( on: true, holdAtLevel: nil ) ] )
+	}
+
+	func testDischargeRestoresAdapterAtTarget() {
+		XCTAssertEqual( JobPlanner.start( .discharge( 50 ) ), [ .adapter( on: false ) ] )
+		XCTAssertFalse( JobPlanner.step( .discharge( 50 ), percent: 51, now: t0 ).finished )
+		let done = JobPlanner.step( .discharge( 50 ), percent: 50, now: t0 )
+		XCTAssertEqual( done.intents, [ .adapter( on: true ) ] )
+		XCTAssertTrue( done.finished )
+	}
+
+	func testCalibrationWalksThroughPhases() {
+		var job = Job.calibrate( Calibration() )
+		XCTAssertEqual( JobPlanner.start( job ), [ .adapter( on: false ) ] )
+
+		var s = JobPlanner.step( job, percent: 15, now: t0 )          // -> charging100
+		XCTAssertEqual( s.intents, [ .adapter( on: true ), .charging( on: true, holdAtLevel: nil ) ] )
+		job = s.job
+		s = JobPlanner.step( job, percent: 100, now: t0 )              // -> holding
+		job = s.job
+		XCTAssertFalse( s.finished )
+		s = JobPlanner.step( job, percent: 100, now: t0.addingTimeInterval( 3601 ) )   // -> discharging80
+		XCTAssertEqual( s.intents, [ .adapter( on: false ) ] )
+		job = s.job
+		s = JobPlanner.step( job, percent: 80, now: t0.addingTimeInterval( 4000 ) )    // -> done
+		XCTAssertTrue( s.finished )
+		XCTAssertEqual( s.intents, [ .adapter( on: true ), .charging( on: true, holdAtLevel: nil ) ] )
+	}
+
+	func testActivityText() {
+		XCTAssertEqual( Job.charge( 90 ).activity, "Charging to 90%" )
+		XCTAssertEqual( Job.discharge( 50 ).activity, "Discharging to 50%" )
+	}
+
+}
+
+final class ScheduleTests: XCTestCase {
+
+	private let t0 = Date( timeIntervalSince1970: 1_000_000 )
+	private let day = 86400.0
+
+	func testEnablingCountsFromNow() {
+		var s = Schedule()
+		XCTAssertNil( s.nextRun )
+		s.set( days: 7, now: t0 )
+		XCTAssertEqual( s.nextRun, t0.addingTimeInterval( 7 * day ) )
+	}
+
+	func testReEnablingAfterOffDoesNotFireImmediately() {
+		var s = Schedule( days: 7, lastRun: t0 )
+		s.set( days: 0, now: t0.addingTimeInterval( 30 * day ) )
+		s.set( days: 7, now: t0.addingTimeInterval( 60 * day ) )
+		XCTAssertFalse( s.isDue( now: t0.addingTimeInterval( 61 * day ), acAttached: true, busy: false ) )
+	}
+
+	func testDueNeedsACAndIdle() {
+		let s = Schedule( days: 1, lastRun: t0 )
+		let later = t0.addingTimeInterval( 2 * day )
+		XCTAssertTrue( s.isDue( now: later, acAttached: true, busy: false ) )
+		XCTAssertFalse( s.isDue( now: later, acAttached: false, busy: false ) )
+		XCTAssertFalse( s.isDue( now: later, acAttached: true, busy: true ) )
+		XCTAssertFalse( s.isDue( now: t0.addingTimeInterval( day / 2 ), acAttached: true, busy: false ) )
+	}
+
+	func testClampAndPersistence() {
+		XCTAssertEqual( Schedule( days: 500 ).days, 90 )
+		XCTAssertEqual( Schedule( days: -3 ).days, 0 )
+		let s = Schedule( days: 30, lastRun: t0 )
+		XCTAssertEqual( Schedule( persisted: s.persisted ), s )
+		XCTAssertNil( Schedule( persisted: "7 0" ).lastRun )     // 0 = never
+		XCTAssertEqual( Schedule( persisted: "garbage" ).days, 0 )
+	}
+
+}
+
+final class MaintainValidationTests: XCTestCase {
+
+	private func caps( _ k: [ String ] ) -> SMCCapabilities { SMCCapabilities( keys: Set( k ) ) }
+
+	func testUnsupportedMac() {
+		XCTAssertNotNil( Limits.check( maintain: .level( lower: 80, upper: 80 ), force: false, caps: caps( [] ) ) )
+	}
+
+	func testFirmwareRules() {
+		let fw = caps( [ "bfD0", "bfE0", "bfF0" ] )
+		XCTAssertNil( Limits.check( maintain: .level( lower: 70, upper: 80 ), force: false, caps: fw ) )
+		XCTAssertNotNil( Limits.check( maintain: .voltage( center: 11.4, hysteresis: 0.1 ), force: false, caps: fw ) )
+		XCTAssertNotNil( Limits.check( maintain: .level( lower: 80, upper: 80 ), force: true, caps: fw ) )   // no adapter-cut key
+	}
+
+	func testForceNeedsAdapterKey() {
+		XCTAssertNil( Limits.check( maintain: .level( lower: 80, upper: 80 ), force: true, caps: caps( [ "CHTE", "CHIE" ] ) ) )
+		XCTAssertNotNil( Limits.check( maintain: .level( lower: 80, upper: 80 ), force: true, caps: caps( [ "CHTE" ] ) ) )
+	}
+
+	func testPersistedLineRoundTrip() throws {
+		let t = MaintainTarget.level( lower: 70, upper: 80 )
+		XCTAssertEqual( MaintainTarget.parseLine( t.persistedLine( force: true ) )?.force, true )
+		XCTAssertEqual( MaintainTarget.parseLine( t.persistedLine( force: false ) )?.target, t )
+		XCTAssertEqual( MaintainTarget.parseLine( "11.4V 0.3V --force-discharge" )?.target, .voltage( center: 11.4, hysteresis: 0.3 ) )
+		XCTAssertNil( MaintainTarget.parseLine( "junk" ) )
+	}
+
+}
+
+final class ControllerExtrasTests: XCTestCase {
+
+	func testForceDischargeDoesNotFlapWhenAdapterCutMakesACReadFalse() {
+		// cut adapter => macOS says "not on AC". Without `currentlyCut` the loop would restore and re-cut every tick.
+		XCTAssertTrue( Controller.forceDischargeCut( percent: 85, upper: 80, acAttached: false, currentlyCut: true ) )
+		XCTAssertFalse( Controller.forceDischargeCut( percent: 85, upper: 80, acAttached: false, currentlyCut: false ) )
+		XCTAssertFalse( Controller.forceDischargeCut( percent: 80, upper: 80, acAttached: true, currentlyCut: true ) )
+		XCTAssertTrue( Controller.forceDischargeCut( percent: 81, upper: 80, acAttached: true, currentlyCut: false ) )
+	}
+
+	func testEffectWarning() {
+		XCTAssertNotNil( Controller.effectWarning( heldFor: 200, chargingEnabled: false, acAttached: true, isCharging: true, amperage: 900 ) )
+		XCTAssertNil( Controller.effectWarning( heldFor: 30, chargingEnabled: false, acAttached: true, isCharging: true, amperage: 900 ) )   // firmware still acting
+		XCTAssertNil( Controller.effectWarning( heldFor: nil, chargingEnabled: false, acAttached: true, isCharging: true, amperage: 900 ) )
+		XCTAssertNil( Controller.effectWarning( heldFor: 200, chargingEnabled: false, acAttached: true, isCharging: false, amperage: 0 ) )
+	}
+
+}
+
+final class LimitSettingsTests: XCTestCase {
+
+	func testBandAndSingleLevel() {
+		XCTAssertEqual( LimitSettings( limit: 80, lower: 70 ).target, .level( lower: 70, upper: 80 ) )
+		XCTAssertEqual( LimitSettings( limit: 80, lower: 80 ).target, .level( lower: 80, upper: 80 ) )
+	}
+
+	func testLowerFollowsLimitDown() {
+		var s = LimitSettings( limit: 90, lower: 85 )
+		s.setLimit( 60 )
+		XCTAssertEqual( s.lower, 60 )
+		s.setLower( 5 )
+		XCTAssertEqual( s.lower, Limits.minMaintain )
+		s.setLower( 99 )
+		XCTAssertEqual( s.lower, 60 )
+	}
+
+	func testSliderClamp() {
+		XCTAssertEqual( LimitSettings( limit: 5 ).limit, 20 )
+		XCTAssertEqual( LimitSettings( limit: 500 ).limit, 100 )
+	}
+
+	func testPresets() {
+		var s = LimitSettings()
+		s.addPreset( 85 ); s.addPreset( 85 ); s.addPreset( 5 )
+		XCTAssertEqual( s.presets, [ 60, 70, 80, 85, 90 ] )
+		s.addPreset( 95 ); s.addPreset( 75 )
+		XCTAssertEqual( s.presets.count, LimitSettings.maxPresets )
+		s.removePreset( 60 )
+		XCTAssertFalse( s.presets.contains( 60 ) )
+		s.resetPresets()
+		XCTAssertEqual( s.presets, LimitSettings.defaultPresets )
+		XCTAssertEqual( LimitSettings.presets( from: "60,x,80" ), [ 60, 80 ] )
+	}
+
+	func testAdoptDaemonTarget() {
+		var s = LimitSettings()
+		s.adopt( .level( lower: 50, upper: 60 ), force: true )
+		XCTAssertEqual( s.limit, 60 ); XCTAssertEqual( s.lower, 50 ); XCTAssertTrue( s.force )
+		s.adopt( .voltage( center: 11.4, hysteresis: 0.1 ), force: false )   // not a band: ignore
+		XCTAssertEqual( s.limit, 60 )
+		XCTAssertEqual( s.dischargeTarget, 50 )
+	}
+
 }

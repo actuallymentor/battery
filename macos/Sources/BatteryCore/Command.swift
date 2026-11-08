@@ -55,10 +55,10 @@ public enum Command: Equatable, Sendable {
 			self = .adapter( on: try Self.onOff( setting ) )
 
 		case "charge":
-			self = .charge( try Self.percent( setting ) )
+			self = .charge( try Self.percent( setting, in: Limits.chargeTargets ) )
 
 		case "discharge":
-			self = .discharge( try Self.percent( setting ) )
+			self = .discharge( try Self.percent( setting, in: Limits.dischargeTargets ) )
 
 		case "maintain":
 			guard let setting else { throw BatteryError.missingArgument( "maintain PERCENTAGE|RANGE|VOLTAGE|stop" ) }
@@ -87,8 +87,8 @@ public enum Command: Equatable, Sendable {
 		}
 	}
 
-	private static func percent( _ s: String? ) throws -> Int {
-		guard let s, let n = Int( s ), ( 0...100 ).contains( n ) else { throw BatteryError.invalidPercentage( s ?? "" ) }
+	private static func percent( _ s: String?, in range: ClosedRange<Int> ) throws -> Int {
+		guard let s, let n = Int( s ), range.contains( n ) else { throw BatteryError.invalidPercentage( s ?? "" ) }
 		return n
 	}
 

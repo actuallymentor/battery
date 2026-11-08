@@ -79,6 +79,19 @@ public enum Controller {
 		return .idle
 	}
 
+	/// `--force-discharge`: cut the adapter while above the band, restore once back inside it.
+	/// A cut adapter makes macOS report "not on AC", so `currentlyCut` must keep the decision stable (no flapping every tick).
+	public static func forceDischargeCut( percent: Int, upper: Int, acAttached: Bool, currentlyCut: Bool ) -> Bool {
+		percent > upper && ( acAttached || currentlyCut )
+	}
+
+	/// Requested vs effective: we hold charging off, yet current still flows into the pack.
+	/// `heldFor` is how long the hold has been in place (firmware needs ~45 s to act).
+	public static func effectWarning( heldFor: TimeInterval?, chargingEnabled: Bool?, acAttached: Bool, isCharging: Bool?, amperage: Int? ) -> String? {
+		guard let heldFor, heldFor > 120, chargingEnabled == false, acAttached, isCharging == true, ( amperage ?? 0 ) > 100 else { return nil }
+		return "macOS is still charging even though the limit is set. This Mac may be ignoring the charge control."
+	}
+
 	/// Seconds to sleep between `charge N` polls: slow far away, fast near the target.
 	public static func chargePollInterval( percent: Int, target: Int ) -> TimeInterval {
 		percent >= target - 3 ? 20 : 60
