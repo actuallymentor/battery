@@ -12,59 +12,73 @@ struct SettingsView: View {
 	@State private var confirmUninstall = false
 
 	var body: some View {
-		Form {
+		TabView {
 
-			Section( "General" ) {
-				Toggle( "Open at login", isOn: Binding( get: { model.launchAtLogin }, set: { model.setLaunchAtLogin( $0 ) } ) )
-			}
-
-			Section( "Updates" ) {
-				Toggle( "Check for updates automatically", isOn: Binding( get: { autoUpdate }, set: { autoUpdate = $0; updater.automatic = $0 } ) )
-				Button( "Check now" ) { updater.check() }
-				Text( "Off by default. Nothing is downloaded or installed without you." ).font( .caption ).foregroundStyle( .secondary )
-			}
-			.onAppear { autoUpdate = updater.automatic }
-
-			Section( "Menu bar" ) {
-				Toggle( "Show battery percentage", isOn: $showPercent )
-				Picker( "Icon", selection: $iconStyle ) {
-					ForEach( IconStyle.allCases ) { Text( $0.title ).tag( $0.rawValue ) }
+			Form {
+				Section( "General" ) {
+					Toggle( "Open at login", isOn: Binding( get: { model.launchAtLogin }, set: { model.setLaunchAtLogin( $0 ) } ) )
+				}
+				Section( "Menu bar" ) {
+					Toggle( "Show battery percentage", isOn: $showPercent )
+					Picker( "Icon", selection: $iconStyle ) {
+						ForEach( IconStyle.allCases ) { Text( $0.title ).tag( $0.rawValue ) }
+					}
+				}
+				Section( "Alerts" ) {
+					Toggle( "Low battery notification", isOn: $lowAlert )
+					if lowAlert { Stepper( "Alert at \( lowLevel )%", value: $lowLevel, in: 5...50, step: 5 ) }
 				}
 			}
+			.tabItem { Label( "General", systemImage: "gearshape" ) }
 
-			Section( "Schedule" ) {
-				Toggle( "Top off to 100% regularly", isOn: Binding( get: { ( model.status?.scheduleDays ?? 0 ) > 0 }, set: { model.setSchedule( days: $0 ? 30 : 0 ) } ) )
-				if let days = model.status?.scheduleDays, days > 0 {
-					Stepper( "Every \( days ) days", value: Binding( get: { days }, set: { model.setSchedule( days: $0 ) } ), in: 1...90 )
-					if let next = model.status?.nextTopOff { LabeledContent( "Next", value: next.formatted( date: .abbreviated, time: .omitted ) ) }
+			Form {
+				Section( "Schedule" ) {
+					Toggle( "Top off to 100% regularly", isOn: Binding( get: { ( model.status?.scheduleDays ?? 0 ) > 0 }, set: { model.setSchedule( days: $0 ? 30 : 0 ) } ) )
+					if let days = model.status?.scheduleDays, days > 0 {
+						Stepper( "Every \( days ) days", value: Binding( get: { days }, set: { model.setSchedule( days: $0 ) } ), in: 1...90 )
+						if let next = model.status?.nextTopOff { LabeledContent( "Next", value: next.formatted( date: .abbreviated, time: .omitted ) ) }
+					}
+					Text( "Charges to 100% once in a while, then returns to your limit. Runs when plugged in." ).font( .caption ).foregroundStyle( .secondary )
 				}
-			}
-
-			Section( "Alerts" ) {
-				Toggle( "Low battery notification", isOn: $lowAlert )
-				if lowAlert { Stepper( "Alert at \( lowLevel )%", value: $lowLevel, in: 5...50, step: 5 ) }
-			}
-
-			Section( "Helper" ) {
-				LabeledContent( "Status", value: helperText )
 				if let s = model.status {
-					LabeledContent( "Version", value: s.daemonVersion )
-					LabeledContent( "Charge control", value: backendName( s.backend ) )
-					if let c = s.cycleCount { LabeledContent( "Cycle count", value: "\( c )" ) }
-					if let h = s.healthPercent { LabeledContent( "Battery health", value: "\( h )%" ) }
-					LabeledContent( "SMC keys", value: s.smcKeys.isEmpty ? "none found" : s.smcKeys.joined( separator: " " ) )
+					Section( "Battery" ) {
+						if let c = s.cycleCount { LabeledContent( "Cycle count", value: "\( c )" ) }
+						if let h = s.healthPercent { LabeledContent( "Health", value: "\( h )%" ) }
+						LabeledContent( "Charge control", value: backendName( s.backend ) )
+					}
 				}
-				Toggle( "Use `battery` in Terminal", isOn: Binding( get: { model.cliInstalled }, set: { model.setCLIInstalled( $0 ) } ) )
-				Button( "Uninstall Battery…", role: .destructive ) { confirmUninstall = true }
-					.confirmationDialog( "Uninstall Battery?", isPresented: $confirmUninstall ) {
-						Button( "Restore charging and uninstall", role: .destructive ) { model.uninstall() }
-					} message: { Text( "Charging goes back to normal and the helper is removed. Then drag Battery.app to the Trash." ) }
 			}
+			.tabItem { Label( "Charging", systemImage: "bolt.batteryblock" ) }
+
+			Form {
+				Section( "Helper" ) {
+					LabeledContent( "Status", value: helperText )
+					if let s = model.status {
+						LabeledContent( "Version", value: s.daemonVersion )
+						LabeledContent( "SMC keys", value: s.smcKeys.isEmpty ? "none found" : s.smcKeys.joined( separator: " " ) )
+					}
+				}
+				Section( "Command line" ) {
+					Toggle( "Use `battery` in Terminal", isOn: Binding( get: { model.cliInstalled }, set: { model.setCLIInstalled( $0 ) } ) )
+				}
+				Section( "Updates" ) {
+					Toggle( "Check for updates automatically", isOn: Binding( get: { autoUpdate }, set: { autoUpdate = $0; updater.automatic = $0 } ) )
+					Button( "Check now" ) { updater.check() }
+					Text( "Off by default. Nothing is downloaded or installed without you." ).font( .caption ).foregroundStyle( .secondary )
+				}
+				.onAppear { autoUpdate = updater.automatic }
+				Section {
+					Button( "Uninstall Battery…", role: .destructive ) { confirmUninstall = true }
+						.confirmationDialog( "Uninstall Battery?", isPresented: $confirmUninstall ) {
+							Button( "Restore charging and uninstall", role: .destructive ) { model.uninstall() }
+						} message: { Text( "Charging goes back to normal and the helper is removed. Then drag Battery.app to the Trash." ) }
+				}
+			}
+			.tabItem { Label( "Helper", systemImage: "lock.shield" ) }
 
 		}
 		.formStyle( .grouped )
-		.frame( width: 420 )
-		.fixedSize( horizontal: false, vertical: true )
+		.frame( width: 440, height: 500 )
 	}
 
 	private func backendName( _ b: String ) -> String {

@@ -73,6 +73,15 @@ final class AppModel {
 		Task { await refresh() }
 	}
 
+	/// Registered but not answering (app was moved, bundle replaced, stale registration): start over.
+	func repairHelper() {
+		Task {
+			try? await daemon.unregister()
+			try? await Task.sleep( for: .seconds( 1 ) )
+			registerHelper()
+		}
+	}
+
 	func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
 
 	func setLaunchAtLogin( _ on: Bool ) {
