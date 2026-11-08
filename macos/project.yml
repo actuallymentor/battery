@@ -1,0 +1,97 @@
+name: Battery
+options:
+  minimumXcodeGenVersion: 2.38.0
+  deploymentTarget: { macOS: "14.0" }
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
+    DEVELOPMENT_TEAM: CAWM399GFD
+    ENABLE_HARDENED_RUNTIME: YES
+    MARKETING_VERSION: 2.0.0-dev
+    CURRENT_PROJECT_VERSION: 1
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+packages:
+  BatteryCore: { path: . }
+
+targets:
+
+  # Menubar app. Embeds the daemon plist, daemon binary and CLI.
+  Battery:
+    type: application
+    platform: macOS
+    sources: [ App, Shared ]
+    dependencies:
+      - package: BatteryCore
+        product: BatteryCore
+      - target: batteryd
+        embed: false
+      - target: BatteryCLI
+        embed: false
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleName: Battery
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        LSMinimumSystemVersion: "14.0"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.palokaj.battery
+        PRODUCT_NAME: Battery
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: App/Battery.entitlements
+    postCompileScripts: []
+    # Daemon + CLI + launchd plist land inside the bundle
+    postbuildScripts:
+      - name: Embed daemon and CLI
+        script: |
+          set -eu
+          APP="${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Library/LaunchDaemons" "$APP/Contents/Helpers"
+          cp "${BUILT_PRODUCTS_DIR}/batteryd" "$APP/Contents/MacOS/batteryd"
+          cp "${BUILT_PRODUCTS_DIR}/battery" "$APP/Contents/Helpers/battery"
+          cp "${SRCROOT}/Daemon/co.palokaj.battery.daemon.plist" "$APP/Contents/Library/LaunchDaemons/"
+        basedOnDependencyAnalysis: false
+
+  # Root daemon: SMC access, maintain loop, XPC server.
+  batteryd:
+    type: tool
+    platform: macOS
+    sources: [ Daemon, Shared ]
+    dependencies:
+      - package: BatteryCore
+        product: BatteryCore
+    settings:
+      base:
+        PRODUCT_NAME: batteryd
+        PRODUCT_BUNDLE_IDENTIFIER: co.palokaj.battery.daemon
+        SKIP_INSTALL: YES
+
+  # CLI: thin XPC client. Target name differs from the product (`battery`) because Battery.app collides with it on case-insensitive disks.
+  BatteryCLI:
+    type: tool
+    platform: macOS
+    sources: [ CLI, Shared ]
+    dependencies:
+      - package: BatteryCore
+        product: BatteryCore
+    settings:
+      base:
+        PRODUCT_NAME: battery
+        PRODUCT_MODULE_NAME: BatteryCLI
+        PRODUCT_BUNDLE_IDENTIFIER: co.palokaj.battery.cli
+        SKIP_INSTALL: YES
+
+schemes:
+  Battery:
+    build:
+      targets: { Battery: all }
+    run: { config: Debug }
+    archive: { config: Release }

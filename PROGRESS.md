@@ -16,16 +16,15 @@ Updated 2026-11-08. Read with `.HANDOFF.md` (plan, decisions), `AGENTS.md`, `.no
 - On the Mac: `~/bin/xcodes` (2.46.0), `~/bin/xcodegen`, `~/Applications/` (empty).
 - Creds: env `APPLE_ID`, `APPLE_ID_PASSWORD` (also `GMAIL_*`), Olivia's account. Never print them; pass as `"$APPLE_ID_PASSWORD"` in double quotes.
 
-## BLOCKER: Xcode install needs Apple 2FA
-- `xcodes install 26.1.1 --experimental-unxip --no-superuser --directory ~/Applications` (26.1.1 matches macOS 26.1; list: `xcodes list`) reaches the 2FA prompt, then fails without a tty.
-- The code goes to a trusted device/phone, not Gmail. The user must supply it.
-- Plan: run xcodes with stdin from a fifo (`mkfifo /tmp/xin; ... < /tmp/xin &`), ask the user for the code, `echo CODE > /tmp/xin`. Codes expire fast, so ask right after triggering.
-- Disk: Xcode needs ~40 GB, 32 GB free. Check; free space or use `--experimental-unxip` and delete the xip.
-- Then: `sudo xcode-select -s ~/Applications/Xcode-26.1.1.app`, accept the license (`babysit mac sudo ArjunMacbook xcodebuild -license accept`).
+## Xcode: DONE
+Xcode 26.1.1 at `~/Applications/Xcode-26.1.1.app` on the Mac, selected, license accepted. Build: `zsh /tmp/rebuild.sh` pattern = tar macos -> scp -> xcodegen -> xcodebuild (arm64, ad-hoc).
+
+## Scaffold DONE (uncommitted before this commit)
+`macos/project.yml` (XcodeGen, generated project gitignored; build.sh runs xcodegen), `App/` (MenuBarExtra + SMAppService), `Daemon/` (SMC + XPC), `CLI/` (thin XPC client), `Shared/BatteryXPC.swift`. Verified on real Mac 26.1: probe/status/charging/adapter via CLI -> XPC -> root daemon -> SMC.
 
 ## Next
-1. Xcode (above).
-2. `macos/project.yml` (XcodeGen; targets App, Daemon, CLI, Core). Release contract: `macos/Battery.xcodeproj`, scheme `Battery`, product `Battery.app`, daemon plist in `Contents/Library/LaunchDaemons/`, bundle `co.palokaj.battery`, daemon `co.palokaj.battery.daemon`, min macOS 14.
+1. (done) Xcode, project.yml.
+2. (done) project.yml. Release contract: `macos/Battery.xcodeproj`, scheme `Battery`, product `Battery.app`, daemon plist in `Contents/Library/LaunchDaemons/`, bundle `co.palokaj.battery`, daemon `co.palokaj.battery.daemon`, min macOS 14.
 3. IOKit SMC layer (daemon only). Probe keys on the Mac, record per-OS results in `.notes/RESEARCH.md`. Unknown: `bfD0/bfE0/bfF0`.
 4. Daemon + XPC + caller code-signature check (team `CAWM399GFD`) + `SMAppService.daemon` registration.
 5. Menubar UI (`MenuBarExtra`), CLI as thin XPC client, parity with v1 commands (`legacy/battery.sh`).
@@ -38,3 +37,8 @@ Appcast hosting, Homebrew formula owner, when to push for first CI run.
 ## Notes
 - `.notes/` and other dotfiles are gitignored (`.*`); `.github` is whitelisted. Pre-existing deleted `assets/node_modules/*` in the working tree: leave alone.
 - Post-milestone checklist in CLAUDE.md (reflect, style, changelog, test, cleanup, commit) not yet run for the Core commit.
+
+## Next up
+- SMAppService approval flow (screen locked; need unlock) instead of dev launchctl plist.
+- Maintain loop in daemon (Controller.decide), status/CSV, calibrate, charge/discharge, LED (ACLC absent on 26.1: probe alternatives), probe bfD0/bfE0/bfF0.
+- CLI: timeout when daemon unreachable (hangs if name not registered).

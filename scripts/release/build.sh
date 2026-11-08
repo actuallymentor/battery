@@ -9,6 +9,12 @@
 
 source "$(dirname "$0")/lib.sh"
 
+# The project is generated (gitignored): build it from project.yml
+if [[ ! -d "$XCODE_PROJECT" && -f "$(dirname "$XCODE_PROJECT")/project.yml" ]]; then
+	command -v xcodegen >/dev/null || brew install xcodegen
+	( cd "$(dirname "$XCODE_PROJECT")" && xcodegen generate )
+fi
+
 [[ -d "$XCODE_PROJECT" ]] || fail "Xcode project not found at $XCODE_PROJECT, set XCODE_PROJECT to its location"
 
 rm -rf "$OUT_DIR"

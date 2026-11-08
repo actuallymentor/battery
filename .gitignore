@@ -3,3 +3,6 @@
 !.github
 !.vscode
 CLAUDE.md
+macos/Battery.xcodeproj
+macos/build
+macos/.build

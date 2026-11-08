@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>co.palokaj.battery.daemon</string>
+	<!-- Relative to the app bundle; SMAppService resolves it -->
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/batteryd</string>
+	<key>MachServices</key>
+	<dict>
+		<key>co.palokaj.battery.daemon</key>
+		<true/>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>co.palokaj.battery</string>
+	</array>
+</dict>
+</plist>
