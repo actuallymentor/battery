@@ -10,15 +10,13 @@ final class Jobs {
 		case calibrate( Calibration )
 	}
 
-	private let smc: SMC
-	private let caps: SMCCapabilities
+	private let control: ChargeControl
 	private let maintainer: Maintainer
 	private var timer: Timer?
 	private( set ) var kind: Kind?
 
-	init( smc: SMC, caps: SMCCapabilities, maintainer: Maintainer ) {
-		self.smc = smc
-		self.caps = caps
+	init( control: ChargeControl, maintainer: Maintainer ) {
+		self.control = control
 		self.maintainer = maintainer
 	}
 
@@ -36,6 +34,7 @@ final class Jobs {
 		cancel()
 		maintainer.suspend()
 		kind = k
+		log( "job start: \( activity ?? "" )" )
 		apply( k )
 		timer = Timer.scheduledTimer( withTimeInterval: 20, repeats: true ) { [ weak self ] _ in self?.tick() }
 		tick()
@@ -50,25 +49,24 @@ final class Jobs {
 	private func end( restoring: Bool ) {
 		timer?.invalidate(); timer = nil
 		guard kind != nil else { return }
+		log( "job end (\( restoring ? "cancelled" : "done" ))" )
 		kind = nil
 		maintainer.resume( restoring: restoring )
 	}
 
-	private func write( _ writes: [ SMCWrite ]? ) { writes?.forEach { smc.write( $0.key, hex: $0.hex ) } }
-
 	/// Side effects for the phase a job just entered
 	private func apply( _ k: Kind ) {
 		switch k {
-		case .charge: write( SMCPlan.adapter( on: true, caps ) ); write( SMCPlan.charging( true, caps ) )
-		case .discharge: write( SMCPlan.adapter( on: false, caps ) )
+		case .charge: control.adapter( on: true ); control.charging( true )
+		case .discharge: control.adapter( on: false )
 		case .calibrate( let c ): applyPhase( c.phase )
 		}
 	}
 
 	private func applyPhase( _ p: Calibration.Phase ) {
 		switch p {
-		case .discharging15, .discharging80: write( SMCPlan.adapter( on: false, caps ) )
-		case .charging100, .holding: write( SMCPlan.adapter( on: true, caps ) ); write( SMCPlan.charging( true, caps ) )
+		case .discharging15, .discharging80: control.adapter( on: false )
+		case .charging100, .holding: control.adapter( on: true ); control.charging( true )
 		case .done: break
 		}
 	}
@@ -78,16 +76,17 @@ final class Jobs {
 
 		switch kind {
 		case .charge( let n ):
-			if percent >= n { write( SMCPlan.charging( false, caps ) ); finish() }
+			if percent >= n { control.charging( false, level: percent ); finish() }
 
 		case .discharge( let n ):
-			if percent <= n { write( SMCPlan.adapter( on: true, caps ) ); finish() }
+			if percent <= n { control.adapter( on: true ); finish() }
 
 		case .calibrate( var c ):
 			if c.advance( percent: percent, now: Date() ) {
 				self.kind = .calibrate( c )
+				log( "calibrate: \( c.phase.message )" )
 				applyPhase( c.phase )
-				if c.phase == .done { write( SMCPlan.adapter( on: true, caps ) ); write( SMCPlan.charging( true, caps ) ); finish() }
+				if c.phase == .done { control.adapter( on: true ); control.charging( true ); finish() }
 			} else {
 				self.kind = .calibrate( c )   // holdStart lives inside the struct
 			}

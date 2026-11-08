@@ -2,17 +2,24 @@ import Foundation
 import BatteryCore
 
 /// Root daemon: owns the SMC. Everything else talks to it over XPC.
-func log( _ s: String ) { FileHandle.standardError.write( Data( "batteryd: \( s )\n".utf8 ) ) }
-
 final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 
 	private let smc = SMC()
 	private lazy var caps = SMCCapabilities( keys: Set( SMCCapabilities.probeKeys.filter { smc?.has( $0 ) ?? false } ) )
-	private lazy var maintainer = smc.map { Maintainer( smc: $0, caps: caps ) }
-	private lazy var jobs = smc.flatMap { s in maintainer.map { Jobs( smc: s, caps: caps, maintainer: $0 ) } }
+	private lazy var control = smc.map { ChargeControl( smc: $0, caps: caps ) }
+	private lazy var maintainer = control.map { Maintainer( control: $0 ) }
+	private lazy var jobs = control.flatMap { c in maintainer.map { Jobs( control: c, maintainer: $0 ) } }
+	private let events = PowerEvents()
 
-	/// Touch at launch so a persisted maintain target resumes without waiting for a client
-	func boot() { _ = maintainer }
+	/// Touch at launch so a persisted maintain target resumes without waiting for a client, and wire power events
+	func boot() {
+		log( "daemon \( batteryVersion ) up. \( caps.summary )" )
+		_ = maintainer
+		events.onWake = { [ weak self ] in log( "wake" ); self?.maintainer?.reconcile() }
+		events.onWillSleep = { [ weak self ] in self?.maintainer?.willSleep() }
+		events.onSourceChange = { [ weak self ] in self?.maintainer?.reconcile() }
+		events.start()
+	}
 
 	// Callers must be our own signed app or CLI. Debug builds are ad-hoc signed, so skip there.
 	private let requirement = """
@@ -21,7 +28,6 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		"""
 
 	func listener( _ listener: NSXPCListener, shouldAcceptNewConnection c: NSXPCConnection ) -> Bool {
-		log( "connection from pid \( c.processIdentifier )" )
 		#if !DEBUG
 		c.setCodeSigningRequirement( requirement )
 		#endif
@@ -31,77 +37,112 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		return true
 	}
 
+	func snapshot( reply: @escaping ( Bool, String ) -> Void ) {
+		guard let control, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
+		var warning = maintainer?.warning( reading )
+		if control.backend == .none { warning = control.unsupportedMessage }
+		let status = BatteryStatus(
+			percent: reading.snapshot.percent, voltage: reading.voltage, remaining: reading.snapshot.remaining, acAttached: reading.snapshot.acAttached,
+			chargingEnabled: control.chargingEnabled, discharging: control.adapterCut,
+			maintain: maintainer?.target?.persisted, forceDischarge: maintainer?.forceDischarge ?? false,
+			activity: jobs?.activity, smcKeys: caps.keys.sorted(), daemonVersion: batteryVersion,
+			backend: control.backend.rawValue, isCharging: reading.isCharging, amperage: reading.amperage,
+			warning: warning, cycleCount: reading.cycleCount, healthPercent: reading.healthPercent )
+		reply( true, status.encoded() )
+	}
+
 	func probe( reply: @escaping ( Bool, String ) -> Void ) {
-		log( "probe" )
 		guard smc != nil else { return reply( false, "AppleSMC unavailable" ) }
 		let values = SMCCapabilities.probeKeys.map { "\( $0 )=\( smc?.read( $0 ) ?? "-" )" }.joined( separator: " " )
 		reply( true, "\( caps.summary )\n\( values )" )
 	}
 
 	func status( reply: @escaping ( Bool, String ) -> Void ) {
-		guard let smc, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
-		let charging = SMCPlan.chargingEnabled( caps ) { smc.read( $0 ) }
-		reply( true, Report.status( reading.snapshot, voltage: reading.voltage, charging: charging, maintain: maintainer?.target ) + ( jobs?.activity.map { "\n\( $0 )" } ?? "" ) )
+		guard let control, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
+		var out = Report.status( reading.snapshot, voltage: reading.voltage, charging: control.chargingEnabled, maintain: maintainer?.target )
+		if let activity = jobs?.activity { out += "\n\( activity )" }
+		if let warning = maintainer?.warning( reading ) { out += "\nWarning: \( warning )" }
+		if control.backend == .none { out += "\nWarning: \( control.unsupportedMessage )" }
+		reply( true, out )
 	}
 
 	func statusCSV( reply: @escaping ( Bool, String ) -> Void ) {
-		guard let smc, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
-		let charging = SMCPlan.chargingEnabled( caps ) { smc.read( $0 ) }
-		let discharging = SMCPlan.discharging( caps ) { smc.read( $0 ) }
-		reply( true, Report.csv( reading.snapshot, charging: charging, discharging: discharging, maintain: maintainer?.target ) )
+		guard let control, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
+		reply( true, Report.csv( reading.snapshot, charging: control.chargingEnabled, discharging: control.adapterCut, maintain: maintainer?.target ) )
 	}
 
 	func maintain( _ setting: String, forceDischarge: Bool, reply: @escaping ( Bool, String ) -> Void ) {
 		guard let maintainer else { return reply( false, "AppleSMC unavailable" ) }
 		guard let target = try? MaintainTarget( persisted: setting ) else { return reply( false, "Invalid maintain target: \( setting )" ) }
 		jobs?.cancel()
-		maintainer.start( target, force: forceDischarge )
+		if let why = maintainer.start( target, force: forceDischarge ) { return reply( false, why ) }
 		reply( true, "Maintaining battery at \( target.display )" )
 	}
 
 	func charge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void ) {
-		guard let jobs else { return reply( false, "AppleSMC unavailable" ) }
+		guard let jobs, let control else { return reply( false, "AppleSMC unavailable" ) }
+		guard control.backend != .none else { return reply( false, control.unsupportedMessage ) }
 		jobs.start( .charge( percent ) )
 		reply( true, "Charging to \( percent )%" )
 	}
 
 	func discharge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void ) {
-		guard let jobs else { return reply( false, "AppleSMC unavailable" ) }
+		guard let jobs, let control else { return reply( false, "AppleSMC unavailable" ) }
+		guard control.caps.canCutAdapter else { return reply( false, "Discharging isn't available on this Mac (no adapter-cut key)." ) }
 		jobs.start( .discharge( percent ) )
 		reply( true, "Discharging to \( percent )%" )
 	}
 
 	func calibrate( reply: @escaping ( Bool, String ) -> Void ) {
-		guard let jobs else { return reply( false, "AppleSMC unavailable" ) }
+		guard let jobs, let control else { return reply( false, "AppleSMC unavailable" ) }
+		guard control.caps.canCutAdapter, control.backend != .none else { return reply( false, "Calibration isn't available on this Mac (needs adapter cut and charge control)." ) }
 		jobs.start( .calibrate( Calibration() ) )
 		reply( true, "Calibration started: \( Calibration().phase.message )" )
 	}
 
-	/// Drop any job and let macOS charge normally; the maintain target stays
-	func recover( reply: @escaping ( Bool, String ) -> Void ) {
+	func legacyFound( reply: @escaping ( Bool, String ) -> Void ) {
+		guard let uid = NSXPCConnection.current()?.effectiveUserIdentifier else { return reply( false, "No caller" ) }
+		reply( true, Legacy.found( uid: uid ).joined( separator: "," ) )
+	}
+
+	func removeLegacy( reply: @escaping ( Bool, String ) -> Void ) {
+		guard let uid = NSXPCConnection.current()?.effectiveUserIdentifier else { return reply( false, "No caller" ) }
+		let removed = Legacy.remove( uid: uid )
+		log( "removed v1 leftovers: \( removed )" )
+		reply( true, removed.joined( separator: "," ) )
+	}
+
+	/// Drop any job and the maintain target, restore stock charging (also clears a firmware limit).
+	func resetAll( reply: @escaping ( Bool, String ) -> Void ) {
 		jobs?.cancel()
 		maintainer?.stop()
+		control?.resetAll()
 		reply( true, "Charging restored" )
 	}
+
+	func recover( reply: @escaping ( Bool, String ) -> Void ) { resetAll( reply: reply ) }
 
 	func stopMaintain( reply: @escaping ( Bool, String ) -> Void ) {
 		maintainer?.stop()
 		reply( true, "Battery maintenance stopped" )
 	}
 
+	/// Manual override: the user asked for a specific state, so nothing else keeps fighting it (#460 / #440).
 	func setCharging( _ on: Bool, reply: @escaping ( Bool, String ) -> Void ) {
-		apply( SMCPlan.charging( on, caps ), reply )
+		guard let control, let reading = Power.read() else { return reply( false, "AppleSMC unavailable" ) }
+		guard control.backend != .none else { return reply( false, control.unsupportedMessage ) }
+		jobs?.cancel()
+		if maintainer?.target != nil { maintainer?.stop(); log( "manual charging override stopped maintain" ) }
+		let ok = control.charging( on, level: reading.snapshot.percent )
+		reply( ok, ok ? "ok" : "Writing the charge control failed (see `battery logs`)" )
 	}
 
 	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void ) {
-		apply( SMCPlan.adapter( on: on, caps ), reply )
-	}
-
-	private func apply( _ writes: [ SMCWrite ]?, _ reply: ( Bool, String ) -> Void ) {
-		guard let smc else { return reply( false, "AppleSMC unavailable" ) }
-		guard let writes else { return reply( false, "No known charging key on this machine" ) }
-		let failed = writes.filter { !smc.write( $0.key, hex: $0.hex ) }
-		reply( failed.isEmpty, failed.isEmpty ? "ok" : "write failed: \( failed.map( \.key ).joined( separator: "," ) )" )
+		guard let control else { return reply( false, "AppleSMC unavailable" ) }
+		guard control.caps.canCutAdapter else { return reply( false, "No adapter-cut key on this Mac." ) }
+		jobs?.cancel()
+		let ok = control.adapter( on: on )
+		reply( ok, ok ? "ok" : "Writing the adapter control failed (see `battery logs`)" )
 	}
 
 }

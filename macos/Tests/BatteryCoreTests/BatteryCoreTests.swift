@@ -53,12 +53,12 @@ final class ControllerTests: XCTestCase {
 
 	func testStopsAtUpper() {
 		let d = Controller.decide( .level( lower: 80, upper: 80 ), state( 80, charging: true ) )
-		XCTAssertEqual( d, Decision( action: .disableCharging, led: .green ) )
+		XCTAssertEqual( d, Decision( action: .disableCharging, led: .green, refilling: false ) )
 	}
 
 	func testKeepsLedGreenWhenAlreadyOffOnAC() {
 		let d = Controller.decide( .level( lower: 70, upper: 80 ), state( 85, charging: false ) )
-		XCTAssertEqual( d, Decision( action: .none, led: .green ) )
+		XCTAssertEqual( d, Decision( action: .none, led: .green, refilling: false ) )
 	}
 
 	func testIdleAboveUpperOnBattery() {
@@ -67,12 +67,14 @@ final class ControllerTests: XCTestCase {
 
 	func testResumesBelowLower() {
 		let d = Controller.decide( .level( lower: 70, upper: 80 ), state( 69, charging: false ) )
-		XCTAssertEqual( d, Decision( action: .enableCharging, led: .orange ) )
+		XCTAssertEqual( d, Decision( action: .enableCharging, led: .orange, refilling: true ) )
 	}
 
 	func testHysteresisInsideBandDoesNothing() {
 		XCTAssertEqual( Controller.decide( .level( lower: 70, upper: 80 ), state( 75, charging: false ) ), .idle )
-		XCTAssertEqual( Controller.decide( .level( lower: 70, upper: 80 ), state( 75, charging: true ) ), .idle )
+		// Refilling from below lower: keep going up to upper
+		var refilling = state( 75, charging: true ); refilling.refilling = true
+		XCTAssertEqual( Controller.decide( .level( lower: 70, upper: 80 ), refilling ), .idle )
 	}
 
 	func testUnknownChargingStateNeverResumes() {
@@ -247,6 +249,121 @@ final class FormattingTests: XCTestCase {
 		XCTAssertEqual( Report.csv( p, charging: true, discharging: false, maintain: .level( lower: 80, upper: 80 ) ),
 			"80,1:23,enabled,not discharging,80" )
 		XCTAssertEqual( Report.csv( p, charging: nil, discharging: nil, maintain: nil ), "80,1:23,unknown,unknown," )
+	}
+
+}
+
+final class BatteryStatusTests: XCTestCase {
+
+	func testJSONRoundTrip() {
+		let s = BatteryStatus( percent: 81, voltage: 12.4, remaining: "1:05", acAttached: true, chargingEnabled: false,
+		                       maintain: "70-80", forceDischarge: true, smcKeys: [ "CHTE", "CHIE" ], daemonVersion: "2.0.0" )
+		XCTAssertEqual( BatteryStatus.decode( s.encoded() ), s )
+	}
+
+	func testHeadline() {
+		XCTAssertEqual( BatteryStatus( percent: 50, acAttached: false ).headline, "On battery" )
+		XCTAssertEqual( BatteryStatus( percent: 50, acAttached: true, chargingEnabled: true ).headline, "Charging" )
+		XCTAssertEqual( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, maintain: "80" ).headline, "Holding at limit" )
+		XCTAssertEqual( BatteryStatus( percent: 100, acAttached: true ).headline, "Fully charged" )
+		XCTAssertEqual( BatteryStatus( percent: 100, acAttached: true, chargingEnabled: false, maintain: "80" ).headline, "Holding at limit" )
+		XCTAssertEqual( BatteryStatus( percent: 60, acAttached: true, discharging: true ).headline, "Discharging on adapter" )
+		XCTAssertEqual( BatteryStatus( percent: 60, acAttached: true, activity: "Charging to 90%" ).headline, "Charging to 90%" )
+	}
+
+	func testMaintainTargetParse() {
+		XCTAssertEqual( BatteryStatus( percent: 1, acAttached: true, maintain: "70-80" ).maintainTarget, .level( lower: 70, upper: 80 ) )
+		XCTAssertNil( BatteryStatus( percent: 1, acAttached: true ).maintainTarget )
+	}
+
+}
+
+
+// MARK: #475 range semantics + backends
+
+final class RangeAndBackendTests: XCTestCase {
+
+	private func st( _ p: Int, charging: Bool?, ac: Bool = true, refilling: Bool = false ) -> BatteryState {
+		BatteryState( percent: p, chargingEnabled: charging, acAttached: ac, refilling: refilling )
+	}
+
+	func testPluggedInInsideBandHolds() {
+		// #475: maintain 45-55 at 52% plugged in must NOT charge up to 55
+		let d = Controller.decide( .level( lower: 45, upper: 55 ), st( 52, charging: true ) )
+		XCTAssertEqual( d.action, .disableCharging )
+	}
+
+	func testBelowLowerStartsRefill() {
+		let held = Controller.decide( .level( lower: 45, upper: 55 ), st( 44, charging: false ) )
+		XCTAssertEqual( held.action, .enableCharging )
+		XCTAssertEqual( held.refilling, true )
+		let already = Controller.decide( .level( lower: 45, upper: 55 ), st( 44, charging: true ) )
+		XCTAssertEqual( already.action, .none )
+		XCTAssertEqual( already.refilling, true )
+	}
+
+	func testRefillStopsAtUpperAndClearsLatch() {
+		let d = Controller.decide( .level( lower: 45, upper: 55 ), st( 55, charging: true, refilling: true ) )
+		XCTAssertEqual( d.action, .disableCharging )
+		XCTAssertEqual( d.refilling, false )
+	}
+
+	func testSingleValueNeverHoldsInBand() {
+		// lower == upper has no band: below N charge, at N stop
+		XCTAssertEqual( Controller.decide( .level( lower: 80, upper: 80 ), st( 79, charging: false ) ).action, .enableCharging )
+		XCTAssertEqual( Controller.decide( .level( lower: 80, upper: 80 ), st( 79, charging: true ) ).action, .none )
+	}
+
+	// Real key sets from issue reports
+	private func caps( _ keys: [ String ] ) -> SMCCapabilities { SMCCapabilities( keys: Set( keys ) ) }
+
+	func testBackendFixtures() {
+		XCTAssertEqual( caps( [ "CH0B", "CH0C", "CH0I" ] ).backend, .legacy )
+		XCTAssertEqual( caps( [ "CHTE", "CHIE", "CH0J" ] ).backend, .tahoe )                       // M4 Air 26.3
+		XCTAssertEqual( caps( [ "bfD0", "bfE0", "bfF0", "CHIE", "CH0J" ] ).backend, .firmwareLimit ) // M4 Pro 15.8.2
+		XCTAssertEqual( caps( [ "CHIE" ] ).backend, .softwareCut )                                   // M4 Air 27.0 (bf* gated)
+		XCTAssertEqual( caps( [ "CH0J" ] ).backend, .softwareCut )                                   // M1 Pro 27.0
+		XCTAssertEqual( caps( [] ).backend, .none )
+		XCTAssertEqual( caps( [ "bfD0", "bfF0" ] ).backend, .none )                                  // partial bf* set is unusable
+	}
+
+	func testLE32() {
+		XCTAssertEqual( SMCPlan.le32( 80 ), "50000000" )
+		XCTAssertEqual( SMCPlan.le32( 78 ), "4e000000" )
+		XCTAssertEqual( SMCPlan.le32( 300 ), "2c010000" )
+	}
+
+	func testFirmwareWriteOrder() {
+		let w = SMCPlan.firmwareLimit( upper: 80, lower: 80 )!
+		XCTAssertEqual( w.map( \.key ), [ "bfF0", "bfD0", "bfE0", "bfF0" ] )
+		XCTAssertEqual( w.map( \.hex ), [ "00", "50000000", "4e000000", "02" ] )   // single N resumes at N-2
+		XCTAssertEqual( SMCPlan.firmwareLimit( upper: 80, lower: 70 )!.map( \.hex )[ 2 ], "46000000" )
+	}
+
+	func testFirmwareSafetyFloorAndNoLimit() {
+		XCTAssertNil( SMCPlan.firmwareLimit( upper: 15, lower: 10 ) )   // would drain on purpose
+		XCTAssertNil( SMCPlan.firmwareLimit( upper: 100, lower: 95 ) )  // 100 = no limit
+		XCTAssertEqual( SMCPlan.firmwareReset.map( \.hex ), [ "00", "00000000", "00000000" ] )
+	}
+
+	func testFirmwareHoldFreezesAtCurrentLevel() {
+		let c = caps( [ "bfD0", "bfE0", "bfF0" ] )
+		XCTAssertEqual( SMCPlan.charging( false, c, level: 64 )!.map( \.hex )[ 1 ], "40000000" )
+		XCTAssertNil( SMCPlan.charging( false, c ) )                    // level unknown: refuse
+		XCTAssertEqual( SMCPlan.charging( false, c, level: 100 ), [] )  // nothing to hold
+		XCTAssertEqual( SMCPlan.charging( true, c ), SMCPlan.firmwareReset )
+	}
+
+	func testSoftwareCutUsesAdapterKeys() {
+		XCTAssertEqual( SMCPlan.charging( false, caps( [ "CHIE" ] ) ), [ SMCWrite( "CHIE", "08" ) ] )
+		XCTAssertEqual( SMCPlan.charging( true, caps( [ "CHIE" ] ) ), [ SMCWrite( "CHIE", "00" ) ] )
+		XCTAssertNil( SMCPlan.charging( false, caps( [] ) ) )
+	}
+
+	func testFirmwareChargingRead() {
+		let c = caps( [ "bfD0", "bfE0", "bfF0" ] )
+		XCTAssertEqual( SMCPlan.chargingEnabled( c ) { $0 == "bfF0" ? "02" : nil }, false )
+		XCTAssertEqual( SMCPlan.chargingEnabled( c ) { $0 == "bfF0" ? "00" : nil }, true )
 	}
 
 }

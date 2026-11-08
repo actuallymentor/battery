@@ -35,7 +35,18 @@ do {
 	case .discharge( let n ): remote { $0.discharge( n, reply: $1 ) }
 	case .calibrate: remote { $0.calibrate( reply: $1 ) }
 	case .maintain( .recover ): remote { $0.recover( reply: $1 ) }
-	case .version: print( "2.0.0-dev" )   // TODO: inject MARKETING_VERSION at build time
+	case .version: print( batteryVersion )
+	case .uninstall:
+		remote { proxy, reply in
+			proxy.resetAll { ok, text in
+				reply( ok, ok ? "\( text ). Now turn Battery off in Login Items and delete Battery.app (or use Settings -> Uninstall in the app)." : text )
+			}
+		}
+	case .update, .reinstall:
+		print( "Updates and reinstalls are handled by Battery.app: menu bar icon -> Settings, or download the latest release." )
+	case .logs( let lines ):
+		let text = ( try? String( contentsOfFile: batteryLogPath, encoding: .utf8 ) ) ?? ""
+		print( text.split( separator: "\n" ).suffix( lines ).joined( separator: "\n" ) )
 	case .statusCSV: remote { $0.statusCSV( reply: $1 ) }
 	case .maintain( .stop ): remote { $0.stopMaintain( reply: $1 ) }
 	case .maintain( .set( let target, let force ) ): remote { $0.maintain( target.persisted, forceDischarge: force, reply: $1 ) }

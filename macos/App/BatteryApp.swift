@@ -1,42 +1,57 @@
 import SwiftUI
-import ServiceManagement
+import BatteryCore
 
 @main
 struct BatteryApp: App {
 
-	@State private var daemon = SMAppService.daemon( plistName: "co.palokaj.battery.daemon.plist" )
-	@State private var message = ""
-
-	init() {
-		// First launch: ask for the daemon. macOS then needs approval under Login Items
-		let d = SMAppService.daemon( plistName: "co.palokaj.battery.daemon.plist" )
-		if d.status == .notRegistered || d.status == .notFound { try? d.register() }
-	}
+	@State private var model = AppModel()
+	@AppStorage( Pref.showPercent ) private var showPercent = true
+	@AppStorage( Pref.iconStyle ) private var iconStyle = IconStyle.battery.rawValue
 
 	var body: some Scene {
-		MenuBarExtra( "Battery", systemImage: "battery.100" ) {
-			Text( "Daemon: \( label( daemon.status ) )" )
-			if !message.isEmpty { Text( message ) }
-			Divider()
-			Button( "Register daemon" ) { register() }
-			Button( "Open Login Items…" ) { SMAppService.openSystemSettingsLoginItems() }
-			Divider()
-			Button( "Quit" ) { NSApplication.shared.terminate( nil ) }
+
+		MenuBarExtra {
+			MenuContent( model: model )
+		} label: {
+			MenuBarLabel( status: model.status, helper: model.helper, showPercent: showPercent, style: IconStyle( rawValue: iconStyle ) ?? .battery )
+		}
+		.menuBarExtraStyle( .window )
+
+		Settings { SettingsView( model: model ) }
+
+	}
+
+}
+
+/// Menu bar item: glyph (+ percent). Warning glyph when the helper is not usable.
+struct MenuBarLabel: View {
+
+	let status: BatteryStatus?
+	let helper: AppModel.Helper
+	let showPercent: Bool
+	let style: IconStyle
+
+	var body: some View {
+		HStack( spacing: 3 ) {
+			Image( systemName: symbol )
+			if showPercent, let status { Text( "\( status.percent )%" ).monospacedDigit() }
 		}
 	}
 
-	private func register() {
-		do { try daemon.register(); message = "" }
-		catch { message = error.localizedDescription }
-	}
-
-	private func label( _ s: SMAppService.Status ) -> String {
-		switch s {
-		case .enabled: return "enabled"
-		case .requiresApproval: return "needs approval"
-		case .notRegistered: return "not registered"
-		case .notFound: return "not found"
-		@unknown default: return "unknown"
+	private var symbol: String {
+		guard helper == .ready, let s = status else { return "exclamationmark.triangle" }
+		switch style {
+		case .bolt: return s.chargingEnabled == false ? "pause.circle" : "bolt.fill"
+		case .shield: return s.maintain != nil ? "shield.lefthalf.filled" : "shield"
+		case .battery:
+			if s.acAttached && s.chargingEnabled != false && s.percent < 100 { return "battery.100percent.bolt" }
+			switch s.percent {
+			case ..<13: return "battery.0percent"
+			case ..<38: return "battery.25percent"
+			case ..<63: return "battery.50percent"
+			case ..<88: return "battery.75percent"
+			default: return "battery.100percent"
+			}
 		}
 	}
 

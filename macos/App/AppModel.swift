@@ -1,0 +1,168 @@
+import Foundation
+import SwiftUI
+import ServiceManagement
+import UserNotifications
+import BatteryCore
+
+/// State + actions for every view. One poll loop; the daemon is the source of truth.
+@MainActor
+@Observable
+final class AppModel {
+
+	enum Helper: Equatable { case unknown, ready, notRegistered, needsApproval, unreachable }
+
+	private( set ) var status: BatteryStatus?
+	private( set ) var helper: Helper = .unknown
+	private( set ) var error: String?
+	private( set ) var busy = false
+	private( set ) var legacyLeftovers: [ String ] = []
+
+	/// Launch at login for the menu bar app itself
+	private( set ) var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+	private let client = DaemonClient()
+	private let daemon = SMAppService.daemon( plistName: "co.palokaj.battery.daemon.plist" )
+	private let defaults = UserDefaults.standard
+	private var poll: Task<Void, Never>?
+	private var alertedLow = false
+
+	init() {
+		UserDefaults.registerBatteryDefaults()
+		startPolling()
+	}
+
+	// MARK: Polling
+
+	func startPolling() {
+		poll?.cancel()
+		poll = Task { [ weak self ] in
+			while !Task.isCancelled {
+				await self?.refresh()
+				try? await Task.sleep( for: .seconds( 5 ) )
+			}
+		}
+	}
+
+	func refresh() async {
+		launchAtLogin = SMAppService.mainApp.status == .enabled
+
+		do {
+			status = try await client.snapshot()
+			helper = .ready
+			error = nil
+			checkLowBattery()
+			if legacyLeftovers.isEmpty, !defaults.bool( forKey: Pref.legacyDeclined ) { legacyLeftovers = ( try? await client.legacyFound() ) ?? [] }
+		} catch {
+			// Not answering: find out why
+			status = nil
+			switch daemon.status {
+			case .notRegistered, .notFound: helper = .notRegistered
+			case .requiresApproval: helper = .needsApproval
+			default: helper = .unreachable
+			}
+		}
+	}
+
+	// MARK: Helper lifecycle
+
+	func registerHelper() {
+		do { try daemon.register() } catch { self.error = error.localizedDescription }
+		if daemon.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+		Task { await refresh() }
+	}
+
+	func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
+
+	func setLaunchAtLogin( _ on: Bool ) {
+		do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
+		catch { self.error = error.localizedDescription }
+		launchAtLogin = SMAppService.mainApp.status == .enabled
+	}
+
+	// MARK: Limit
+
+	var limit: Int { get { defaults.integer( forKey: Pref.limit ) } set { defaults.set( newValue, forKey: Pref.limit ) } }
+	var lower: Int { get { defaults.integer( forKey: Pref.lower ) } set { defaults.set( newValue, forKey: Pref.lower ) } }
+	var forceDischarge: Bool { get { defaults.bool( forKey: Pref.forceDischarge ) } set { defaults.set( newValue, forKey: Pref.forceDischarge ) } }
+
+	func applyLimit( enabled: Bool ) {
+		defaults.set( enabled, forKey: Pref.limitOn )
+		perform { [ self ] in
+			if enabled {
+				let t: MaintainTarget = lower < limit ? .level( lower: max( lower, 10 ), upper: limit ) : .level( lower: limit, upper: limit )
+				try await client.maintain( t, force: forceDischarge )
+			} else {
+				try await client.stopMaintain()
+			}
+		}
+	}
+
+	/// Re-send the band after a value changed while the limit is on.
+	func commitLimitChange() { if defaults.bool( forKey: Pref.limitOn ) { applyLimit( enabled: true ) } }
+
+	// MARK: Jobs
+
+	func chargeTo( _ n: Int ) { perform { [ self ] in try await client.charge( n ) } }
+	func dischargeTo( _ n: Int ) { perform { [ self ] in try await client.discharge( n ) } }
+	func calibrate() { perform { [ self ] in try await client.calibrate() } }
+	func recover() { perform { [ self ] in try await client.recover(); defaults.set( false, forKey: Pref.limitOn ) } }
+
+	// MARK: v1 migration
+
+	func removeLegacy() {
+		perform { [ self ] in
+			try await client.removeLegacy()
+			legacyLeftovers = []
+		}
+	}
+
+	func declineLegacyCleanup() {
+		defaults.set( true, forKey: Pref.legacyDeclined )
+		legacyLeftovers = []
+	}
+
+	/// Settings -> "Uninstall": hand charging back to macOS, drop the helper.
+	func uninstall() {
+		perform { [ self ] in
+			try? await client.resetAll()
+			try? await daemon.unregister()
+			try? await SMAppService.mainApp.unregister()
+			NSApplication.shared.terminate( nil )
+		}
+	}
+
+	// MARK: Alerts
+
+	private func checkLowBattery() {
+		guard let s = status, defaults.bool( forKey: Pref.lowBatteryAlert ) else { return }
+		let threshold = defaults.integer( forKey: Pref.lowBatteryLevel )
+
+		if s.percent <= threshold, !s.acAttached {
+			guard !alertedLow else { return }
+			alertedLow = true
+			let content = UNMutableNotificationContent()
+			content.title = "Battery at \( s.percent )%"
+			content.body = "Plug in soon."
+			UNUserNotificationCenter.current().requestAuthorization( options: [ .alert, .sound ] ) { granted, _ in
+				if granted { UNUserNotificationCenter.current().add( UNNotificationRequest( identifier: "low-battery", content: content, trigger: nil ) ) }
+			}
+		} else if s.percent > threshold + 3 || s.acAttached {
+			alertedLow = false
+		}
+	}
+
+	// MARK: Plumbing
+
+	/// Run a daemon action, surface failures, then refresh.
+	private func perform( _ action: @escaping () async throws -> Void ) {
+		busy = true
+		Task {
+			do { try await action(); error = nil } catch { self.error = error.localizedDescription }
+			busy = false
+			await refresh()
+		}
+	}
+
+	func dismissError() { error = nil }
+
+}

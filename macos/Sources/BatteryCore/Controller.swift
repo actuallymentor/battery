@@ -7,7 +7,15 @@ public struct Decision: Equatable, Sendable {
 	public enum Action: Equatable, Sendable { case enableCharging, disableCharging, none }
 	public var action: Action
 	public var led: LEDColor?
+	/// New value for the "refilling to upper" latch; nil = leave as is
+	public var refilling: Bool?
 	public static let idle = Decision( action: .none, led: nil )
+
+	public init( action: Action, led: LEDColor?, refilling: Bool? = nil ) {
+		self.action = action
+		self.led = led
+		self.refilling = refilling
+	}
 }
 
 /// Snapshot of the battery; `chargingEnabled` is nil when SMC state is unreadable.
@@ -17,7 +25,12 @@ public struct BatteryState: Equatable, Sendable {
 	public var chargingEnabled: Bool?
 	public var acAttached: Bool
 
-	public init( percent: Int, voltage: Double? = nil, chargingEnabled: Bool?, acAttached: Bool ) {
+	/// We resumed charging below `lower` and have not reached `upper` yet. Inside the band, this decides
+	/// between "keep charging up" and "hold" (#475: plugging in inside the band must not charge to the top).
+	public var refilling: Bool
+
+	public init( percent: Int, voltage: Double? = nil, chargingEnabled: Bool?, acAttached: Bool, refilling: Bool = false ) {
+		self.refilling = refilling
 		self.percent = percent
 		self.voltage = voltage
 		self.chargingEnabled = chargingEnabled
@@ -39,12 +52,18 @@ public enum Controller {
 
 		// At or above the top: stop charging (even if SMC says off but AC is attached, keep LED green)
 		if s.percent >= upper && ( s.chargingEnabled == true || s.acAttached ) {
-			return Decision( action: s.chargingEnabled == true ? .disableCharging : .none, led: .green )
+			return Decision( action: s.chargingEnabled == true ? .disableCharging : .none, led: .green, refilling: false )
 		}
 
-		// Below the bottom while held off: resume charging
-		if s.percent < lower && s.chargingEnabled == false {
-			return Decision( action: .enableCharging, led: .orange )
+		// Below the bottom: charge (resume if held off, otherwise remember we are refilling)
+		if s.percent < lower {
+			if s.chargingEnabled == false { return Decision( action: .enableCharging, led: .orange, refilling: true ) }
+			return s.chargingEnabled == true && !s.refilling ? Decision( action: .none, led: nil, refilling: true ) : .idle
+		}
+
+		// Inside the band: keep charging only if we are on the way up from below `lower`, otherwise hold
+		if lower < upper, s.chargingEnabled == true, !s.refilling {
+			return Decision( action: .disableCharging, led: .green )
 		}
 
 		return .idle
