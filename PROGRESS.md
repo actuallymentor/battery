@@ -43,8 +43,10 @@ Appcast hosting, Homebrew formula owner, when to push for first CI run.
 - Daemon: `Power.swift` (AppleSmartBattery readings), `Maintainer.swift` (level/voltage band, --force-discharge, persisted in /var/db/co.palokaj.battery/maintain, resumes on restart). CLI: status, status_csv, maintain N|A-B|xV [--force-discharge]|stop, charging, adapter, probe; 15s timeout when daemon is absent. All verified on the real Mac (26.1).
 - App auto-registers the daemon at launch.
 
+- `Jobs.swift`: charge N / discharge N / calibrate (Calibration state machine, 20s poll), pause maintenance and resume after; `maintain recover` aborts everything. Verified: charge holds charging off at target, recover restores AC. Full calibrate/discharge runs not exercised to completion (hours).
+
 ## Next up
-- CLI/daemon: `maintain recover`, `charge N`, `discharge N`, `calibrate`, `logs`, `version`; LED (ACLC absent on 26.1: find the key); probe `bfD0/bfE0/bfF0`.
+- CLI/daemon: `logs`, inject real version into `battery version` (hardcoded 2.0.0-dev); LED (ACLC absent on 26.1: find the key); probe `bfD0/bfE0/bfF0`.
 - App UI: status, maintain presets/custom limits (#462), menubar % (#470), launch at login (#425), Apple charge limit (#480/#469), range bottom-bound (#475).
 - v1 cleanup on first launch, Sparkle wiring, telemetry already removed.
 - Post-milestone checklist (reflect/style/changelog/test) still not run.

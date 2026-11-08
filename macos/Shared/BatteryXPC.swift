@@ -11,5 +11,9 @@ let batteryDaemonName = "co.palokaj.battery.daemon"
 	func maintain( _ setting: String, forceDischarge: Bool, reply: @escaping ( Bool, String ) -> Void )
 	func stopMaintain( reply: @escaping ( Bool, String ) -> Void )
 	func statusCSV( reply: @escaping ( Bool, String ) -> Void )
+	func charge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void )
+	func discharge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void )
+	func calibrate( reply: @escaping ( Bool, String ) -> Void )
+	func recover( reply: @escaping ( Bool, String ) -> Void )
 	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void )
 }

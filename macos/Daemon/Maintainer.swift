@@ -16,11 +16,11 @@ final class Maintainer {
 	init( smc: SMC, caps: SMCCapabilities ) {
 		self.smc = smc
 		self.caps = caps
-		resume()
+		load()
 	}
 
 	/// Pick up the persisted target after a reboot / daemon restart.
-	private func resume() {
+	private func load() {
 		guard let raw = try? String( contentsOf: file, encoding: .utf8 ) else { return }
 		let force = raw.contains( "--force-discharge" )
 		let setting = raw.replacingOccurrences( of: " --force-discharge", with: "" ).trimmingCharacters( in: .whitespacesAndNewlines )
@@ -39,6 +39,14 @@ final class Maintainer {
 		tick()
 	}
 
+	/// A job (charge/discharge/calibrate) takes over charging; the target is kept.
+	func suspend() { timer?.invalidate(); timer = nil }
+
+	/// Back to maintaining after a job. Without a target: `restoring` hands charging back to macOS, otherwise leave it as the job set it.
+	func resume( restoring: Bool ) {
+		if let target { start( target, force: forceDischarge, persist: false ) } else if restoring { restore() }
+	}
+
 	/// Stop and hand charging back to macOS.
 	func stop() {
 		timer?.invalidate(); timer = nil
@@ -50,7 +58,9 @@ final class Maintainer {
 	/// Charging on, adapter on.
 	private func restore() {
 		SMCPlan.charging( true, caps )?.forEach { smc.write( $0.key, hex: $0.hex ) }
-		if adapterCut { SMCPlan.adapter( on: true, caps ).forEach { smc.write( $0.key, hex: $0.hex ) }; adapterCut = false }
+		// Always: a job may have cut the adapter without us knowing
+		SMCPlan.adapter( on: true, caps ).forEach { smc.write( $0.key, hex: $0.hex ) }
+		adapterCut = false
 	}
 
 	private func tick() {

@@ -31,6 +31,11 @@ do {
 	switch try Command( arguments: args ) {
 	case .help: print( Report.help )
 	case .status: remote { $0.status( reply: $1 ) }
+	case .charge( let n ): remote { $0.charge( n, reply: $1 ) }
+	case .discharge( let n ): remote { $0.discharge( n, reply: $1 ) }
+	case .calibrate: remote { $0.calibrate( reply: $1 ) }
+	case .maintain( .recover ): remote { $0.recover( reply: $1 ) }
+	case .version: print( "2.0.0-dev" )   // TODO: inject MARKETING_VERSION at build time
 	case .statusCSV: remote { $0.statusCSV( reply: $1 ) }
 	case .maintain( .stop ): remote { $0.stopMaintain( reply: $1 ) }
 	case .maintain( .set( let target, let force ) ): remote { $0.maintain( target.persisted, forceDischarge: force, reply: $1 ) }
