@@ -1,22 +1,25 @@
-This repository contains software that limits the battery charging level of apple silicon macbooks.
+This repository contains software that limits the battery charging level of Apple Silicon MacBooks.
 
 ## Project structure
 
-- `./battery.sh` is the main CLI binary used under the hood
-- `./setup.sh` is the setup script for the binary
-- `./update.sh` is the script used to update the binary
-- `./app/` contains an electron codebase for a GUI that wraps around the CLI
-- `./dist` contains precompiled binaries that are shipped with the CLI
+- `./macos/` v2, native Swift. Source of truth.
+  - `Sources/BatteryCore/` pure logic (SMC plans, controller, CLI parsing, formatting). `cd macos && swift test`
+  - `App/` SwiftUI menu bar app, `Daemon/` root helper (SMC, maintain loop, jobs), `CLI/` thin XPC client, `Shared/` XPC protocol
+  - `project.yml` XcodeGen spec; the `.xcodeproj` is generated and gitignored
+- `./scripts/release/` + `.github/workflows/release.yml` signed release pipeline (tag `v*`)
+- `./legacy/` v1 (shell + Electron). Frozen. `main` keeps serving v1 `update.sh` until the v1 to v2 handover release.
 
-## Development flow
+## Rules
 
-- any changes made to `battery.sh` must also increment the version number at the top of `battery.sh` as this is what the update command relies on
-- any changes to `smc` commands must update the `visudoconfig` variable in `battery.sh` as this updates the visudo entry on the client device to make sure smc may run commands without sudo
-- any changes to the `visudoconfig` file must add a corresponding line to the `smc_commands` variable in `app/modules/battery.js` as this makes sure the GUI continues working when the visudo commands are changed
+- No push, tag or release unless asked. No `Co-Authored-By` lines.
+- Charge control is chosen by probing SMC keys (`SMCCapabilities.backend`), never by OS version.
+- All SMC writes go through `Daemon/ChargeControl.swift` (verified, rolled back on failure).
+- New XPC methods: add to `Shared/BatteryXPC.swift`, implement in `Daemon/main.swift`, expose via `App/DaemonClient.swift` and/or `CLI/main.swift`.
+- Logic that can be pure goes in `BatteryCore` with tests; fixtures come from `.notes/TRIAGE.md` key dumps.
+- Version: `MARKETING_VERSION` in `macos/project.yml` (release builds override it from the tag).
+- The `battery`/`Battery.app` names collide on case-insensitive disks: the CLI target is `BatteryCLI` (product `battery`).
+- v1 rules (bump `battery.sh` version, `visudoconfig`) apply to `legacy/` only.
 
-## Mantatory checks
+## Mandatory checks
 
-Before finishing any task, make sure that you:
-
-- do a sanity check for bugs
-- check that comments still reflect the changed code
+Before finishing any task: sanity check for bugs, check comments still match the code, run `swift test`, and for UI/daemon changes verify on a real Mac (`babysit mac`), see `.notes/RESEARCH.md`.

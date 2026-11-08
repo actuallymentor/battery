@@ -1,168 +1,74 @@
-# Battery charge limiter for Apple Silicon Macbook devices
+# Battery: charge limiter for Apple Silicon MacBooks
 
-<img width="300px" align="right" src="./screenshots/tray.png"/>This tool makes it possible to keep a chronically plugged in Apple Silicon Macbook at `80%` battery, since that will prolong the longevity of the battery. It is free and open-source and will remain that way.
+<img width="300px" align="right" src="./screenshots/tray.png"/>Keeps a plugged-in MacBook at `80%` (or any limit you pick) to slow battery ageing. Native Swift menu bar app, free and open source. **v2 is a full rewrite**; the old Electron + shell version lives in [`legacy/`](./legacy).
 
-> Want to know if this tool does anything or is just a placebo? Read [this excellent article](https://batteryuniversity.com/article/bu-808-how-to-prolong-lithium-based-batteries). TL;DR: keep your battery cool, keep it at 80% when plugged in, and discharge it as shallowly as feasible.
+> Does this do anything? [BU-808](https://batteryuniversity.com/article/bu-808-how-to-prolong-lithium-based-batteries): keep it cool, ~80% when plugged in, discharge shallowly.
 
-### Requirements
+## Requirements
 
-This is an app for Apple Silicon Macs. It will not work on Intel macs. Do you have an older Mac? Consider the free version of the [Al Dente](https://apphousekitchen.com/) software package. It is a good alternative and has a premium version with many more features.
+Apple Silicon, **macOS 14+**. Intel Macs: use [AlDente](https://apphousekitchen.com/).
 
-### Installation
+## Install
 
-- Option 1: install the app through brew with `brew install battery`
-- Option 2: [download the app dmg version here](https://github.com/actuallymentor/battery/releases/)
-- Option 3: install ONLY the command line interface (see section below)
+| How | |
+| --- | --- |
+| DMG | [Releases](https://github.com/actuallymentor/battery/releases), drag `Battery.app` to `/Applications` |
+| Homebrew | `brew install --cask battery` (once a signed release exists) |
 
-When installing via brew or dmg, opening the macOS app is required to complete the installation.
+First launch: **Enable helper** → approve *Battery* in *System Settings → General → Login Items & Extensions*. One time, no password prompts afterwards. Coming from v1? Battery offers to remove the old install.
 
-The first time you open the app, it will ask for your administator password so it can install the needed components. Please note that the app:
+## Use
 
-- Discharges your battery until it reaches 80%, **even when plugged in**
-- Disables charging when your battery is above 80% charged
-- Enables charging when your battery is under 80% charged
-- Keeps the limit engaged even after rebooting
-- Keeps the limit engaged even after closing the tray app
-- Also automatically installs the `battery` command line tool. If you want a custom charging percentage, the CLI is the only way to do that.
+Menu bar icon: charge limit toggle, presets (`60 70 80 90`, long-press ⌃-click to remove, `…` to add your own), slider, *Resume below* (hysteresis), optional *discharge down to the limit*, one-off *Charge to 100%* / *Discharge to* / *Calibrate*.
+Settings: open at login, menu bar % and icon, low-battery alert, scheduled top-off every N days, opt-in updates, `battery` in Terminal, uninstall.
 
-Do you have questions, comments, or feature requests? [Open an issue here](https://github.com/actuallymentor/battery/issues) or [Tweet at me](https://twitter.com/actuallymentor).
+## CLI
 
----
-
-## 🖥 Command-line version
-
-> If you don't know what a "command line" is, ignore this section. You don't need it.
-
-The GUI app uses a command line tool under the hood. Installing the GUI automatically installs the CLI as well. You can also separately install the CLI.
-
-The CLI is used for managing the battery charging status for Apple Silicon Macbooks. Can be used to enable/disable the Macbook from charging the battery when plugged into power.
-
-### Installation
-
-One-line installation:
-
-```bash
-curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash
-```
-
-This will:
-
-1. Download the precompiled `smc` tool in this repo (built from the [hholtmann/smcFanControl](https://github.com/hholtmann/smcFanControl.git) repository)
-2. Install `smc` to `/usr/local/bin`
-3. Install `battery` to `/usr/local/bin`
-
-### Usage
-
-Example usage:
-
-```shell
-# This will enable charging when your battery dips under 80, and disable it when it exceeds 80
-battery maintain 80
-
-# This will maintain your battery between 70-80%, letting it rest in that range
-battery maintain 70-80
-```
-
-After running a command like `battery charging off` you can verify the change visually by looking at the battery icon:
-
-![Battery not charging](./screenshots/not-charging-screenshot.png)
-
-After running `battery charging on` you will see it change to this:
-
-![Battery charging](./screenshots/charging-screenshot.png)
-
-For help, run `battery` without parameters:
+*Settings → Use `battery` in Terminal* links it to `/usr/local/bin/battery` (app must be in `/Applications`). No sudo, ever: it is a thin client of the root helper.
 
 ```
-Battery CLI utility v1.0.1
-
-Usage:
-
-  battery status
-    output battery SMC status, % and time remaining
-
-  battery maintain LEVEL[1-100,stop] or RANGE[lower-upper]
-    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
-    eg: battery maintain 80           # maintain at 80%
-    eg: battery maintain 70-80        # maintain between 70-80%
-    eg: battery maintain stop
-
-  battery charging SETTING[on/off]
-    manually set the battery to (not) charge
-    eg: battery charging on
-
-  battery adapter SETTING[on/off]
-    manually set the adapter to (not) charge even when plugged in
-    eg: battery adapter off
-
-  battery calibrate
-    calibrate the battery by discharging it to 15%, then recharging it to 100%, and keeping it there for 1 hour
-
-  battery charge LEVEL[1-100]
-    charge the battery to a certain percentage, and disable charging when that percentage is reached
-    eg: battery charge 90
-
-  battery discharge LEVEL[1-100]
-    block power input from the adapter until battery falls to this level
-    eg: battery discharge 90
-
-  battery visudo
-    ensure you don't need to call battery with sudo
-    This is already used in the setup script, so you should't need it.
-
-  battery update
-    update the battery utility to the latest version
-
-  battery reinstall
-    reinstall the battery utility to the latest version (reruns the installation script)
-
-  battery uninstall
-    enable charging, remove the smc tool, and the battery script
+battery status | status_csv
+battery maintain 80 | 70-80 | 11.4V [0.1V] [--force-discharge] | stop | recover
+battery charge 90 | discharge 50 | calibrate
+battery charging on|off | adapter on|off
+battery schedule 30          # top off to 100% every 30 days, 0 = off
+battery logs 100 | version | uninstall
 ```
 
-## FAQ & Troubleshooting
+`maintain 70-80`: plugged in inside the band **holds**; charging resumes only below 70 and runs to 80.
 
-### Why does this exist?
+## How it limits charging
 
-I was looking at the Al Dente software package for battery limiting, but I found the [license too limiting](https://github.com/davidwernhart/AlDente/discussions/558) for a poweruser like myself.
+Picked per Mac by **probing SMC keys, not OS versions** (Apple moved them across 15.8.x / 26.x / 27):
 
-I would actually have preferred using Al Dente, but decided to create a command-line utility to replace it as a side-project on holiday. A colleague mentioned they would like a GUI, so I spend a few evenings setting up an Electron app. And voila, here we are.
+| Backend | Keys | Notes |
+| --- | --- | --- |
+| SMC inhibit | `CHTE` or `CH0B`/`CH0C` | helper loop + plug/wake events |
+| Firmware limit | `bfD0` `bfE0` `bfF0` | firmware enforces it, also asleep. Floor 20% |
+| Adapter cut | `CHIE` / `CH0J` / `CH0I` | compatibility mode, uses battery |
+| none | | UI says so. It never pretends |
 
-### "It's not working"
+The helper verifies the hardware actually obeys and warns if the Mac keeps charging. macOS 27's native charge limit is not wired up yet. Interplay with Apple's *Optimized Battery Charging*: leave it on or off, but not both a native limit and this at once.
 
-If you used one of the earlier versions of the `battery` utility, you may run into [path/permission issues](https://github.com/actuallymentor/battery/issues/8). This is not your fault but mine. To fix it:
+## Privacy and security
+
+- No telemetry, no network calls. Updates (Sparkle 2, EdDSA-signed) only if you turn them on.
+- Root helper = `SMAppService` daemon in the app bundle; XPC peers must be signed by team `CAWM399GFD`; fixed command surface, no sudoers, no shell.
+
+## Develop
 
 ```
-sudo rm -rf ~/.battery
-binfolder=/usr/local/bin
-sudo rm -v "$binfolder/smc" "$binfolder/battery"
+cd macos && swift test                    # core logic, runs anywhere
+cd macos && xcodegen && xcodebuild -scheme Battery build
+scripts/release/                          # CI release pipeline (tag v* -> signed, notarized dmg + pkg)
 ```
 
-Then reopen the app and things should work. If not, [open an issue](https://github.com/actuallymentor/battery/issues/new/choose) and I'll try to help you fix it.
+Layout: `macos/Sources/BatteryCore` (pure logic), `App/` SwiftUI, `Daemon/` root helper + SMC, `CLI/`, `Shared/` XPC. Ad-hoc dev builds invalidate the `SMAppService` approval on every rebuild; load the daemon with a plain launchd plist while iterating.
 
-### A note to Little Snitch users
+## FAQ
 
-This tool calls a number of urls, blocking all of them will only break auto-updates.
+**Not working on my Mac?** Settings → Helper shows the charge-control backend and the SMC keys found; `battery logs 100` shows what the helper did. Open an issue with both.
 
-1. `unidentifiedanalytics.web.app` is a self-made app that tracks app installations, I use it to see if enough people use the app to justify spending time on it. It tracks only how many unique ip addresses open the app.
-1. `icanhazip.com` is used to see if there is an internet connection
-1. `github.com` is used both as a liveness check and as the source of updates for the underlying command-line utility
-1. `electronjs.org` hosts the update server for the GUI
+**vs Optimized Charging?** That's ML-timed and per-Apple. This is explicit: you choose the limit.
 
-All urls are called over `https` and so not leak data. Unidentified Analytics keeps track of unique ip addresses that open the app, but nothing else.
-
-### What distinguishes this project from Optimized Charging?
-
-Optimized Charging, a feature that is built into MacOS, aims to ensure the longevity and health of your battery. It does so by "delaying charging the battery past 80% when it predicts that you’ll be plugged in for an extended period of time, and aims to charge the battery before you unplug," as explained in [Apple's user guide](https://support.apple.com/en-ca/guide/mac-help/mchlfc3b7879/mac#:~:text=Optimized%20Battery%20Charging%3A%20To%20reduce,the%20battery%20before%20you%20unplug.).
-
-Additionally, Optimized Charging uses machine learning to decide when the battery should be held at 80%, and when it should become fully charged. If your Mac is not plugged in on a regular schedule, optimized charging will not work as intended.
-
-This app is a similar alternative to Optimized Charging, giving the user control over when it is activated, what percentage the battery should be held at, and more.
-
-### How do I support this project?
-
-Do you know how to code? Open a pull-request for a feature with the label [help wanted (PR welcome)](https://github.com/actuallymentor/battery/labels/help%20wanted%20%28PR%20welcome%29).
-
-Do you have an awesome feature idea? [Add a feature request](https://github.com/actuallymentor/battery/issues/new/choose)
-
-Do you just want to keep me motivated to update the app? [Tweet at me](https://twitter.com/actuallymentor)
+Support: PRs welcome ([help wanted](https://github.com/actuallymentor/battery/labels/help%20wanted%20%28PR%20welcome%29)), issues, or [a tweet](https://twitter.com/actuallymentor).
