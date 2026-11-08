@@ -1,0 +1,54 @@
+# Pull request and branch checks. No secrets, no signing: tests plus an unsigned build of every target.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main, 'v2/**' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  core:
+    name: Core tests (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: swift test
+        working-directory: macos
+        run: swift test
+
+  identity:
+    name: Identity constants agree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/check-identity.sh
+
+  app:
+    name: Build app, daemon and CLI (macOS)
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Generate project
+        run: brew install xcodegen && cd macos && xcodegen generate
+      - name: Build unsigned
+        working-directory: macos
+        run: xcodebuild -scheme Battery -configuration Debug -destination 'platform=macOS' -derivedDataPath build build

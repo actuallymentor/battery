@@ -18,6 +18,10 @@ settings:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
       # Ad-hoc dev builds can't pass library validation for the embedded Sparkle.framework
       ENABLE_HARDENED_RUNTIME: NO
+      # Contributors build without a team: `xcodegen && xcodebuild -scheme Battery build` just works
+      CODE_SIGN_IDENTITY: "-"
+      CODE_SIGNING_REQUIRED: NO
+      DEVELOPMENT_TEAM: ""
 packages:
   BatteryCore: { path: . }
   # Pinned to the version scripts/release/lib.sh verifies and signs with
@@ -61,7 +65,6 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: App/Battery.entitlements
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
-    postCompileScripts: []
     # Daemon + CLI + launchd plist land inside the bundle
     postbuildScripts:
       - name: Embed daemon and CLI

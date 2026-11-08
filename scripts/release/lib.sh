@@ -35,6 +35,9 @@ SPARKLE_SHA256="1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27
 # Version and artifact names follow the electron-builder convention: ${productName}-${version}-${os}-${arch}.${ext}
 TAG="${TAG:-$(git describe --tags --exact-match 2>/dev/null || echo v0.0.0-local)}"
 VERSION="${TAG#v}"
+
+# Sparkle compares CFBundleVersion, so it must grow with every release (CI run number, 1 locally)
+BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-1}}"
 ARTIFACT_BASE="$APP_NAME-$VERSION-mac-arm64"
 
 # Working folders, RUNNER_TEMP is wiped with the runner, .release/ is gitignored locally

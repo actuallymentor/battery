@@ -22,8 +22,24 @@ concurrency:
 
 jobs:
 
+  # A tag must never ship code whose tests or identity checks fail
+  verify:
+    name: Tests and identity checks
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Identity constants agree
+        run: scripts/check-identity.sh
+      - name: Core tests
+        working-directory: macos
+        run: swift test
+
   release:
     name: Build, sign & notarize
+    needs: verify
     runs-on: macos-15
     environment: release
     timeout-minutes: 120
@@ -80,6 +96,9 @@ jobs:
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: scripts/release/sparkle.sh sign
+
+      - name: Write appcast
+        run: scripts/release/appcast.sh
 
       - name: Draft GitHub release
         env:

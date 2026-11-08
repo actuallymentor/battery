@@ -18,4 +18,8 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 - Percentages and amperage from IOKit, not `pmset` text (#250, #461).
 - CLI never hangs when the helper is missing.
 
-**CLI**: `visudo` and `update_silent` removed. Added `schedule`.
+**CLI**: `visudo` and `update_silent` removed. Added `schedule`. `update` / `reinstall` now point to the app. `status` is rendered by the CLI from one daemon snapshot.
+
+**Safety**: the helper refuses `discharge` below 5%, `maintain` below 10% and out-of-range schedules whatever the client sends. Adapter is restored before sleep and at boot; a job replaced by a new target hands the adapter back.
+
+**Release**: `CFBundleVersion` grows per CI run (Sparkle), appcast generated, signing identifiers asserted, tests gate the release.

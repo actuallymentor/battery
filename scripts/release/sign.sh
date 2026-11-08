@@ -58,6 +58,23 @@ while read -r item; do
 	fi
 done <<<"$all_items"
 
+# The root daemon only accepts callers with these identifiers (Daemon/main.swift `requirement`) and our team.
+# Debug builds skip that check, so this is the only place a re-signing mistake would show up before users hit it.
+function assert_identifier() {
+	local item="$1" expected="$2"
+	[[ -e "$item" ]] || fail "Missing $item"
+	codesign -dv "$item" 2>&1 | grep -q "^Identifier=$expected$" || fail "Wrong code-signing identifier on ${item#"$OUT_DIR"/}, expected $expected"
+}
+assert_identifier "$APP_PATH" co.palokaj.battery
+assert_identifier "$APP_PATH/Contents/Helpers/battery" co.palokaj.battery.cli
+assert_identifier "$APP_PATH/Contents/MacOS/batteryd" co.palokaj.battery.daemon
+
+# The same requirement the daemon enforces must verify for the app and the CLI
+for client in "$APP_PATH" "$APP_PATH/Contents/Helpers/battery"; do
+	codesign --verify -R="anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\" and ( identifier \"co.palokaj.battery\" or identifier \"co.palokaj.battery.cli\" )" "$client" ||
+		fail "Daemon caller requirement does not verify for ${client#"$OUT_DIR"/}"
+done
+
 # Every SMAppService daemon plist must point at an executable inside the bundle
 for plist in "$APP_PATH"/Contents/Library/LaunchDaemons/*.plist; do
 	program=$(plutil -extract BundleProgram raw "$plist") || fail "No BundleProgram in $plist"

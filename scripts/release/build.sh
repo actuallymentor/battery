@@ -32,6 +32,7 @@ xcodebuild archive \
 	-archivePath "$archive" \
 	ARCHS=arm64 \
 	MARKETING_VERSION="$VERSION" \
+	CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
 	ONLY_ACTIVE_ARCH=NO \
 	CODE_SIGN_STYLE=Manual \
 	CODE_SIGN_IDENTITY=- \

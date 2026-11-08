@@ -12,14 +12,14 @@ Apple Silicon, **macOS 14+**. Intel Macs: use [AlDente](https://apphousekitchen.
 
 | How | |
 | --- | --- |
-| DMG | [Releases](https://github.com/actuallymentor/battery/releases), drag `Battery.app` to `/Applications` |
-| Homebrew | `brew install --cask battery` (once a signed release exists) |
+| DMG | Releases page, once the first signed beta is published. Drag `Battery.app` to `/Applications` |
+| Homebrew | cask planned, not available yet |
 
 First launch: **Enable helper** → approve *Battery* in *System Settings → General → Login Items & Extensions*. One time, no password prompts afterwards. Coming from v1? Battery offers to remove the old install.
 
 ## Use
 
-Menu bar icon: charge limit toggle, presets (`60 70 80 90`, right-click to remove, `…` to add your own), slider, *Resume below* (hysteresis), optional *discharge down to the limit*, one-off *Charge to 100%* / *Discharge to* / *Calibrate*.
+Menu bar icon: charge limit toggle, presets (`60 70 80 90`, right-click to remove, `…` to add the current one), slider, *Resume below* (hysteresis), optional *discharge down to the limit*, one-off *Charge to 100%* / *Discharge to* / *Calibrate*.
 Settings: open at login, menu bar % and icon, low-battery alert, scheduled top-off every N days, opt-in updates, `battery` in Terminal, uninstall.
 
 ## CLI
@@ -33,6 +33,7 @@ battery charge 90 | discharge 50 | calibrate
 battery charging on|off | adapter on|off
 battery schedule 30          # top off to 100% every 30 days, 0 = off
 battery logs 100 | version | uninstall
+battery update | reinstall          # point to Battery.app, which owns updates
 ```
 
 `maintain 70-80`: plugged in inside the band **holds**; charging resumes only below 70 and runs to 80.
@@ -52,15 +53,16 @@ The helper verifies the hardware actually obeys and warns if the Mac keeps charg
 
 ## Privacy and security
 
-- No telemetry, no network calls. Updates (Sparkle 2, EdDSA-signed) only if you turn them on.
-- Root helper = `SMAppService` daemon in the app bundle; XPC peers must be signed by team `CAWM399GFD`; fixed command surface, no sudoers, no shell.
+- No telemetry. The only network use is Sparkle 2 (EdDSA-signed) and only if you turn updates on or press *Check now*; the update feed is not published yet.
+- Root helper = `SMAppService` daemon in the app bundle. In release builds it only accepts XPC callers signed by team `CAWM399GFD` with the app or CLI identifier. It validates every argument itself (maintain >= 10%, discharge >= 5%, schedule 0-90 days), has a fixed command surface, no sudoers, no shell. The app and CLI do not authenticate the helper: it is reached through its launchd Mach name.
 
 ## Develop
 
 ```
 cd macos && swift test                    # core logic, runs anywhere
-cd macos && xcodegen && xcodebuild -scheme Battery build
-scripts/release/                          # CI release pipeline (tag v* -> signed, notarized dmg + pkg)
+cd macos && xcodegen && xcodebuild -scheme Battery build      # Debug builds are unsigned
+scripts/check-identity.sh                 # team/bundle/service/Sparkle constants must agree (CI runs it)
+scripts/release/                          # tag v* -> tests, signed + notarized dmg/pkg, draft release
 ```
 
 Layout: `macos/Sources/BatteryCore` (pure logic), `App/` SwiftUI, `Daemon/` root helper + SMC, `CLI/`, `Shared/` XPC. Ad-hoc dev builds invalidate the `SMAppService` approval on every rebuild; load the daemon with a plain launchd plist while iterating.
