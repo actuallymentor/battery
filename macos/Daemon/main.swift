@@ -8,6 +8,10 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 
 	private let smc = SMC()
 	private lazy var caps = SMCCapabilities( keys: Set( SMCCapabilities.probeKeys.filter { smc?.has( $0 ) ?? false } ) )
+	private lazy var maintainer = smc.map { Maintainer( smc: $0, caps: caps ) }
+
+	/// Touch at launch so a persisted maintain target resumes without waiting for a client
+	func boot() { _ = maintainer }
 
 	// Callers must be our own signed app or CLI. Debug builds are ad-hoc signed, so skip there.
 	private let requirement = """
@@ -34,10 +38,28 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 	}
 
 	func status( reply: @escaping ( Bool, String ) -> Void ) {
-		guard let smc else { return reply( false, "AppleSMC unavailable" ) }
+		guard let smc, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
+		let charging = SMCPlan.chargingEnabled( caps ) { smc.read( $0 ) }
+		reply( true, Report.status( reading.snapshot, voltage: reading.voltage, charging: charging, maintain: maintainer?.target ) )
+	}
+
+	func statusCSV( reply: @escaping ( Bool, String ) -> Void ) {
+		guard let smc, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
 		let charging = SMCPlan.chargingEnabled( caps ) { smc.read( $0 ) }
 		let discharging = SMCPlan.discharging( caps ) { smc.read( $0 ) }
-		reply( true, "charging=\( charging.map { "\( $0 )" } ?? "unknown" ) discharging=\( discharging.map { "\( $0 )" } ?? "unknown" )" )
+		reply( true, Report.csv( reading.snapshot, charging: charging, discharging: discharging, maintain: maintainer?.target ) )
+	}
+
+	func maintain( _ setting: String, forceDischarge: Bool, reply: @escaping ( Bool, String ) -> Void ) {
+		guard let maintainer else { return reply( false, "AppleSMC unavailable" ) }
+		guard let target = try? MaintainTarget( persisted: setting ) else { return reply( false, "Invalid maintain target: \( setting )" ) }
+		maintainer.start( target, force: forceDischarge )
+		reply( true, "Maintaining battery at \( target.display )" )
+	}
+
+	func stopMaintain( reply: @escaping ( Bool, String ) -> Void ) {
+		maintainer?.stop()
+		reply( true, "Battery maintenance stopped" )
 	}
 
 	func setCharging( _ on: Bool, reply: @escaping ( Bool, String ) -> Void ) {
@@ -59,6 +81,7 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 
 let service = Service()
 let listener = NSXPCListener( machServiceName: batteryDaemonName )
+service.boot()
 listener.delegate = service
 listener.resume()
 RunLoop.main.run()

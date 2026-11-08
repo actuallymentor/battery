@@ -8,5 +8,8 @@ let batteryDaemonName = "co.palokaj.battery.daemon"
 	func probe( reply: @escaping ( Bool, String ) -> Void )
 	func status( reply: @escaping ( Bool, String ) -> Void )
 	func setCharging( _ on: Bool, reply: @escaping ( Bool, String ) -> Void )
+	func maintain( _ setting: String, forceDischarge: Bool, reply: @escaping ( Bool, String ) -> Void )
+	func stopMaintain( reply: @escaping ( Bool, String ) -> Void )
+	func statusCSV( reply: @escaping ( Bool, String ) -> Void )
 	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void )
 }

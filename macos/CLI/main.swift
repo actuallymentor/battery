@@ -12,6 +12,11 @@ func remote( _ call: ( BatteryDaemonXPC, @escaping ( Bool, String ) -> Void ) ->
 		FileHandle.standardError.write( Data( "battery: daemon unreachable (\( e.localizedDescription )). Open Battery.app and approve it in Login Items.\n".utf8 ) )
 		exit( 1 )
 	} as! BatteryDaemonXPC
+	// An unregistered Mach name never errors, it just hangs: give up after a while
+	DispatchQueue.main.asyncAfter( deadline: .now() + 15 ) {
+		FileHandle.standardError.write( Data( "battery: daemon not responding. Open Battery.app and approve it in Login Items.\n".utf8 ) )
+		exit( 1 )
+	}
 	call( proxy ) { ok, text in
 		print( text )
 		exit( ok ? 0 : 1 )
@@ -26,6 +31,9 @@ do {
 	switch try Command( arguments: args ) {
 	case .help: print( Report.help )
 	case .status: remote { $0.status( reply: $1 ) }
+	case .statusCSV: remote { $0.statusCSV( reply: $1 ) }
+	case .maintain( .stop ): remote { $0.stopMaintain( reply: $1 ) }
+	case .maintain( .set( let target, let force ) ): remote { $0.maintain( target.persisted, forceDischarge: force, reply: $1 ) }
 	case .charging( let on ): remote { $0.setCharging( on, reply: $1 ) }
 	case .adapter( let on ): remote { $0.setAdapter( on, reply: $1 ) }
 	default:

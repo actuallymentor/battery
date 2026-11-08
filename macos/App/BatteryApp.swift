@@ -7,6 +7,12 @@ struct BatteryApp: App {
 	@State private var daemon = SMAppService.daemon( plistName: "co.palokaj.battery.daemon.plist" )
 	@State private var message = ""
 
+	init() {
+		// First launch: ask for the daemon. macOS then needs approval under Login Items
+		let d = SMAppService.daemon( plistName: "co.palokaj.battery.daemon.plist" )
+		if d.status == .notRegistered || d.status == .notFound { try? d.register() }
+	}
+
 	var body: some Scene {
 		MenuBarExtra( "Battery", systemImage: "battery.100" ) {
 			Text( "Daemon: \( label( daemon.status ) )" )

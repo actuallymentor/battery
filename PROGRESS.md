@@ -38,7 +38,13 @@ Appcast hosting, Homebrew formula owner, when to push for first CI run.
 - `.notes/` and other dotfiles are gitignored (`.*`); `.github` is whitelisted. Pre-existing deleted `assets/node_modules/*` in the working tree: leave alone.
 - Post-milestone checklist in CLAUDE.md (reflect, style, changelog, test, cleanup, commit) not yet run for the Core commit.
 
+## Done since scaffold (commit 2)
+- SMAppService flow verified (GUI approval via `babysit mac run` chain, see .notes/RESEARCH.md). Rebuilds change the ad-hoc signature => launchd EX_CONFIG for the smd job; iterate with the dev launchctl plist (`/tmp/devload.sh`, `/tmp/rebuild.sh` on the Mac), re-approve only when testing SMAppService again.
+- Daemon: `Power.swift` (AppleSmartBattery readings), `Maintainer.swift` (level/voltage band, --force-discharge, persisted in /var/db/co.palokaj.battery/maintain, resumes on restart). CLI: status, status_csv, maintain N|A-B|xV [--force-discharge]|stop, charging, adapter, probe; 15s timeout when daemon is absent. All verified on the real Mac (26.1).
+- App auto-registers the daemon at launch.
+
 ## Next up
-- SMAppService approval flow (screen locked; need unlock) instead of dev launchctl plist.
-- Maintain loop in daemon (Controller.decide), status/CSV, calibrate, charge/discharge, LED (ACLC absent on 26.1: probe alternatives), probe bfD0/bfE0/bfF0.
-- CLI: timeout when daemon unreachable (hangs if name not registered).
+- CLI/daemon: `maintain recover`, `charge N`, `discharge N`, `calibrate`, `logs`, `version`; LED (ACLC absent on 26.1: find the key); probe `bfD0/bfE0/bfF0`.
+- App UI: status, maintain presets/custom limits (#462), menubar % (#470), launch at login (#425), Apple charge limit (#480/#469), range bottom-bound (#475).
+- v1 cleanup on first launch, Sparkle wiring, telemetry already removed.
+- Post-milestone checklist (reflect/style/changelog/test) still not run.
