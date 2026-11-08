@@ -16,8 +16,12 @@ settings:
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      # Ad-hoc dev builds can't pass library validation for the embedded Sparkle.framework
+      ENABLE_HARDENED_RUNTIME: NO
 packages:
   BatteryCore: { path: . }
+  # Pinned to the version scripts/release/lib.sh verifies and signs with
+  Sparkle: { url: "https://github.com/sparkle-project/Sparkle", exactVersion: 2.10.1 }
 
 targets:
 
@@ -29,6 +33,8 @@ targets:
     dependencies:
       - package: BatteryCore
         product: BatteryCore
+      - package: Sparkle
+        product: Sparkle
       - target: batteryd
         embed: false
       - target: BatteryCLI
@@ -41,12 +47,19 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSUIElement: true
         LSMinimumSystemVersion: "14.0"
+        # Updates are opt-in (#412): no automatic checks until the user turns them on in Settings.
+        # Feed hosting is still undecided (.notes/HUMAN.md); release assets is the working default.
+        SUFeedURL: https://github.com/actuallymentor/battery/releases/latest/download/appcast.xml
+        SUPublicEDKey: xmO49bUIPl43rec5rtC1NoTg5LAFEnVwqnToYuz+NZ0=
+        SUEnableAutomaticChecks: false
+        SUAutomaticallyUpdate: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: co.palokaj.battery
         PRODUCT_NAME: Battery
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: App/Battery.entitlements
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
     postCompileScripts: []
     # Daemon + CLI + launchd plist land inside the bundle
     postbuildScripts:

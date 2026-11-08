@@ -5,6 +5,7 @@ import BatteryCore
 struct BatteryApp: App {
 
 	@State private var model = AppModel()
+	private let updater = Updater()
 	@AppStorage( Pref.showPercent ) private var showPercent = true
 	@AppStorage( Pref.iconStyle ) private var iconStyle = IconStyle.battery.rawValue
 
@@ -17,7 +18,7 @@ struct BatteryApp: App {
 		}
 		.menuBarExtraStyle( .window )
 
-		Settings { SettingsView( model: model ) }
+		Settings { SettingsView( model: model, updater: updater ) }
 
 	}
 

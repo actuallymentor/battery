@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
 
 	@Bindable var model: AppModel
+	let updater: Updater
+	@State private var autoUpdate = false
 	@AppStorage( Pref.showPercent ) private var showPercent = true
 	@AppStorage( Pref.iconStyle ) private var iconStyle = IconStyle.battery.rawValue
 	@AppStorage( Pref.lowBatteryAlert ) private var lowAlert = true
@@ -15,6 +17,13 @@ struct SettingsView: View {
 			Section( "General" ) {
 				Toggle( "Open at login", isOn: Binding( get: { model.launchAtLogin }, set: { model.setLaunchAtLogin( $0 ) } ) )
 			}
+
+			Section( "Updates" ) {
+				Toggle( "Check for updates automatically", isOn: Binding( get: { autoUpdate }, set: { autoUpdate = $0; updater.automatic = $0 } ) )
+				Button( "Check now" ) { updater.check() }
+				Text( "Off by default. Nothing is downloaded or installed without you." ).font( .caption ).foregroundStyle( .secondary )
+			}
+			.onAppear { autoUpdate = updater.automatic }
 
 			Section( "Menu bar" ) {
 				Toggle( "Show battery percentage", isOn: $showPercent )
