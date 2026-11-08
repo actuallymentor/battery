@@ -73,12 +73,21 @@ final class AppModel {
 		Task { await refresh() }
 	}
 
-	/// Registered but not answering (app was moved, bundle replaced, stale registration): start over.
+	/// Registered but not answering (app was moved, bundle replaced, stale job spec): start over.
+	/// Observed on macOS 26: when the helper is already approved, one unregister + register refreshes the job;
+	/// if it still doesn't answer, a second round does. Approval itself is only asked when it was switched off.
 	func repairHelper() {
 		Task {
-			try? await daemon.unregister()
-			try? await Task.sleep( for: .seconds( 1 ) )
-			registerHelper()
+			for _ in 0..<2 {
+				try? await daemon.unregister()
+				try? await Task.sleep( for: .seconds( 1 ) )
+				do { try daemon.register() } catch { self.error = error.localizedDescription }
+				if daemon.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems(); break }
+
+				try? await Task.sleep( for: .seconds( 4 ) )
+				if ( try? await client.snapshot() ) != nil { break }
+			}
+			await refresh()
 		}
 	}
 
