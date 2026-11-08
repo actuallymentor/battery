@@ -25,6 +25,7 @@ final class AppModel {
 	private let defaults = UserDefaults.standard
 	private var poll: Task<Void, Never>?
 	private var alertedLow = false
+	private var adopted = false
 
 	init() {
 		UserDefaults.registerBatteryDefaults()
@@ -48,6 +49,7 @@ final class AppModel {
 
 		do {
 			status = try await client.snapshot()
+			adoptDaemonLimitOnce()
 			helper = .ready
 			error = nil
 			checkLowBattery()
@@ -86,7 +88,6 @@ final class AppModel {
 	var forceDischarge: Bool { get { defaults.bool( forKey: Pref.forceDischarge ) } set { defaults.set( newValue, forKey: Pref.forceDischarge ) } }
 
 	func applyLimit( enabled: Bool ) {
-		defaults.set( enabled, forKey: Pref.limitOn )
 		perform { [ self ] in
 			if enabled {
 				let t: MaintainTarget = lower < limit ? .level( lower: max( lower, 10 ), upper: limit ) : .level( lower: limit, upper: limit )
@@ -98,14 +99,22 @@ final class AppModel {
 	}
 
 	/// Re-send the band after a value changed while the limit is on.
-	func commitLimitChange() { if defaults.bool( forKey: Pref.limitOn ) { applyLimit( enabled: true ) } }
+	func commitLimitChange() { if status?.maintain != nil { applyLimit( enabled: true ) } }
+
+	/// The daemon owns the real limit (it persists across reboots). First contact: show that, not stale prefs.
+	private func adoptDaemonLimitOnce() {
+		guard !adopted else { return }
+		adopted = true
+		if case .level( let l, let u )? = status?.maintainTarget { limit = u; lower = l; forceDischarge = status?.forceDischarge ?? false }
+	}
 
 	// MARK: Jobs
 
+	func setSchedule( days: Int ) { perform { [ self ] in try await client.setSchedule( days ) } }
 	func chargeTo( _ n: Int ) { perform { [ self ] in try await client.charge( n ) } }
 	func dischargeTo( _ n: Int ) { perform { [ self ] in try await client.discharge( n ) } }
 	func calibrate() { perform { [ self ] in try await client.calibrate() } }
-	func recover() { perform { [ self ] in try await client.recover(); defaults.set( false, forKey: Pref.limitOn ) } }
+	func recover() { perform { [ self ] in try await client.recover() } }
 
 	// MARK: v1 migration
 

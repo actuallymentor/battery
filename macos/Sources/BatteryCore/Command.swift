@@ -16,6 +16,7 @@ public enum Command: Equatable, Sendable {
 	case charging( on: Bool )
 	case adapter( on: Bool )
 	case calibrate
+	case schedule( days: Int )
 	case charge( Int )
 	case discharge( Int )
 	case version
@@ -37,6 +38,9 @@ public enum Command: Equatable, Sendable {
 		case "status": self = .status
 		case "status_csv": self = .statusCSV
 		case "calibrate": self = .calibrate
+		case "schedule":
+			guard let setting, let n = Int( setting ), ( 0...90 ).contains( n ) else { throw BatteryError.missingArgument( "schedule DAYS[0-90, 0 = off]" ) }
+			self = .schedule( days: n )
 		case "update": self = .update
 		case "reinstall": self = .reinstall
 		case "uninstall": self = .uninstall

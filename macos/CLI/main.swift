@@ -33,6 +33,7 @@ do {
 	case .status: remote { $0.status( reply: $1 ) }
 	case .charge( let n ): remote { $0.charge( n, reply: $1 ) }
 	case .discharge( let n ): remote { $0.discharge( n, reply: $1 ) }
+	case .schedule( let days ): remote { $0.setSchedule( days, reply: $1 ) }
 	case .calibrate: remote { $0.calibrate( reply: $1 ) }
 	case .maintain( .recover ): remote { $0.recover( reply: $1 ) }
 	case .version: print( batteryVersion )

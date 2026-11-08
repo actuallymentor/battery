@@ -23,6 +23,14 @@ struct SettingsView: View {
 				}
 			}
 
+			Section( "Schedule" ) {
+				Toggle( "Top off to 100% regularly", isOn: Binding( get: { ( model.status?.scheduleDays ?? 0 ) > 0 }, set: { model.setSchedule( days: $0 ? 30 : 0 ) } ) )
+				if let days = model.status?.scheduleDays, days > 0 {
+					Stepper( "Every \( days ) days", value: Binding( get: { days }, set: { model.setSchedule( days: $0 ) } ), in: 1...90 )
+					if let next = model.status?.nextTopOff { LabeledContent( "Next", value: next.formatted( date: .abbreviated, time: .omitted ) ) }
+				}
+			}
+
 			Section( "Alerts" ) {
 				Toggle( "Low battery notification", isOn: $lowAlert )
 				if lowAlert { Stepper( "Alert at \( lowLevel )%", value: $lowLevel, in: 5...50, step: 5 ) }
@@ -32,6 +40,9 @@ struct SettingsView: View {
 				LabeledContent( "Status", value: helperText )
 				if let s = model.status {
 					LabeledContent( "Version", value: s.daemonVersion )
+					LabeledContent( "Charge control", value: backendName( s.backend ) )
+					if let c = s.cycleCount { LabeledContent( "Cycle count", value: "\( c )" ) }
+					if let h = s.healthPercent { LabeledContent( "Battery health", value: "\( h )%" ) }
 					LabeledContent( "SMC keys", value: s.smcKeys.isEmpty ? "none found" : s.smcKeys.joined( separator: " " ) )
 				}
 				Button( "Uninstall Battery…", role: .destructive ) { confirmUninstall = true }
@@ -44,6 +55,16 @@ struct SettingsView: View {
 		.formStyle( .grouped )
 		.frame( width: 420 )
 		.fixedSize( horizontal: false, vertical: true )
+	}
+
+	private func backendName( _ b: String ) -> String {
+		switch b {
+		case "tahoe", "legacy": return "SMC inhibit"
+		case "firmwareLimit": return "Firmware limit"
+		case "softwareCut": return "Adapter cut (compatibility)"
+		case "none": return "Not supported"
+		default: return b
+		}
 	}
 
 	private var helperText: String {

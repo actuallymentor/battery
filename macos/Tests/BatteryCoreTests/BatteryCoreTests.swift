@@ -367,3 +367,13 @@ final class RangeAndBackendTests: XCTestCase {
 	}
 
 }
+
+
+final class ScheduleCommandTests: XCTestCase {
+	func testSchedule() throws {
+		XCTAssertEqual( try Command( arguments: [ "schedule", "30" ] ), .schedule( days: 30 ) )
+		XCTAssertEqual( try Command( arguments: [ "schedule", "0" ] ), .schedule( days: 0 ) )
+		XCTAssertThrowsError( try Command( arguments: [ "schedule", "400" ] ) )
+		XCTAssertThrowsError( try Command( arguments: [ "schedule" ] ) )
+	}
+}

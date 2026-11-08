@@ -9,13 +9,15 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 	private lazy var control = smc.map { ChargeControl( smc: $0, caps: caps ) }
 	private lazy var maintainer = control.map { Maintainer( control: $0 ) }
 	private lazy var jobs = control.flatMap { c in maintainer.map { Jobs( control: c, maintainer: $0 ) } }
+	private lazy var scheduler = jobs.map { Scheduler( jobs: $0 ) }
 	private let events = PowerEvents()
 
 	/// Touch at launch so a persisted maintain target resumes without waiting for a client, and wire power events
 	func boot() {
 		log( "daemon \( batteryVersion ) up. \( caps.summary )" )
 		_ = maintainer
-		events.onWake = { [ weak self ] in log( "wake" ); self?.maintainer?.reconcile() }
+		_ = scheduler
+		events.onWake = { [ weak self ] in log( "wake" ); self?.maintainer?.reconcile(); self?.scheduler?.check() }
 		events.onWillSleep = { [ weak self ] in self?.maintainer?.willSleep() }
 		events.onSourceChange = { [ weak self ] in self?.maintainer?.reconcile() }
 		events.start()
@@ -47,7 +49,7 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 			maintain: maintainer?.target?.persisted, forceDischarge: maintainer?.forceDischarge ?? false,
 			activity: jobs?.activity, smcKeys: caps.keys.sorted(), daemonVersion: batteryVersion,
 			backend: control.backend.rawValue, isCharging: reading.isCharging, amperage: reading.amperage,
-			warning: warning, cycleCount: reading.cycleCount, healthPercent: reading.healthPercent )
+			warning: warning, scheduleDays: scheduler?.days ?? 0, nextTopOff: scheduler?.nextRun, cycleCount: reading.cycleCount, healthPercent: reading.healthPercent )
 		reply( true, status.encoded() )
 	}
 
@@ -135,6 +137,12 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		if maintainer?.target != nil { maintainer?.stop(); log( "manual charging override stopped maintain" ) }
 		let ok = control.charging( on, level: reading.snapshot.percent )
 		reply( ok, ok ? "ok" : "Writing the charge control failed (see `battery logs`)" )
+	}
+
+	func setSchedule( _ days: Int, reply: @escaping ( Bool, String ) -> Void ) {
+		guard let scheduler else { return reply( false, "AppleSMC unavailable" ) }
+		scheduler.set( days: days )
+		reply( true, days > 0 ? "Top off every \( days ) days" : "Schedule off" )
 	}
 
 	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void ) {

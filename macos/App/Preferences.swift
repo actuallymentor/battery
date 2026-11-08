@@ -7,7 +7,6 @@ enum Pref {
 	static let iconStyle = "menuBarIconStyle"
 	static let limit = "chargeLimit"
 	static let lower = "chargeLowerBound"
-	static let limitOn = "limitEnabled"
 	static let forceDischarge = "forceDischarge"
 	static let presets = "limitPresets"
 	static let lowBatteryAlert = "lowBatteryAlert"
@@ -30,7 +29,6 @@ extension UserDefaults {
 			Pref.iconStyle: IconStyle.battery.rawValue,
 			Pref.limit: 80,
 			Pref.lower: 75,
-			Pref.limitOn: false,
 			Pref.forceDischarge: false,
 			Pref.presets: [ 60, 70, 80, 90 ],
 			Pref.lowBatteryAlert: true,

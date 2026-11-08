@@ -34,6 +34,10 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 	/// Set when what we asked for is not what the hardware does
 	public var warning: String?
 
+	/// Scheduled top-off to 100% (#450): every N days, 0 = off
+	public var scheduleDays: Int
+	public var nextTopOff: Date?
+
 	/// Battery health (PR #445)
 	public var cycleCount: Int?
 	public var healthPercent: Int?
@@ -41,8 +45,10 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 	public init( percent: Int, voltage: Double? = nil, remaining: String = "no estimate", acAttached: Bool,
 	             chargingEnabled: Bool? = nil, discharging: Bool? = nil, maintain: String? = nil, forceDischarge: Bool = false,
 	             activity: String? = nil, smcKeys: [ String ] = [], daemonVersion: String = "",
-	             backend: String = "unknown", isCharging: Bool? = nil, amperage: Int? = nil, warning: String? = nil,
+	             backend: String = "unknown", isCharging: Bool? = nil, amperage: Int? = nil, warning: String? = nil, scheduleDays: Int = 0, nextTopOff: Date? = nil,
 	             cycleCount: Int? = nil, healthPercent: Int? = nil ) {
+		self.scheduleDays = scheduleDays
+		self.nextTopOff = nextTopOff
 		self.cycleCount = cycleCount
 		self.healthPercent = healthPercent
 		self.backend = backend

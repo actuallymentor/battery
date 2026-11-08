@@ -87,6 +87,10 @@ public enum Report {
 	    manually set the adapter to (not) charge even when plugged in
 	    eg: battery adapter off
 
+	  battery schedule DAYS[0-90]
+	    top off to 100% every DAYS days (0 turns it off), runs when plugged in
+	    eg: battery schedule 30
+
 	  battery calibrate
 	    calibrate the battery by discharging it to 15%, then recharging it to 100%, and keeping it there for 1 hour
 	    battery maintenance is restored upon completion

@@ -28,5 +28,7 @@ let batteryDaemonName = "co.palokaj.battery.daemon"
 	func removeLegacy( reply: @escaping ( Bool, String ) -> Void )
 	/// Restore normal charging and wipe persisted state (before the app unregisters the daemon).
 	func resetAll( reply: @escaping ( Bool, String ) -> Void )
+	/// Top off to 100% every N days (0 = off)
+	func setSchedule( _ days: Int, reply: @escaping ( Bool, String ) -> Void )
 	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void )
 }

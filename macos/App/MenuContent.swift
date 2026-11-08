@@ -5,7 +5,6 @@ import BatteryCore
 struct MenuContent: View {
 
 	@Bindable var model: AppModel
-	@AppStorage( Pref.limitOn ) private var limitOn = false
 	@AppStorage( Pref.limit ) private var limit = 80
 	@AppStorage( Pref.lower ) private var lower = 75
 	@AppStorage( Pref.forceDischarge ) private var force = false
@@ -42,8 +41,14 @@ struct MenuContent: View {
 	@ViewBuilder private var content: some View {
 		if let s = model.status {
 			header( s )
-			limitSection( s )
-			actions( s )
+			if let w = s.warning {
+				Label( w, systemImage: "exclamationmark.triangle.fill" )
+					.font( .caption ).foregroundStyle( .orange ).fixedSize( horizontal: false, vertical: true )
+			}
+			if s.backend != "none" {
+				limitSection( s )
+				actions( s )
+			}
 		}
 	}
 
@@ -59,6 +64,7 @@ struct MenuContent: View {
 	}
 
 	private func detail( _ s: BatteryStatus ) -> String {
+		if s.backend == "none" { return "No charge control found on this Mac" }
 		var parts = [ String ]()
 		if s.remaining != "no estimate" { parts.append( "\( s.remaining ) remaining" ) }
 		if let v = s.voltage { parts.append( String( format: "%.2f V", v ) ) }
@@ -70,7 +76,7 @@ struct MenuContent: View {
 	private func limitSection( _ s: BatteryStatus ) -> some View {
 		VStack( alignment: .leading, spacing: 10 ) {
 
-			Toggle( isOn: Binding( get: { limitOn }, set: { model.applyLimit( enabled: $0 ) } ) ) {
+			Toggle( isOn: Binding( get: { s.maintain != nil }, set: { model.applyLimit( enabled: $0 ) } ) ) {
 				Text( "Charge limit" ).font( .subheadline.weight( .medium ) )
 			}
 			.toggleStyle( .switch )
@@ -104,9 +110,11 @@ struct MenuContent: View {
 			}
 			.font( .caption )
 
-			Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { force }, set: { force = $0; model.commitLimitChange() } ) )
-				.font( .caption )
-				.help( "Uses the battery instead of the adapter while above the limit. Can conflict with clamshell mode." )
+			if canCutAdapter( s ) {
+				Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { force }, set: { force = $0; model.commitLimitChange() } ) )
+					.font( .caption )
+					.help( "Uses the battery instead of the adapter while above the limit. Can conflict with clamshell mode." )
+			}
 		}
 		.padding( 12 )
 		.background( .quaternary.opacity( 0.5 ), in: RoundedRectangle( cornerRadius: 10 ) )
@@ -121,12 +129,14 @@ struct MenuContent: View {
 			} else {
 				HStack {
 					Button { model.chargeTo( 100 ) } label: { Label( "Charge to 100%", systemImage: "bolt.fill" ) }
-					Button { model.dischargeTo( max( limit - 10, 20 ) ) } label: { Label( "Discharge to \( max( limit - 10, 20 ) )%", systemImage: "arrow.down.circle" ) }
+					if canCutAdapter( s ) {
+						Button { model.dischargeTo( max( limit - 10, 20 ) ) } label: { Label( "Discharge to \( max( limit - 10, 20 ) )%", systemImage: "arrow.down.circle" ) }
+					}
 				}
-				Button { confirmCalibrate = true } label: { Label( "Calibrate battery…", systemImage: "gauge.with.dots.needle.bottom.50percent" ) }
+				if canCutAdapter( s ) { Button { confirmCalibrate = true } label: { Label( "Calibrate battery…", systemImage: "gauge.with.dots.needle.bottom.50percent" ) }
 					.confirmationDialog( "Calibrate battery?", isPresented: $confirmCalibrate ) {
 						Button( "Calibrate", role: .destructive ) { model.calibrate() }
-					} message: { Text( "Discharges to 15%, charges to 100%, holds for an hour, then returns to your limit. Takes several hours. Keep the Mac awake and plugged in." ) }
+					} message: { Text( "Discharges to 15%, charges to 100%, holds for an hour, then returns to your limit. Takes several hours. Keep the Mac awake and plugged in." ) } }
 			}
 		}
 		.buttonStyle( .bordered )
@@ -134,11 +144,15 @@ struct MenuContent: View {
 		.disabled( model.busy )
 	}
 
+	/// Adapter cut keys exist: force discharge, discharge-to and calibrate depend on them
+	private func canCutAdapter( _ s: BatteryStatus ) -> Bool { !Set( s.smcKeys ).isDisjoint( with: [ "CHIE", "CH0J", "CH0I" ] ) }
+
 	// MARK: Footer
 
 	private var footer: some View {
 		HStack {
 			SettingsLink { Text( "Settings…" ) }
+				.simultaneousGesture( TapGesture().onEnded { NSApplication.shared.activate( ignoringOtherApps: true ) } )
 			Spacer()
 			Button( "Quit" ) { NSApplication.shared.terminate( nil ) }
 		}
