@@ -40,6 +40,9 @@ final class Jobs {
 		tick()
 	}
 
+	/// After wake the adapter was restored for sleep: put the job's state back.
+	func reconcile() { if let kind { apply( kind ) } }
+
 	/// Abort: back to normal charging
 	func cancel() { end( restoring: true ) }
 
@@ -76,7 +79,11 @@ final class Jobs {
 
 		switch kind {
 		case .charge( let n ):
-			if percent >= n { control.charging( false, level: percent ); finish() }
+			if percent >= n {
+				// Below 100 hold at the reached level (v1 behaviour). At 100 there is nothing to hold: leave charging normal.
+				if n >= 100 { control.charging( true ) } else { control.charging( false, level: percent ) }
+				finish()
+			}
 
 		case .discharge( let n ):
 			if percent <= n { control.adapter( on: true ); finish() }

@@ -89,7 +89,7 @@ final class Maintainer {
 
 	/// Going to sleep: never sleep with the adapter cut by us.
 	func willSleep() {
-		guard adapterCut else { return }
+		guard control.adapterCutByUs else { return }
 		control.adapter( on: true )
 		adapterCut = false
 		log( "sleep: adapter restored" )

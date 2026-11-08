@@ -17,7 +17,7 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		log( "daemon \( batteryVersion ) up. \( caps.summary )" )
 		_ = maintainer
 		_ = scheduler
-		events.onWake = { [ weak self ] in log( "wake" ); self?.maintainer?.reconcile(); self?.scheduler?.check() }
+		events.onWake = { [ weak self ] in log( "wake" ); self?.maintainer?.reconcile(); self?.jobs?.reconcile(); self?.scheduler?.check() }
 		events.onWillSleep = { [ weak self ] in self?.maintainer?.willSleep() }
 		events.onSourceChange = { [ weak self ] in self?.maintainer?.reconcile() }
 		events.start()

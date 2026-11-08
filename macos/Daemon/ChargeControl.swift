@@ -40,10 +40,15 @@ final class ChargeControl {
 		return ok
 	}
 
+	/// We cut the adapter and have not restored it. Anything that can cut (maintain, jobs) goes through here, so one flag covers all.
+	private( set ) var adapterCutByUs = false
+
 	@discardableResult
 	func adapter( on: Bool ) -> Bool {
 		guard caps.canCutAdapter else { return false }
-		return apply( SMCPlan.adapter( on: on, caps ) )
+		let ok = apply( SMCPlan.adapter( on: on, caps ) )
+		if ok { adapterCutByUs = !on }
+		return ok
 	}
 
 	/// Firmware backend: hand a band to the firmware, which then enforces it by itself (also asleep and before login).

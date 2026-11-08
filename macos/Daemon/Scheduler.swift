@@ -25,9 +25,10 @@ final class Scheduler {
 	}
 
 	func set( days: Int ) {
+		let wasOff = self.days == 0
 		self.days = max( 0, min( days, 90 ) )
-		// First enable counts from now, not from "never"
-		if self.days > 0, lastRun == nil { lastRun = Date() }
+		// Turning it on counts from now, never from a stale last run
+		if self.days > 0, wasOff || lastRun == nil { lastRun = Date() }
 		save()
 		log( "schedule: top off every \( self.days ) days" )
 	}
