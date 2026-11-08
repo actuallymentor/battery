@@ -1,0 +1,91 @@
+# Builds, signs, notarizes and drafts a macOS release for every v* tag.
+#
+# - Runs on tags only, never on pull requests, so secrets never reach fork code
+# - The "release" environment requires maintainer approval before secrets are exposed
+# - Secrets are passed per step through env, never interpolated into scripts
+# - The result is a DRAFT GitHub release, publishing stays a manual step
+#
+# Scripts live in scripts/release/, see lib.sh for the Xcode project contract.
+
+name: Release macOS
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+
+  release:
+    name: Build, sign & notarize
+    runs-on: macos-15
+    environment: release
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No credentials exist on the runner yet while project code builds
+      - name: Build app
+        run: scripts/release/build.sh
+
+      - name: Check Sparkle key
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: scripts/release/sparkle.sh check
+
+      - name: Import signing credentials
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CI_KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
+          DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          DEVELOPER_ID_INSTALLER_P12_BASE64: ${{ secrets.DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          DEVELOPER_ID_INSTALLER_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
+          NOTARY_API_KEY_P8_BASE64: ${{ secrets.NOTARY_API_KEY_P8_BASE64 }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: scripts/release/keychain.sh setup
+
+      - name: Sign app
+        run: scripts/release/sign.sh
+
+      # Stapling the app first keeps the copy inside the .pkg and .dmg valid offline
+      - name: Notarize app
+        run: scripts/release/notarize.sh app
+
+      - name: Build .pkg and .dmg
+        run: scripts/release/package.sh
+
+      - name: Notarize .pkg and .dmg
+        run: |
+          scripts/release/notarize.sh pkg
+          scripts/release/notarize.sh dmg
+
+      - name: Sign Sparkle update
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: scripts/release/sparkle.sh sign
+
+      - name: Draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release/publish.sh
+
+      - name: Remove credentials
+        if: always()
+        run: scripts/release/keychain.sh cleanup
