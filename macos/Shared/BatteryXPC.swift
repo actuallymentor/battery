@@ -1,7 +1,7 @@
 import Foundation
 
-/// Single source for the version shown by CLI, daemon and app. Keep in sync with MARKETING_VERSION in project.yml.
-let batteryVersion = "2.0.0-dev"
+/// App, daemon and CLI all report the same version: MARKETING_VERSION, embedded in each binary's Info.plist.
+let batteryVersion = Bundle.main.object( forInfoDictionaryKey: "CFBundleShortVersionString" ) as? String ?? "dev"
 
 /// Daemon log file, world-readable
 let batteryLogPath = "/Library/Logs/co.palokaj.battery.log"
@@ -30,5 +30,8 @@ let batteryDaemonName = "co.palokaj.battery.daemon"
 	func resetAll( reply: @escaping ( Bool, String ) -> Void )
 	/// Top off to 100% every N days (0 = off)
 	func setSchedule( _ days: Int, reply: @escaping ( Bool, String ) -> Void )
+	/// Symlink /usr/local/bin/battery to the CLI inside /Applications/Battery.app (root-owned location only)
+	func installCLI( reply: @escaping ( Bool, String ) -> Void )
+	func uninstallCLI( reply: @escaping ( Bool, String ) -> Void )
 	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void )
 }

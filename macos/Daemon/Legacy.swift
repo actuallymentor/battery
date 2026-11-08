@@ -57,3 +57,35 @@ enum Legacy {
 	}
 
 }
+
+/// `battery` on PATH. Only ever points into /Applications: a root-run command must not resolve to user-writable code.
+enum CLILink {
+
+	static let link = "/usr/local/bin/battery"
+	static let target = "/Applications/Battery.app/Contents/Helpers/battery"
+
+	static func install() -> ( Bool, String ) {
+		let fm = FileManager.default
+		guard fm.isExecutableFile( atPath: target ) else { return ( false, "Move Battery.app to /Applications first." ) }
+
+		// Replace our own link, never a foreign file
+		if let dest = try? fm.destinationOfSymbolicLink( atPath: link ) {
+			if dest == target { return ( true, "Already installed" ) }
+			guard dest.hasPrefix( "/usr/local/co.palokaj.battery" ) else { return ( false, "\( link ) already points to \( dest )." ) }
+			try? fm.removeItem( atPath: link )
+		} else if fm.fileExists( atPath: link ) {
+			return ( false, "\( link ) exists and isn't a link; not touching it." )
+		}
+
+		do {
+			try fm.createDirectory( atPath: "/usr/local/bin", withIntermediateDirectories: true )
+			try fm.createSymbolicLink( atPath: link, withDestinationPath: target )
+			return ( true, "Installed \( link )" )
+		} catch { return ( false, error.localizedDescription ) }
+	}
+
+	static func uninstall() {
+		if ( try? FileManager.default.destinationOfSymbolicLink( atPath: link ) ) == target { try? FileManager.default.removeItem( atPath: link ) }
+	}
+
+}

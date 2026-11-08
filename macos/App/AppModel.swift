@@ -116,6 +116,14 @@ final class AppModel {
 	func calibrate() { perform { [ self ] in try await client.calibrate() } }
 	func recover() { perform { [ self ] in try await client.recover() } }
 
+	// MARK: Command line
+
+	var cliInstalled: Bool { ( try? FileManager.default.destinationOfSymbolicLink( atPath: "/usr/local/bin/battery" ) ) == "/Applications/Battery.app/Contents/Helpers/battery" }
+
+	func setCLIInstalled( _ on: Bool ) {
+		perform { [ self ] in if on { try await client.installCLI() } else { try await client.uninstallCLI() } }
+	}
+
 	// MARK: v1 migration
 
 	func removeLegacy() {
@@ -133,6 +141,7 @@ final class AppModel {
 	/// Settings -> "Uninstall": hand charging back to macOS, drop the helper.
 	func uninstall() {
 		perform { [ self ] in
+			try? await client.uninstallCLI()
 			try? await client.resetAll()
 			try? await daemon.unregister()
 			try? await SMAppService.mainApp.unregister()

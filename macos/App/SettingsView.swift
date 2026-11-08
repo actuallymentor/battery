@@ -54,6 +54,7 @@ struct SettingsView: View {
 					if let h = s.healthPercent { LabeledContent( "Battery health", value: "\( h )%" ) }
 					LabeledContent( "SMC keys", value: s.smcKeys.isEmpty ? "none found" : s.smcKeys.joined( separator: " " ) )
 				}
+				Toggle( "Use `battery` in Terminal", isOn: Binding( get: { model.cliInstalled }, set: { model.setCLIInstalled( $0 ) } ) )
 				Button( "Uninstall Battery…", role: .destructive ) { confirmUninstall = true }
 					.confirmationDialog( "Uninstall Battery?", isPresented: $confirmUninstall ) {
 						Button( "Restore charging and uninstall", role: .destructive ) { model.uninstall() }

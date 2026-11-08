@@ -57,6 +57,8 @@ final class DaemonClient {
 	func calibrate() async throws { _ = try await call { $0.calibrate( reply: $1 ) } }
 	func recover() async throws { _ = try await call { $0.recover( reply: $1 ) } }
 	func setSchedule( _ days: Int ) async throws { _ = try await call { $0.setSchedule( days, reply: $1 ) } }
+	func installCLI() async throws { _ = try await call { $0.installCLI( reply: $1 ) } }
+	func uninstallCLI() async throws { _ = try await call { $0.uninstallCLI( reply: $1 ) } }
 	func resetAll() async throws { _ = try await call { $0.resetAll( reply: $1 ) } }
 
 	func legacyFound() async throws -> [ String ] {

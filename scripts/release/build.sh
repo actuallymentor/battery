@@ -31,6 +31,7 @@ xcodebuild archive \
 	-destination 'generic/platform=macOS' \
 	-archivePath "$archive" \
 	ARCHS=arm64 \
+	MARKETING_VERSION="$VERSION" \
 	ONLY_ACTIVE_ARCH=NO \
 	CODE_SIGN_STYLE=Manual \
 	CODE_SIGN_IDENTITY=- \

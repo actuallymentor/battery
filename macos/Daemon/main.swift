@@ -139,6 +139,17 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		reply( ok, ok ? "ok" : "Writing the charge control failed (see `battery logs`)" )
 	}
 
+	func installCLI( reply: @escaping ( Bool, String ) -> Void ) {
+		let ( ok, text ) = CLILink.install()
+		log( "install CLI: \( text )" )
+		reply( ok, text )
+	}
+
+	func uninstallCLI( reply: @escaping ( Bool, String ) -> Void ) {
+		CLILink.uninstall()
+		reply( true, "ok" )
+	}
+
 	func setSchedule( _ days: Int, reply: @escaping ( Bool, String ) -> Void ) {
 		guard let scheduler else { return reply( false, "AppleSMC unavailable" ) }
 		scheduler.set( days: days )
