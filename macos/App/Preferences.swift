@@ -9,7 +9,6 @@ enum Pref {
 	static let limit = "chargeLimit"
 	static let lower = "chargeLowerBound"
 	static let forceDischarge = "forceDischarge"
-	static let presets = "limitPresets"
 	static let lowBatteryAlert = "lowBatteryAlert"
 	static let lowBatteryLevel = "lowBatteryLevel"
 	static let legacyDeclined = "legacyCleanupDeclined"
@@ -31,7 +30,6 @@ extension UserDefaults {
 			Pref.limit: 80,
 			Pref.lower: 75,
 			Pref.forceDischarge: false,
-			Pref.presets: LimitSettings.defaultPresets.map( String.init ).joined( separator: "," ),
 			Pref.lowBatteryAlert: true,
 			Pref.lowBatteryLevel: 15,
 		] )
@@ -44,8 +42,7 @@ extension LimitSettings {
 	static func load() -> LimitSettings {
 		UserDefaults.registerBatteryDefaults()
 		let d = UserDefaults.standard
-		return LimitSettings( limit: d.integer( forKey: Pref.limit ), lower: d.integer( forKey: Pref.lower ), force: d.bool( forKey: Pref.forceDischarge ),
-		                      presets: presets( from: d.string( forKey: Pref.presets ) ?? "" ) )
+		return LimitSettings( limit: d.integer( forKey: Pref.limit ), lower: d.integer( forKey: Pref.lower ), force: d.bool( forKey: Pref.forceDischarge ) )
 	}
 
 	func save() {
@@ -53,7 +50,6 @@ extension LimitSettings {
 		d.set( limit, forKey: Pref.limit )
 		d.set( lower, forKey: Pref.lower )
 		d.set( force, forKey: Pref.forceDischarge )
-		d.set( presetsString, forKey: Pref.presets )
 	}
 
 }

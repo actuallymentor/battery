@@ -1,14 +1,17 @@
 import SwiftUI
 import BatteryCore
 
-/// The popover: one control for the limit, the one-off actions. Charge level lives in the menu bar icon, not here.
+/// The popover: the limit control. One-off actions, Settings and Quit sit behind the gear. Charge level lives in the menu bar icon, not here.
 struct MenuContent: View {
 
 	@Bindable var model: AppModel
 	@State private var confirmCalibrate = false
+	@Environment( \.openSettings ) private var openSettings
 
 	var body: some View {
 		VStack( alignment: .leading, spacing: 14 ) {
+
+			HStack { Spacer(); gear }
 
 			switch model.helper {
 			case .ready: content
@@ -23,12 +26,12 @@ struct MenuContent: View {
 					.font( .caption ).foregroundStyle( .red )
 					.onTapGesture { model.dismissError() }
 			}
-
-			Divider()
-			footer
 		}
 		.padding( 16 )
 		.frame( width: 320 )
+		.confirmationDialog( "Calibrate battery?", isPresented: $confirmCalibrate ) {
+			Button( "Calibrate", role: .destructive ) { model.calibrate() }
+		} message: { Text( "Discharges to 15%, charges to 100%, holds for an hour, then returns to your limit. Takes several hours. Keep the Mac awake and plugged in." ) }
 	}
 
 	// MARK: Ready state
@@ -41,7 +44,7 @@ struct MenuContent: View {
 			}
 			if s.canLimit {
 				limitSection( s )
-				actions( s )
+				activity( s )
 			}
 		}
 	}
@@ -56,23 +59,6 @@ struct MenuContent: View {
 			}
 			.toggleStyle( .switch )
 			.disabled( model.busy )
-
-			HStack {
-				ForEach( model.settings.presets, id: \.self ) { p in
-					Button( "\( p )%" ) { model.settings.setLimit( p ); model.commitLimitChange() }
-						.buttonStyle( .bordered )
-						.tint( model.settings.limit == p ? .accentColor : .secondary )
-						.controlSize( .small )
-						.contextMenu { Button( "Remove preset" ) { model.settings.removePreset( p ) } }
-				}
-				Spacer()
-				Menu {
-					Button( "Add current (\( model.settings.limit )%) as preset" ) { model.settings.addPreset( model.settings.limit ) }
-					Divider()
-					Button( "Reset presets" ) { model.settings.resetPresets() }
-				} label: { Image( systemName: "ellipsis.circle" ) }
-				.menuStyle( .borderlessButton ).fixedSize()
-			}
 
 			Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.settings.setLimit( Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
 			        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
@@ -95,41 +81,34 @@ struct MenuContent: View {
 		.background( .quaternary.opacity( 0.5 ), in: RoundedRectangle( cornerRadius: 10 ) )
 	}
 
-	// MARK: One-off actions
+	// MARK: Gear menu: one-off actions, Settings, Quit
 
-	private func actions( _ s: BatteryStatus ) -> some View {
-		VStack( alignment: .leading, spacing: 8 ) {
-			if let activity = s.activity {
-				Text( activity ).font( .caption ).foregroundStyle( .secondary )
-				Button { model.recover() } label: { Label( "Cancel and restore charging", systemImage: "xmark.circle" ) }
-			} else {
-				HStack {
-					Button { model.chargeTo( 100 ) } label: { Label( "Charge to 100%", systemImage: "bolt.fill" ) }
-					if s.canCutAdapter {
-						Button { model.dischargeTo( model.settings.dischargeTarget ) } label: { Label( "Discharge to \( model.settings.dischargeTarget )%", systemImage: "arrow.down.circle" ) }
-					}
+	private var gear: some View {
+		Menu {
+			if let s = model.status, s.canLimit, s.activity == nil {
+				Button { model.chargeTo( 100 ) } label: { Label( "Charge to 100%", systemImage: "bolt.fill" ) }
+				if s.canCutAdapter {
+					Button { model.dischargeTo( model.settings.dischargeTarget ) } label: { Label( "Discharge to \( model.settings.dischargeTarget )%", systemImage: "arrow.down.circle" ) }
+					Button { confirmCalibrate = true } label: { Label( "Calibrate battery…", systemImage: "gauge.with.dots.needle.bottom.50percent" ) }
 				}
-				if s.canCutAdapter { Button { confirmCalibrate = true } label: { Label( "Calibrate battery…", systemImage: "gauge.with.dots.needle.bottom.50percent" ) }
-					.confirmationDialog( "Calibrate battery?", isPresented: $confirmCalibrate ) {
-						Button( "Calibrate", role: .destructive ) { model.calibrate() }
-					} message: { Text( "Discharges to 15%, charges to 100%, holds for an hour, then returns to your limit. Takes several hours. Keep the Mac awake and plugged in." ) } }
+				Divider()
 			}
-		}
-		.buttonStyle( .bordered )
-		.controlSize( .small )
+			Button( "Settings…" ) { NSApplication.shared.activate( ignoringOtherApps: true ); openSettings() }
+			Button( "Quit" ) { NSApplication.shared.terminate( nil ) }
+		} label: { Image( systemName: "gearshape" ) }
+		.menuStyle( .borderlessButton ).menuIndicator( .hidden ).fixedSize()
 		.disabled( model.busy )
 	}
 
-	// MARK: Footer
-
-	private var footer: some View {
-		HStack {
-			SettingsLink { Text( "Settings…" ) }
-				.simultaneousGesture( TapGesture().onEnded { NSApplication.shared.activate( ignoringOtherApps: true ) } )
-			Spacer()
-			Button( "Quit" ) { NSApplication.shared.terminate( nil ) }
+	/// A running job: say so, and offer the way out (starting jobs lives in the gear menu)
+	@ViewBuilder private func activity( _ s: BatteryStatus ) -> some View {
+		if let activity = s.activity {
+			VStack( alignment: .leading, spacing: 8 ) {
+				Text( activity ).font( .caption ).foregroundStyle( .secondary )
+				Button { model.recover() } label: { Label( "Cancel and restore charging", systemImage: "xmark.circle" ) }
+					.buttonStyle( .bordered ).controlSize( .small ).disabled( model.busy )
+			}
 		}
-		.buttonStyle( .plain ).font( .caption ).foregroundStyle( .secondary )
 	}
 
 }

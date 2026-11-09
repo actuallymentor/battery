@@ -585,19 +585,6 @@ final class LimitSettingsTests: XCTestCase {
 		XCTAssertEqual( LimitSettings( limit: 500 ).limit, 100 )
 	}
 
-	func testPresets() {
-		var s = LimitSettings()
-		s.addPreset( 85 ); s.addPreset( 85 ); s.addPreset( 5 )
-		XCTAssertEqual( s.presets, [ 60, 70, 80, 85, 90 ] )
-		s.addPreset( 95 ); s.addPreset( 75 )
-		XCTAssertEqual( s.presets.count, LimitSettings.maxPresets )
-		s.removePreset( 60 )
-		XCTAssertFalse( s.presets.contains( 60 ) )
-		s.resetPresets()
-		XCTAssertEqual( s.presets, LimitSettings.defaultPresets )
-		XCTAssertEqual( LimitSettings.presets( from: "60,x,80" ), [ 60, 80 ] )
-	}
-
 	func testAdoptDaemonTarget() {
 		var s = LimitSettings()
 		s.adopt( .level( lower: 50, upper: 60 ), force: true )

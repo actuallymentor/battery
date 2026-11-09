@@ -19,7 +19,7 @@ First launch: **Enable helper** → approve *Battery* in *System Settings → Ge
 
 ## Use
 
-Menu bar icon: charge limit toggle, presets (`60 70 80 90`, right-click to remove, `…` to add the current one), slider, *Resume below* (hysteresis), optional *discharge down to the limit*, one-off *Charge to 100%* / *Discharge to* / *Calibrate*.
+Menu bar icon: charge limit toggle, slider, *Resume below* (hysteresis), optional *discharge down to the limit*. The gear (top right) holds the one-off *Charge to 100%* / *Discharge to* / *Calibrate*, *Settings…* and *Quit*.
 Settings: open at login, menu bar % and icon, low-battery alert, scheduled top-off every N days, opt-in updates, `battery` in Terminal, uninstall.
 
 ## CLI
