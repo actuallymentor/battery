@@ -42,3 +42,4 @@ OPEN RISK: a dead helper with an active limit leaves charging off (verified). De
 - Bugs found and fixed: p12 holds only the leaf, so the temp keychain needs the Apple Developer ID G2 + Apple Root CA (sha256-pinned, imported AFTER the p12 or codesign fails with errSecInternalComponent); `grep -q` under pipefail failed the identifier check.
 - Signed beta.1 -> beta.2 Sparkle update (local appcast via defaults SUFeedURL override): app swapped, daemon restarted as beta.2, 90% limit resumed, no re-approval. The ad-hoc "dead helper after update" problem does not occur with Developer ID.
 - Sleep/wake verified: wake handler fires on full wake, limit holds.
+- Reboot verified (FileVault on): the root daemon starts at boot before login, reloads the persisted 90% target and holds charging off.
