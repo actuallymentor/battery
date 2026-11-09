@@ -12,6 +12,7 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 - First launch offers to remove v1.
 
 **Changed**
+- Dark mode: follows the system theme; Settings → General → Appearance can force Light or Dark.
 - The popover no longer repeats the charge level, status and voltage (the menu bar icon shows it); it opens straight on the limit controls (no presets, no resume-below stepper: the band is a fixed 5 points, ranges stay on the CLI), the one-off actions, Settings and Quit moved behind a gear at the top right, and it shows the running job's progress when there is one.
 
 **Fixed**

@@ -8,6 +8,7 @@ struct BatteryApp: App {
 	private let updater = Updater()
 	@AppStorage( Pref.showPercent ) private var showPercent = true
 	@AppStorage( Pref.iconStyle ) private var iconStyle = IconStyle.battery.rawValue
+	@AppStorage( Pref.appearance ) private var appearance = Appearance.system.rawValue
 
 	var body: some Scene {
 
@@ -15,6 +16,7 @@ struct BatteryApp: App {
 			MenuContent( model: model )
 		} label: {
 			MenuBarLabel( status: model.status, helper: model.helper, showPercent: showPercent, style: IconStyle( rawValue: iconStyle ) ?? .battery )
+				.onChange( of: appearance, initial: true ) { applyAppearance() }
 		}
 		.menuBarExtraStyle( .window )
 
@@ -56,4 +58,9 @@ struct MenuBarLabel: View {
 		}
 	}
 
+}
+
+/// App-wide override of the device theme (nil = follow the system)
+@MainActor func applyAppearance() {
+	NSApp.appearance = ( Appearance( rawValue: UserDefaults.standard.string( forKey: Pref.appearance ) ?? "" ) ?? .system ).nsAppearance
 }

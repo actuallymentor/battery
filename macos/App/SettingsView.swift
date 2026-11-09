@@ -6,6 +6,7 @@ struct SettingsView: View {
 	let updater: Updater
 	@State private var autoUpdate = false
 	@AppStorage( Pref.showPercent ) private var showPercent = true
+	@AppStorage( Pref.appearance ) private var appearance = Appearance.system.rawValue
 	@AppStorage( Pref.iconStyle ) private var iconStyle = IconStyle.battery.rawValue
 	@AppStorage( Pref.lowBatteryAlert ) private var lowAlert = true
 	@AppStorage( Pref.lowBatteryLevel ) private var lowLevel = 15
@@ -17,6 +18,9 @@ struct SettingsView: View {
 			Form {
 				Section( "General" ) {
 					Toggle( "Open at login", isOn: Binding( get: { model.launchAtLogin }, set: { model.setLaunchAtLogin( $0 ) } ) )
+					Picker( "Appearance", selection: $appearance ) {
+						ForEach( Appearance.allCases ) { Text( $0.title ).tag( $0.rawValue ) }
+					}
 				}
 				Section( "Menu bar" ) {
 					Toggle( "Show battery percentage", isOn: $showPercent )
@@ -79,6 +83,7 @@ struct SettingsView: View {
 		}
 		.formStyle( .grouped )
 		.frame( width: 440, height: 500 )
+		.onChange( of: appearance ) { applyAppearance() }
 	}
 
 	private func backendName( _ b: String ) -> String {
