@@ -23,7 +23,8 @@ Updated 2026-11-09. Read with `AGENTS.md`, `.notes/` (TRIAGE.md, RESEARCH.md, HU
 - GUI: Mac re-locks after each `babysit mac run` session; do everything in one chain (see RESEARCH.md).
 
 ## Open for the user (see .notes/HUMAN.md)
-Appcast hosting (SUFeedURL is a placeholder: GitHub release asset), Homebrew cask owner, when to push / first beta tag, PowerUI backend, multi-Mac testers (15.8.x, 26.7, 27).
+Homebrew cask owner, when to push / first beta tag, PowerUI backend, multi-Mac testers (15.8.x, 26.7, 27).
+Appcast: stays on GitHub `releases/latest` (decided): updates begin at the first stable release, betas are manual installs.
 
 ## Prefactor pass (2026-11-09)
 Done: input limits enforced in the daemon, single main-queue owner, suspend/abort semantics between maintain and jobs, one adapter-cut flag, force-discharge no-flap, boot-safe adapter restore, LED wired (skipped without ACLC), status rendered CLI-side, pure `JobPlanner`/`Schedule`/`LimitSettings`/`Limits` + 24 new tests, app actions serialized + daemon-truth adoption, CI workflow, release test gate, signing identifier assertions, Sparkle build number + appcast, identity drift guard.
