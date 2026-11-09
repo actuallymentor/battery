@@ -27,4 +27,4 @@ Appcast hosting (SUFeedURL is a placeholder: GitHub release asset), Homebrew cas
 
 ## Prefactor pass (2026-11-09)
 Done: input limits enforced in the daemon, single main-queue owner, suspend/abort semantics between maintain and jobs, one adapter-cut flag, force-discharge no-flap, boot-safe adapter restore, LED wired (skipped without ACLC), status rendered CLI-side, pure `JobPlanner`/`Schedule`/`LimitSettings`/`Limits` + 24 new tests, app actions serialized + daemon-truth adoption, CI workflow, release test gate, signing identifier assertions, Sparkle build number + appcast, identity drift guard.
-Deliberately NOT done: typed XPC request enum (large rewrite, no CI to catch regressions yet), dropping the .pkg (owner's call, see HUMAN.md), xcconfig single identity source (guard script instead).
+Deliberately NOT done: typed XPC request enum (large rewrite, no CI to catch regressions yet), xcconfig single identity source (guard script instead).

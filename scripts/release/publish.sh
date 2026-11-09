@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib.sh"
 
 require_env GH_TOKEN
 
-artifacts=("$PKG_PATH" "$DMG_PATH" "$DMG_PATH.sparkle" "$OUT_DIR/appcast.xml")
+artifacts=("$DMG_PATH" "$DMG_PATH.sparkle" "$OUT_DIR/appcast.xml")
 for artifact in "${artifacts[@]}"; do
 	[[ -f "$artifact" ]] || fail "Missing artifact $artifact"
 done

@@ -44,7 +44,6 @@ function setup() {
 
 	require_env CI_KEYCHAIN_PASSWORD \
 		DEVELOPER_ID_APPLICATION_P12_BASE64 DEVELOPER_ID_APPLICATION_P12_PASSWORD \
-		DEVELOPER_ID_INSTALLER_P12_BASE64 DEVELOPER_ID_INSTALLER_P12_PASSWORD \
 		NOTARY_API_KEY_P8_BASE64 NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID APPLE_TEAM_ID
 
 	[[ "$APPLE_TEAM_ID" == "$TEAM_ID" ]] || fail "APPLE_TEAM_ID does not match the team in lib.sh"
@@ -64,9 +63,8 @@ function setup() {
 	security unlock-keychain -p "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
 
 	import_p12 application "$DEVELOPER_ID_APPLICATION_P12_BASE64" "$DEVELOPER_ID_APPLICATION_P12_PASSWORD"
-	import_p12 installer "$DEVELOPER_ID_INSTALLER_P12_BASE64" "$DEVELOPER_ID_INSTALLER_P12_PASSWORD"
 
-	# Allow codesign/productsign to use the keys non-interactively
+	# Allow codesign to use the keys non-interactively
 	security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
 
 	# Put the keychain first in the search list, keep the existing ones after it
@@ -75,11 +73,10 @@ function setup() {
 	# shellcheck disable=SC2086
 	security list-keychains -d user -s "$KEYCHAIN" $existing
 
-	# Both identities must be present and valid before anything gets signed
+	# The identity must be present and valid before anything gets signed
 	local identities
 	identities=$(security find-identity -v "$KEYCHAIN")
 	grep -qF "\"$APP_IDENTITY\"" <<<"$identities" || fail "Identity not found in keychain: $APP_IDENTITY"
-	grep -qF "\"$INSTALLER_IDENTITY\"" <<<"$identities" || fail "Identity not found in keychain: $INSTALLER_IDENTITY"
 	log "Imported signing identities"
 
 	# Store the App Store Connect API key as a notarytool profile, then drop the key file

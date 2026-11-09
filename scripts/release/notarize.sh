@@ -3,7 +3,7 @@
 #
 # Notarizes and staples a signed artifact, then checks it with Gatekeeper.
 #
-# Usage: notarize.sh app|pkg|dmg
+# Usage: notarize.sh app|dmg
 #
 # Apps are zipped for submission and the ticket is stapled to the .app itself.
 #
@@ -12,13 +12,12 @@ source "$(dirname "$0")/lib.sh"
 
 case "${1:-}" in
 	app) target="$APP_PATH" ;;
-	pkg) target="$PKG_PATH" ;;
 	dmg) target="$DMG_PATH" ;;
-	*) fail "Usage: $0 app|pkg|dmg" ;;
+	*) fail "Usage: $0 app|dmg" ;;
 esac
 [[ -e "$target" ]] || fail "Nothing to notarize at $target"
 
-# notarytool only accepts zip, pkg and dmg uploads
+# notarytool only accepts zip, pkg and dmg uploads, the app goes up zipped
 submission="$target"
 if [[ "$target" == *.app ]]; then
 	submission="$WORK_DIR/$(basename "$target").zip"
@@ -51,7 +50,6 @@ xcrun stapler validate "$target"
 # Gatekeeper must accept the artifact the way a user would open it
 case "$target" in
 	*.app) spctl --assess --type execute --verbose=2 "$target" ;;
-	*.pkg) spctl --assess --type install --verbose=2 "$target" ;;
 	*.dmg) spctl --assess --type open --context context:primary-signature --verbose=2 "$target" ;;
 esac
 

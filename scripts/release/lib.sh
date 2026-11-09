@@ -25,7 +25,6 @@ APP_NAME="${APP_NAME:-Battery}"
 # Apple signing identities, see the "release" GitHub environment
 TEAM_ID="CAWM399GFD"
 APP_IDENTITY="Developer ID Application: Mentor Palokaj ($TEAM_ID)"
-INSTALLER_IDENTITY="Developer ID Installer: MMOH (Netherlands) ($TEAM_ID)"
 
 # Sparkle, the public key is baked into Info.plist as SUPublicEDKey
 SPARKLE_PUBLIC_ED_KEY="xmO49bUIPl43rec5rtC1NoTg5LAFEnVwqnToYuz+NZ0="
@@ -45,7 +44,6 @@ WORK_DIR="${RUNNER_TEMP:-$PWD/.release}/battery-release"
 OUT_DIR="$WORK_DIR/out"
 SECRETS_DIR="$WORK_DIR/secrets"
 APP_PATH="$OUT_DIR/$APP_NAME.app"
-PKG_PATH="$OUT_DIR/$ARTIFACT_BASE.pkg"
 DMG_PATH="$OUT_DIR/$ARTIFACT_BASE.dmg"
 
 # Temporary keychain holding both Developer ID identities and the notary credentials

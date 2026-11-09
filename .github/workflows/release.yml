@@ -70,8 +70,6 @@ jobs:
           CI_KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
           DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
-          DEVELOPER_ID_INSTALLER_P12_BASE64: ${{ secrets.DEVELOPER_ID_INSTALLER_P12_BASE64 }}
-          DEVELOPER_ID_INSTALLER_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
           NOTARY_API_KEY_P8_BASE64: ${{ secrets.NOTARY_API_KEY_P8_BASE64 }}
           NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
           NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
@@ -80,17 +78,15 @@ jobs:
       - name: Sign app
         run: scripts/release/sign.sh
 
-      # Stapling the app first keeps the copy inside the .pkg and .dmg valid offline
+      # Stapling the app first keeps the copy inside the .dmg valid offline
       - name: Notarize app
         run: scripts/release/notarize.sh app
 
-      - name: Build .pkg and .dmg
+      - name: Build .dmg
         run: scripts/release/package.sh
 
-      - name: Notarize .pkg and .dmg
-        run: |
-          scripts/release/notarize.sh pkg
-          scripts/release/notarize.sh dmg
+      - name: Notarize .dmg
+        run: scripts/release/notarize.sh dmg
 
       - name: Sign Sparkle update
         env:

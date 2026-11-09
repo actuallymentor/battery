@@ -18,10 +18,10 @@ git tag v2.0.0-beta.1 && git push origin v2.0.0-beta.1   # suffix => pre-release
 | --- | --- | --- |
 | `build.sh` | `xcodebuild archive`, ad-hoc signed, enforces `SUPublicEDKey`, tag == `CFBundleShortVersionString` | none |
 | `sparkle.sh check` | fail fast if the private EdDSA key ≠ `SUPublicEDKey` | `SPARKLE_ED_PRIVATE_KEY` |
-| `keychain.sh setup` | temp keychain, both P12s, notarytool profile | P12s, notary key, keychain pw |
+| `keychain.sh setup` | temp keychain, app P12, notarytool profile | P12s, notary key, keychain pw |
 | `sign.sh` | inside-out Developer ID signing, hardened runtime, verifies team/runtime/no `get-task-allow` | keychain |
-| `notarize.sh app\|pkg\|dmg` | submit, wait, staple, `spctl` | keychain |
-| `package.sh` | `.pkg` (Installer identity) + `.dmg` (Application identity) | keychain |
+| `notarize.sh app\|dmg` | submit, wait, staple, `spctl` | keychain |
+| `package.sh` | `.dmg` (Application identity) | keychain |
 | `sparkle.sh sign` | EdDSA-signs the stapled `.dmg` → `<dmg>.sparkle` enclosure attributes | `SPARKLE_ED_PRIVATE_KEY` |
 | `publish.sh` | draft release + `SHA256SUMS`, re-runs only touch drafts | `GH_TOKEN` |
 | `keychain.sh cleanup` | deletes keychain + decoded credentials, runs on failure too | none |

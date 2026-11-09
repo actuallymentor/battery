@@ -1,23 +1,13 @@
 #!/bin/bash
 
 #
-# Wraps the signed and stapled app in a .pkg and a .dmg.
-#
-# - .pkg: installs into /Applications, signed with the Developer ID Installer identity
-# - .dmg: drag-to-Applications image, signed with the Developer ID Application identity
+# Wraps the signed and stapled app in a .dmg (drag-to-Applications, Developer ID Application identity).
+# No .pkg: nothing needs one yet, see git history if MDM/Homebrew ask for it.
 #
 
 source "$(dirname "$0")/lib.sh"
 
 [[ -d "$APP_PATH" ]] || fail "No app at $APP_PATH, run build.sh and sign.sh first"
-
-# Installer package
-rm -f "$PKG_PATH"
-productbuild --component "$APP_PATH" /Applications \
-	--sign "$INSTALLER_IDENTITY" --keychain "$KEYCHAIN" --timestamp \
-	"$PKG_PATH"
-pkgutil --check-signature "$PKG_PATH"
-log "Built $(basename "$PKG_PATH")"
 
 # Disk image with an Applications shortcut
 staging="$WORK_DIR/dmg"
