@@ -22,9 +22,9 @@ struct MenuContent: View {
 			if !model.legacyLeftovers.isEmpty { LegacyBanner( model: model ) }
 
 			if let error = model.error {
-				Label( error, systemImage: "exclamationmark.circle" )
-					.font( .caption ).foregroundStyle( .red )
-					.onTapGesture { model.dismissError() }
+				Button { model.dismissError() } label: { Label( error, systemImage: "exclamationmark.circle" ).multilineTextAlignment( .leading ) }
+					.buttonStyle( .plain ).font( .caption ).foregroundStyle( .red )
+					.accessibilityHint( "Dismiss" )
 			}
 		}
 		.padding( 16 )
@@ -62,11 +62,15 @@ struct MenuContent: View {
 
 			Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.settings.setLimit( Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
 			        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
+			.accessibilityLabel( "Charge limit" ).accessibilityValue( "\( model.settings.limit ) percent" )
 
 			if s.canCutAdapter {
-				Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { model.settings.force }, set: { model.settings.force = $0; model.commitLimitChange() } ) )
-					.font( .caption )
-					.help( "Uses the battery instead of the adapter while above the limit. Can conflict with clamshell mode." )
+				VStack( alignment: .leading, spacing: 2 ) {
+					Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { model.settings.force }, set: { model.settings.force = $0; model.commitLimitChange() } ) )
+					Text( "Uses the battery instead of the adapter while above the limit. Can conflict with clamshell mode." )
+						.foregroundStyle( .secondary ).fixedSize( horizontal: false, vertical: true )
+				}
+				.font( .caption )
 			}
 		}
 		.padding( 12 )
@@ -87,8 +91,9 @@ struct MenuContent: View {
 			}
 			Button( "Settings…" ) { NSApplication.shared.activate( ignoringOtherApps: true ); openSettings() }
 			Button( "Quit" ) { NSApplication.shared.terminate( nil ) }
-		} label: { Image( systemName: "gearshape" ) }
+		} label: { Image( systemName: "gearshape" ).frame( width: 28, height: 28 ).contentShape( Rectangle() ) }
 		.menuStyle( .borderlessButton ).menuIndicator( .hidden ).fixedSize()
+		.accessibilityLabel( "Actions and settings" ).help( "Actions and settings" )
 		.disabled( model.busy )
 	}
 
