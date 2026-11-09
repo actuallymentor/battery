@@ -36,7 +36,11 @@ struct MenuBarLabel: View {
 
 	var body: some View {
 		HStack( spacing: 3 ) {
-			Image( systemName: symbol )
+			if style == .battery, helper == .ready, let status {
+				Image( nsImage: BatteryGlyph.image( percent: status.percent, charging: status.acAttached && status.chargingEnabled != false && status.percent < 100 ) )
+			} else {
+				Image( systemName: symbol )
+			}
 			if showPercent, let status { Text( "\( status.percent )%" ).monospacedDigit() }
 		}
 	}
@@ -46,15 +50,7 @@ struct MenuBarLabel: View {
 		switch style {
 		case .bolt: return s.chargingEnabled == false ? "pause.circle" : "bolt.fill"
 		case .shield: return s.maintain != nil ? "shield.lefthalf.filled" : "shield"
-		case .battery:
-			if s.acAttached && s.chargingEnabled != false && s.percent < 100 { return "battery.100percent.bolt" }
-			switch s.percent {
-			case ..<13: return "battery.0percent"
-			case ..<38: return "battery.25percent"
-			case ..<63: return "battery.50percent"
-			case ..<88: return "battery.75percent"
-			default: return "battery.100percent"
-			}
+		case .battery: return "battery.100percent"   // drawn by BatteryGlyph while the helper answers; this is the fallback
 		}
 	}
 
