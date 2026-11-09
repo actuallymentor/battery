@@ -5,14 +5,14 @@
 Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 
 **New**
-- SwiftUI menu bar app: limit toggle, custom limits (#462), resume-below, menu bar % (#470) and icon choice, launch at login (#425), low-battery alert, scheduled top-off, battery health and cycles.
+- SwiftUI menu bar app: limit toggle, custom limits (#462), menu bar % (#470) and icon choice, launch at login (#425), low-battery alert, scheduled top-off, battery health and cycles.
 - Root helper via `SMAppService` + XPC: no sudoers, no password prompts, applies the limit at boot.
 - Charge-control backend chosen by SMC key probing: `CHTE`, `CH0B/CH0C`, firmware limit `bfD0/bfE0/bfF0` (#480, #469 groundwork), adapter-cut compat mode. Writes are verified; the app warns when the Mac ignores the limit.
 - Opt-in Sparkle 2 updates (#412, #347). No telemetry (#188).
 - First launch offers to remove v1.
 
 **Changed**
-- The popover no longer repeats the charge level, status and voltage (the menu bar icon shows it); it opens straight on the limit controls (no presets), the one-off actions, Settings and Quit moved behind a gear at the top right, and it shows the running job's progress when there is one.
+- The popover no longer repeats the charge level, status and voltage (the menu bar icon shows it); it opens straight on the limit controls (no presets, no resume-below stepper: the band is a fixed 5 points, ranges stay on the CLI), the one-off actions, Settings and Quit moved behind a gear at the top right, and it shows the running job's progress when there is one.
 
 **Fixed**
 - Uninstall (Settings or `battery uninstall`) also removes helper state, the log and app preferences, not just the helper.

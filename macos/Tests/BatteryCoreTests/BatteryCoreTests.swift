@@ -565,19 +565,10 @@ final class ControllerExtrasTests: XCTestCase {
 
 final class LimitSettingsTests: XCTestCase {
 
-	func testBandAndSingleLevel() {
-		XCTAssertEqual( LimitSettings( limit: 80, lower: 70 ).target, .level( lower: 70, upper: 80 ) )
-		XCTAssertEqual( LimitSettings( limit: 80, lower: 80 ).target, .level( lower: 80, upper: 80 ) )
-	}
-
-	func testLowerFollowsLimitDown() {
-		var s = LimitSettings( limit: 90, lower: 85 )
-		s.setLimit( 60 )
-		XCTAssertEqual( s.lower, 60 )
-		s.setLower( 5 )
-		XCTAssertEqual( s.lower, Limits.minMaintain )
-		s.setLower( 99 )
-		XCTAssertEqual( s.lower, 60 )
+	func testFixedBand() {
+		XCTAssertEqual( LimitSettings( limit: 80 ).target, .level( lower: 75, upper: 80 ) )
+		XCTAssertEqual( LimitSettings( limit: 100 ).target, .level( lower: 95, upper: 100 ) )
+		XCTAssertEqual( LimitSettings( limit: 20 ).target, .level( lower: 15, upper: 20 ) )
 	}
 
 	func testSliderClamp() {
@@ -588,7 +579,7 @@ final class LimitSettingsTests: XCTestCase {
 	func testAdoptDaemonTarget() {
 		var s = LimitSettings()
 		s.adopt( .level( lower: 50, upper: 60 ), force: true )
-		XCTAssertEqual( s.limit, 60 ); XCTAssertEqual( s.lower, 50 ); XCTAssertTrue( s.force )
+		XCTAssertEqual( s.limit, 60 ); XCTAssertEqual( s.target, .level( lower: 55, upper: 60 ) ); XCTAssertTrue( s.force )
 		s.adopt( .voltage( center: 11.4, hysteresis: 0.1 ), force: false )   // not a band: ignore
 		XCTAssertEqual( s.limit, 60 )
 		XCTAssertEqual( s.dischargeTarget, 50 )

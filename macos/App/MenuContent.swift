@@ -55,21 +55,13 @@ struct MenuContent: View {
 		VStack( alignment: .leading, spacing: 10 ) {
 
 			Toggle( isOn: Binding( get: { s.maintain != nil }, set: { model.applyLimit( enabled: $0 ) } ) ) {
-				Text( "Charge limit" ).font( .subheadline.weight( .medium ) )
+				Text( "Charge limit \( model.settings.limit )%" ).font( .subheadline.weight( .medium ) )
 			}
 			.toggleStyle( .switch )
 			.disabled( model.busy )
 
 			Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.settings.setLimit( Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
 			        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
-
-			HStack {
-				Text( "Stop at \( model.settings.limit )%" )
-				Spacer()
-				Stepper( "Resume below \( model.settings.lower )%", value: Binding( get: { model.settings.lower }, set: { model.settings.setLower( $0 ); model.commitLimitChange() } ), in: Limits.minMaintain...model.settings.limit )
-					.font( .caption )
-			}
-			.font( .caption )
 
 			if s.canCutAdapter {
 				Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { model.settings.force }, set: { model.settings.force = $0; model.commitLimitChange() } ) )
