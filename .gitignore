@@ -6,3 +6,9 @@ CLAUDE.md
 macos/Battery.xcodeproj
 macos/build
 macos/.build
+
+# Release credentials, never commit
+.env.release
+*.p12
+*.p8
+*.certSigningRequest
