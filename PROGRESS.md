@@ -35,3 +35,10 @@ Verified: CLI fuzz + 12 parallel clients, discharge job to completion (adapter r
 Found + fixed: uninstall left state/log/prefs; updates leave the old daemon running; Repair did not recover a booted-out job (now points to Login Items); stale dev tarball trap.
 NOT testable here: sleep/wake and reboot (FileVault, sleep blocked), Developer ID update behaviour, signing/notarization. See .notes/GOTCHAS.md.
 OPEN RISK: a dead helper with an active limit leaves charging off (verified). Developer ID updates may avoid the dead helper, unverified: do the beta.1 -> beta.2 update test on a clean Mac.
+
+## Signed pipeline + update test (local, Mac)
+
+- Full pipeline run locally on the Mac with the real Developer ID/notary/Sparkle credentials: build, sign, notarize+staple app and dmg, Sparkle sign, appcast. spctl: "Notarized Developer ID".
+- Bugs found and fixed: p12 holds only the leaf, so the temp keychain needs the Apple Developer ID G2 + Apple Root CA (sha256-pinned, imported AFTER the p12 or codesign fails with errSecInternalComponent); `grep -q` under pipefail failed the identifier check.
+- Signed beta.1 -> beta.2 Sparkle update (local appcast via defaults SUFeedURL override): app swapped, daemon restarted as beta.2, 90% limit resumed, no re-approval. The ad-hoc "dead helper after update" problem does not occur with Developer ID.
+- Sleep/wake verified: wake handler fires on full wake, limit holds.
