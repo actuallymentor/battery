@@ -162,6 +162,9 @@ struct HelperSetup: View {
 		VStack( alignment: .leading, spacing: 10 ) {
 			Label( title, systemImage: "lock.shield" ).font( .headline )
 			Text( message ).font( .callout ).foregroundStyle( .secondary ).fixedSize( horizontal: false, vertical: true )
+			if model.limitWasActive {
+				Text( "Your charge limit may keep the battery from charging until the helper runs again." ).font( .callout ).foregroundStyle( .orange ).fixedSize( horizontal: false, vertical: true )
+			}
 			switch model.helper {
 			case .needsApproval:
 				Button( "Open Login Items" ) { model.openLoginItems() }.buttonStyle( .borderedProminent )

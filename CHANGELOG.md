@@ -12,6 +12,8 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 - First launch offers to remove v1.
 
 **Fixed**
+- Uninstall (Settings or `battery uninstall`) also removes helper state, the log and app preferences, not just the helper.
+- A helper that stops answering while a limit is on now says charging may stay paused; Repair falls back to Login Items guidance; an outdated helper (after an update) is restarted automatically.
 - Range maintain: plugged in inside the band no longer charges to the top (#475).
 - Manual `charging on/off` stops the maintain loop instead of fighting it (#460, #440).
 - Sleep: adapter cut is restored before sleep; limit re-evaluated on wake and on plug/unplug (#442, #356).

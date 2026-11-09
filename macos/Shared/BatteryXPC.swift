@@ -4,6 +4,7 @@ import Foundation
 let batteryVersion = Bundle.main.object( forInfoDictionaryKey: "CFBundleShortVersionString" ) as? String ?? "dev"
 
 /// Daemon log file, world-readable
+let batteryStateDir = "/var/db/co.palokaj.battery"
 let batteryLogPath = "/Library/Logs/co.palokaj.battery.log"
 
 /// Mach service name of the root daemon. Matches the launchd label.
@@ -31,4 +32,6 @@ let batteryDaemonName = "co.palokaj.battery.daemon"
 	func installCLI( reply: @escaping ( Bool, String ) -> Void )
 	func uninstallCLI( reply: @escaping ( Bool, String ) -> Void )
 	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void )
+	/// Full removal: restore charging, forget the schedule, drop the CLI link, delete persisted state and the log. The app unregisters the daemon right after.
+	func uninstall( reply: @escaping ( Bool, String ) -> Void )
 }

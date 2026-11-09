@@ -14,6 +14,8 @@ final class AppModel {
 	private( set ) var status: BatteryStatus?
 	private( set ) var helper: Helper = .unknown
 	private( set ) var error: String?
+	/// Last known truth while the helper answered: a limit that holds charging off keeps doing so with no helper to lift it.
+	private( set ) var limitWasActive = false
 	/// Actions in flight. Polling pauses while > 0 so an old snapshot can't overwrite a fresh change.
 	private var inFlight = 0
 	var busy: Bool { inFlight > 0 }
@@ -30,6 +32,7 @@ final class AppModel {
 	private let defaults = UserDefaults.standard
 	private var poll: Task<Void, Never>?
 	private var alertedLow = false
+	private var restartedHelper = false
 	/// Last target we adopted or sent: a different one in the daemon means someone else (CLI, reboot) changed it.
 	private var knownTarget: String?
 	private var actionTail: Task<Void, Never>?
@@ -59,6 +62,8 @@ final class AppModel {
 			let fresh = try await client.snapshot()
 			guard inFlight == 0 else { return }     // an action started while we waited: this snapshot is already stale
 			status = fresh
+			limitWasActive = fresh.maintain != nil
+			restartOutdatedHelper( fresh.daemonVersion )
 			adoptOutsideChanges()
 			helper = .ready
 			error = nil
@@ -86,8 +91,11 @@ final class AppModel {
 	/// Registered but not answering (app was moved, bundle replaced, stale job spec): start over.
 	/// Observed on macOS 26: when the helper is already approved, one unregister + register refreshes the job;
 	/// if it still doesn't answer, a second round does. Approval itself is only asked when it was switched off.
+	/// If the job was removed from launchd behind our back (observed after `launchctl bootout`), register() alone doesn't
+	/// resubmit it: only switching the Login Items toggle off and on does, so we send the user there.
 	func repairHelper() {
 		Task {
+			var answering = false
 			for _ in 0..<2 {
 				try? await daemon.unregister()
 				try? await Task.sleep( for: .seconds( 1 ) )
@@ -95,10 +103,23 @@ final class AppModel {
 				if daemon.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems(); break }
 
 				try? await Task.sleep( for: .seconds( 4 ) )
-				if ( try? await client.snapshot() ) != nil { break }
+				answering = ( try? await client.snapshot() ) != nil
+				if answering { break }
+			}
+			if !answering, daemon.status == .enabled {
+				error = "Still not answering. In Login Items switch Battery off and on again."
+				SMAppService.openSystemSettingsLoginItems()
 			}
 			await refresh()
 		}
+	}
+
+	/// An update swaps the app but not the running daemon: it keeps the old code, and a later respawn can fail on the stale job spec.
+	/// Once per launch, when the versions differ, re-register so the new daemon takes over.
+	private func restartOutdatedHelper( _ running: String ) {
+		guard !restartedHelper, running != batteryVersion else { return }
+		restartedHelper = true
+		repairHelper()
 	}
 
 	func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
@@ -169,10 +190,10 @@ final class AppModel {
 	/// Settings -> "Uninstall": hand charging back to macOS, drop the helper.
 	func uninstall() {
 		perform { [ self ] in
-			try? await client.uninstallCLI()
-			try? await client.resetAll()
+			try? await client.uninstall()
 			try? await daemon.unregister()
 			try? await SMAppService.mainApp.unregister()
+			if let id = Bundle.main.bundleIdentifier { defaults.removePersistentDomain( forName: id ) }
 			NSApplication.shared.terminate( nil )
 		}
 	}

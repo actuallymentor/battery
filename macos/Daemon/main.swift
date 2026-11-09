@@ -194,6 +194,21 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		}
 	}
 
+	func uninstall( reply: @escaping ( Bool, String ) -> Void ) {
+		onMain { [ self ] in
+			jobs?.cancel()
+			maintainer?.stop()
+			scheduler?.set( days: 0 )
+			control?.resetAll()
+			CLILink.uninstall()
+
+			// Last: nothing may write state or log lines after this
+			try? FileManager.default.removeItem( atPath: batteryStateDir )
+			try? FileManager.default.removeItem( atPath: batteryLogPath )
+			reply( true, "Charging restored, helper state removed" )
+		}
+	}
+
 }
 
 let service = Service()

@@ -59,6 +59,7 @@ final class DaemonClient {
 	func installCLI() async throws { _ = try await call { $0.installCLI( reply: $1 ) } }
 	func uninstallCLI() async throws { _ = try await call { $0.uninstallCLI( reply: $1 ) } }
 	func resetAll() async throws { _ = try await call { $0.resetAll( reply: $1 ) } }
+	func uninstall() async throws { _ = try await call { $0.uninstall( reply: $1 ) } }
 
 	func legacyFound() async throws -> [ String ] {
 		try await call { $0.legacyFound( reply: $1 ) }.split( separator: "," ).map( String.init )

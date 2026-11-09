@@ -8,7 +8,7 @@ import BatteryCore
 final class Maintainer {
 
 	private let control: ChargeControl
-	private let file = URL( fileURLWithPath: "/var/db/co.palokaj.battery/maintain" )
+	private let file = URL( fileURLWithPath: batteryStateDir + "/maintain" )
 	private var timer: Timer?
 	private var refilling = false
 

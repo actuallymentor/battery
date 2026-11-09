@@ -29,3 +29,9 @@ Appcast: stays on GitHub `releases/latest` (decided): updates begin at the first
 ## Prefactor pass (2026-11-09)
 Done: input limits enforced in the daemon, single main-queue owner, suspend/abort semantics between maintain and jobs, one adapter-cut flag, force-discharge no-flap, boot-safe adapter restore, LED wired (skipped without ACLC), status rendered CLI-side, pure `JobPlanner`/`Schedule`/`LimitSettings`/`Limits` + 24 new tests, app actions serialized + daemon-truth adoption, CI workflow, release test gate, signing identifier assertions, Sparkle build number + appcast, identity drift guard.
 Deliberately NOT done: typed XPC request enum (large rewrite, no CI to catch regressions yet), xcconfig single identity source (guard script instead).
+
+## Real-Mac test round 2 (2026-11-09)
+Verified: CLI fuzz + 12 parallel clients, discharge job to completion (adapter restored, charging resumed), kill -9 daemon recovery (maintain + charging-off restored), `.dmg` layout/deep-verify, app Uninstall (found + fixed leftovers), fresh install after uninstall, Sparkle check/verify/install/relaunch via local appcast (throwaway key), helper-down warning + Repair UI.
+Found + fixed: uninstall left state/log/prefs; updates leave the old daemon running; Repair did not recover a booted-out job (now points to Login Items); stale dev tarball trap.
+NOT testable here: sleep/wake and reboot (FileVault, sleep blocked), Developer ID update behaviour, signing/notarization. See .notes/GOTCHAS.md.
+OPEN RISK: a dead helper with an active limit leaves charging off (verified). Developer ID updates may avoid the dead helper, unverified: do the beta.1 -> beta.2 update test on a clean Mac.

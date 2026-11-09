@@ -5,7 +5,7 @@ import BatteryCore
 /// happens as soon as the Mac is back on AC. The rules live in `Schedule` (pure, tested). Main-queue only.
 final class Scheduler {
 
-	private let file = URL( fileURLWithPath: "/var/db/co.palokaj.battery/schedule" )
+	private let file = URL( fileURLWithPath: batteryStateDir + "/schedule" )
 	private let jobs: Jobs
 	private var timer: Timer?
 	private var schedule: Schedule

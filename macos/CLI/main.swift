@@ -50,7 +50,7 @@ do {
 	case .version: print( batteryVersion )
 	case .uninstall:
 		remote { proxy, reply in
-			proxy.resetAll { ok, text in
+			proxy.uninstall { ok, text in
 				reply( ok, ok ? "\( text ). Now turn Battery off in Login Items and delete Battery.app (or use Settings -> Uninstall in the app)." : text )
 			}
 		}
