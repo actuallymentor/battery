@@ -13,6 +13,7 @@ enum Pref {
 	static let lowBatteryLevel = "lowBatteryLevel"
 	static let legacyDeclined = "legacyCleanupDeclined"
 	static let onboarded = "onboarded"
+	static let loginItemDefaulted = "loginItemDefaulted"
 }
 
 enum IconStyle: String, CaseIterable, Identifiable {
@@ -39,7 +40,7 @@ extension UserDefaults {
 			Pref.appearance: Appearance.system.rawValue,
 			Pref.iconStyle: IconStyle.battery.rawValue,
 			Pref.limit: 80,
-			Pref.forceDischarge: false,
+			Pref.forceDischarge: true,
 			Pref.lowBatteryAlert: true,
 			Pref.lowBatteryLevel: 15,
 		] )

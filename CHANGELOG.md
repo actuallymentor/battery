@@ -14,7 +14,8 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 **Changed**
 - Menu bar battery fills continuously with the charge level (was five fixed steps, and always full while charging); a bolt is carved into it while charging.
 - Dark mode: follows the system theme; Settings → General → Appearance can force Light or Dark.
-- The popover no longer repeats the charge level, status and voltage (the menu bar icon shows it); it opens straight on the limit controls (no presets, no resume-below stepper: the band is a fixed 5 points, ranges stay on the CLI), the one-off actions, Settings and Quit moved behind a gear at the top right, and it shows the running job's progress when there is one.
+- The popover is a single line: the charge limit switch and a gear. The limit slider and *Allow discharge* moved to Settings → Charging. *Open at login* and *Allow discharge* are on by default.
+- (Earlier in this beta) The popover no longer repeats the charge level, status and voltage (the menu bar icon shows it); it opens straight on the limit controls (no presets, no resume-below stepper: the band is a fixed 5 points, ranges stay on the CLI), the one-off actions, Settings and Quit moved behind a gear at the top right, and it shows the running job's progress when there is one.
 
 **Fixed**
 - Uninstall (Settings or `battery uninstall`) also removes helper state, the log and app preferences, not just the helper.

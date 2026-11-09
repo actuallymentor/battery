@@ -1,7 +1,7 @@
 import SwiftUI
 import BatteryCore
 
-/// The popover: the limit control. One-off actions, Settings and Quit sit behind the gear. Charge level lives in the menu bar icon, not here.
+/// The popover is one line: the limit switch and a gear. The limit value, discharge option, one-off actions, Settings and Quit live behind the gear / in Settings. The charge level is in the menu bar icon.
 struct MenuContent: View {
 
 	@Bindable var model: AppModel
@@ -11,7 +11,7 @@ struct MenuContent: View {
 	var body: some View {
 		VStack( alignment: .leading, spacing: 14 ) {
 
-			HStack { Spacer(); gear }
+			topRow
 
 			switch model.helper {
 			case .ready: content
@@ -28,10 +28,26 @@ struct MenuContent: View {
 			}
 		}
 		.padding( 16 )
-		.frame( width: 320 )
+		.frame( width: 270 )
 		.confirmationDialog( "Calibrate battery?", isPresented: $confirmCalibrate ) {
 			Button( "Calibrate", role: .destructive ) { model.calibrate() }
 		} message: { Text( "Discharges to 15%, charges to 100%, holds for an hour, then returns to your limit. Takes several hours. Keep the Mac awake and plugged in." ) }
+	}
+
+	/// One line: the limit switch on the left, the gear on the right. The limit value itself is set in Settings.
+	private var topRow: some View {
+		HStack( spacing: 10 ) {
+			if model.helper == .ready, let s = model.status, s.canLimit {
+				Text( "Charge limit \( model.settings.limit )%" ).font( .body )
+				Spacer( minLength: 8 )
+				Toggle( "Charge limit", isOn: Binding( get: { s.maintain != nil }, set: { model.applyLimit( enabled: $0 ) } ) )
+					.labelsHidden().toggleStyle( .switch ).controlSize( .small )
+					.disabled( model.busy )
+			} else {
+				Spacer()
+			}
+			gear
+		}
 	}
 
 	// MARK: Ready state
@@ -42,39 +58,8 @@ struct MenuContent: View {
 				Label( w, systemImage: "exclamationmark.triangle.fill" )
 					.font( .caption ).foregroundStyle( .orange ).fixedSize( horizontal: false, vertical: true )
 			}
-			if s.canLimit {
-				limitSection( s )
-				activity( s )
-			}
+			if s.canLimit { activity( s ) }
 		}
-	}
-
-	// MARK: Limit
-
-	private func limitSection( _ s: BatteryStatus ) -> some View {
-		VStack( alignment: .leading, spacing: 10 ) {
-
-			Toggle( isOn: Binding( get: { s.maintain != nil }, set: { model.applyLimit( enabled: $0 ) } ) ) {
-				Text( "Charge limit \( model.settings.limit )%" ).font( .subheadline.weight( .medium ) )
-			}
-			.toggleStyle( .switch )
-			.disabled( model.busy )
-
-			Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.settings.setLimit( Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
-			        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
-			.accessibilityLabel( "Charge limit" ).accessibilityValue( "\( model.settings.limit ) percent" )
-
-			if s.canCutAdapter {
-				VStack( alignment: .leading, spacing: 2 ) {
-					Toggle( "Discharge down to the limit when plugged in", isOn: Binding( get: { model.settings.force }, set: { model.settings.force = $0; model.commitLimitChange() } ) )
-					Text( "Uses the battery instead of the adapter while above the limit. Can conflict with clamshell mode." )
-						.foregroundStyle( .secondary ).fixedSize( horizontal: false, vertical: true )
-				}
-				.font( .caption )
-			}
-		}
-		.padding( 12 )
-		.background( .quaternary.opacity( 0.5 ), in: RoundedRectangle( cornerRadius: 10 ) )
 	}
 
 	// MARK: Gear menu: one-off actions, Settings, Quit

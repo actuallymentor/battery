@@ -1,4 +1,5 @@
 import SwiftUI
+import BatteryCore
 
 struct SettingsView: View {
 
@@ -14,6 +15,42 @@ struct SettingsView: View {
 
 	var body: some View {
 		TabView {
+
+			Form {
+				Section( "Charge limit" ) {
+					VStack( alignment: .leading, spacing: 4 ) {
+						LabeledContent( "Stop charging at", value: "\( model.settings.limit )%" )
+						Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.settings.setLimit( Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
+						        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
+							.labelsHidden()
+							.accessibilityLabel( "Charge limit" ).accessibilityValue( "\( model.settings.limit ) percent" )
+					}
+					Text( "Charging resumes 5% below the limit." ).font( .caption ).foregroundStyle( .secondary )
+					if model.status?.canCutAdapter == true {
+						VStack( alignment: .leading, spacing: 2 ) {
+							Toggle( "Allow discharge", isOn: Binding( get: { model.settings.force }, set: { model.settings.force = $0; model.commitLimitChange() } ) )
+							Text( "While plugged in above the limit, run on the battery instead of the adapter until it drops to the limit. Can conflict with clamshell mode." )
+								.font( .caption ).foregroundStyle( .secondary ).fixedSize( horizontal: false, vertical: true )
+						}
+					}
+				}
+				Section( "Schedule" ) {
+					Toggle( "Top off to 100% regularly", isOn: Binding( get: { ( model.status?.scheduleDays ?? 0 ) > 0 }, set: { model.setSchedule( days: $0 ? 30 : 0 ) } ) )
+					if let days = model.status?.scheduleDays, days > 0 {
+						Stepper( "Every \( days ) days", value: Binding( get: { days }, set: { model.setSchedule( days: $0 ) } ), in: 1...90 )
+						if let next = model.status?.nextTopOff { LabeledContent( "Next", value: next.formatted( date: .abbreviated, time: .omitted ) ) }
+					}
+					Text( "Charges to 100% once in a while, then returns to your limit. Runs when plugged in." ).font( .caption ).foregroundStyle( .secondary )
+				}
+				if let s = model.status {
+					Section( "Battery" ) {
+						if let c = s.cycleCount { LabeledContent( "Cycle count", value: "\( c )" ) }
+						if let h = s.healthPercent { LabeledContent( "Health", value: "\( h )%" ) }
+						LabeledContent( "Charge control", value: backendName( s.backend ) )
+					}
+				}
+			}
+			.tabItem { Label( "Charging", systemImage: "bolt.batteryblock" ) }
 
 			Form {
 				Section( "General" ) {
@@ -34,25 +71,6 @@ struct SettingsView: View {
 				}
 			}
 			.tabItem { Label( "General", systemImage: "gearshape" ) }
-
-			Form {
-				Section( "Schedule" ) {
-					Toggle( "Top off to 100% regularly", isOn: Binding( get: { ( model.status?.scheduleDays ?? 0 ) > 0 }, set: { model.setSchedule( days: $0 ? 30 : 0 ) } ) )
-					if let days = model.status?.scheduleDays, days > 0 {
-						Stepper( "Every \( days ) days", value: Binding( get: { days }, set: { model.setSchedule( days: $0 ) } ), in: 1...90 )
-						if let next = model.status?.nextTopOff { LabeledContent( "Next", value: next.formatted( date: .abbreviated, time: .omitted ) ) }
-					}
-					Text( "Charges to 100% once in a while, then returns to your limit. Runs when plugged in." ).font( .caption ).foregroundStyle( .secondary )
-				}
-				if let s = model.status {
-					Section( "Battery" ) {
-						if let c = s.cycleCount { LabeledContent( "Cycle count", value: "\( c )" ) }
-						if let h = s.healthPercent { LabeledContent( "Health", value: "\( h )%" ) }
-						LabeledContent( "Charge control", value: backendName( s.backend ) )
-					}
-				}
-			}
-			.tabItem { Label( "Charging", systemImage: "bolt.batteryblock" ) }
 
 			Form {
 				Section( "Helper" ) {

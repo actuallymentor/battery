@@ -39,6 +39,7 @@ final class AppModel {
 
 	init() {
 		UserDefaults.registerBatteryDefaults()
+		enableLoginItemOnce()
 		startPolling()
 	}
 
@@ -122,6 +123,14 @@ final class AppModel {
 		repairHelper()
 	}
 
+	/// Open at login is on by default: switched on once, so turning it off later sticks
+	private func enableLoginItemOnce() {
+		guard !defaults.bool( forKey: Pref.loginItemDefaulted ) else { return }
+		defaults.set( true, forKey: Pref.loginItemDefaulted )
+		try? SMAppService.mainApp.register()
+		launchAtLogin = SMAppService.mainApp.status == .enabled
+	}
+
 	func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
 
 	func setLaunchAtLogin( _ on: Bool ) {
@@ -137,7 +146,7 @@ final class AppModel {
 			if enabled {
 				let t = settings.target
 				knownTarget = t.persisted
-				try await client.maintain( t, force: settings.force )
+				try await client.maintain( t, force: settings.force && ( status?.canCutAdapter ?? false ) )   // the default is on; Macs without an adapter-cut key just ignore it
 			} else {
 				knownTarget = nil
 				try await client.stopMaintain()
@@ -154,7 +163,7 @@ final class AppModel {
 		let current = status?.maintain
 		guard current != knownTarget else { return }
 		knownTarget = current
-		if let t = status?.maintainTarget { settings.adopt( t, force: status?.forceDischarge ?? false ) }
+		if let t = status?.maintainTarget { settings.adopt( t, force: ( status?.canCutAdapter ?? false ) ? ( status?.forceDischarge ?? false ) : settings.force ) }
 	}
 
 	// MARK: Jobs

@@ -9,7 +9,7 @@ public struct LimitSettings: Equatable, Sendable {
 	public private( set ) var limit: Int
 	public var force: Bool
 
-	public init( limit: Int = 80, force: Bool = false ) {
+	public init( limit: Int = 80, force: Bool = true ) {
 		self.limit = Self.sliderRange.clamp( limit )
 		self.force = force
 	}

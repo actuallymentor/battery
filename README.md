@@ -19,7 +19,7 @@ First launch: **Enable helper** → approve *Battery* in *System Settings → Ge
 
 ## Use
 
-Menu bar icon: charge limit toggle and slider (charging resumes 5 points below), optional *discharge down to the limit*. The gear (top right) holds the one-off *Charge to 100%* / *Discharge to* / *Calibrate*, *Settings…* and *Quit*.
+Menu bar icon: one line with the charge limit switch and a gear. The gear holds the one-off *Charge to 100%* / *Discharge to* / *Calibrate*, *Settings…* and *Quit*. Settings → Charging has the limit slider (charging resumes 5 points below it) and *Allow discharge* (on by default where the Mac supports it). *Open at login* is on by default.
 Settings: open at login, menu bar % and icon, low-battery alert, scheduled top-off every N days, opt-in updates, `battery` in Terminal, uninstall.
 
 ## CLI
