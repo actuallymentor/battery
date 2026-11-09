@@ -40,6 +40,17 @@ function import_p12() {
 
 }
 
+function import_apple_ca() {
+
+	local name="$1" sha256="$2" url="$3" cer="$SECRETS_DIR/$1.cer"
+
+	curl -fsSL -o "$cer" "$url"
+	echo "$sha256  $cer" | shasum -a 256 -c - >/dev/null || fail "$name checksum mismatch"
+	security import "$cer" -k "$KEYCHAIN" >/dev/null 2>&1 || true   # the .p12 may already carry it
+	rm -f "$cer"
+
+}
+
 function setup() {
 
 	require_env CI_KEYCHAIN_PASSWORD \
@@ -63,6 +74,11 @@ function setup() {
 	security unlock-keychain -p "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN"
 
 	import_p12 application "$DEVELOPER_ID_APPLICATION_P12_BASE64" "$DEVELOPER_ID_APPLICATION_P12_PASSWORD"
+
+	# codesign needs the whole chain inside the keychain it signs with (Developer ID G2 intermediate + Apple Root CA),
+	# else: "unable to build chain", errSecInternalComponent. Import them AFTER the .p12: the other order breaks signing (observed on macOS 26)
+	import_apple_ca DeveloperIDG2CA "$DEVELOPER_ID_G2_SHA256" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+	import_apple_ca AppleRootCA "$APPLE_ROOT_SHA256" https://www.apple.com/appleca/AppleIncRootCertificate.cer
 
 	# Allow codesign to use the keys non-interactively
 	security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$CI_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null

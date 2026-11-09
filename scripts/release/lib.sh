@@ -25,6 +25,8 @@ APP_NAME="${APP_NAME:-Battery}"
 # Apple signing identities, see the "release" GitHub environment
 TEAM_ID="CAWM399GFD"
 APP_IDENTITY="Developer ID Application: Mentor Palokaj ($TEAM_ID)"
+DEVELOPER_ID_G2_SHA256="f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a"   # Apple DeveloperIDG2CA.cer
+APPLE_ROOT_SHA256="b0b1730ecbc7ff4505142c49f1295e6eda6bcaed7e2c68c5be91b5a11001f024"         # Apple AppleIncRootCertificate.cer
 
 # Sparkle, the public key is baked into Info.plist as SUPublicEDKey
 SPARKLE_PUBLIC_ED_KEY="xmO49bUIPl43rec5rtC1NoTg5LAFEnVwqnToYuz+NZ0="

@@ -63,7 +63,9 @@ done <<<"$all_items"
 function assert_identifier() {
 	local item="$1" expected="$2"
 	[[ -e "$item" ]] || fail "Missing $item"
-	codesign -dv "$item" 2>&1 | grep -q "^Identifier=$expected$" || fail "Wrong code-signing identifier on ${item#"$OUT_DIR"/}, expected $expected"
+	local details   # captured first: `grep -q` closing the pipe early would fail the pipeline under pipefail
+	details=$(codesign -dv "$item" 2>&1)
+	grep -q "^Identifier=$expected$" <<<"$details" || fail "Wrong code-signing identifier on ${item#"$OUT_DIR"/}, expected $expected"
 }
 assert_identifier "$APP_PATH" co.palokaj.battery
 assert_identifier "$APP_PATH/Contents/Helpers/battery" co.palokaj.battery.cli
