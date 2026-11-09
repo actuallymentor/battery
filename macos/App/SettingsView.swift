@@ -100,7 +100,7 @@ struct SettingsView: View {
 
 		}
 		.formStyle( .grouped )
-		.frame( width: 440, height: 500 )
+		.frame( width: 440, height: 600 )
 		.onChange( of: appearance ) { applyAppearance() }
 	}
 
