@@ -1,7 +1,7 @@
 import SwiftUI
 import BatteryCore
 
-/// The popover: state at a glance, one control for the limit, the one-off actions.
+/// The popover: one control for the limit, the one-off actions. Charge level lives in the menu bar icon, not here.
 struct MenuContent: View {
 
 	@Bindable var model: AppModel
@@ -35,7 +35,6 @@ struct MenuContent: View {
 
 	@ViewBuilder private var content: some View {
 		if let s = model.status {
-			header( s )
 			if let w = s.warning {
 				Label( w, systemImage: "exclamationmark.triangle.fill" )
 					.font( .caption ).foregroundStyle( .orange ).fixedSize( horizontal: false, vertical: true )
@@ -45,25 +44,6 @@ struct MenuContent: View {
 				actions( s )
 			}
 		}
-	}
-
-	private func header( _ s: BatteryStatus ) -> some View {
-		HStack( alignment: .firstTextBaseline ) {
-			Text( "\( s.percent )%" ).font( .system( size: 40, weight: .semibold, design: .rounded ) ).monospacedDigit()
-			VStack( alignment: .leading, spacing: 2 ) {
-				Text( s.headline ).font( .headline )
-				Text( detail( s ) ).font( .caption ).foregroundStyle( .secondary )
-			}
-			Spacer()
-		}
-	}
-
-	private func detail( _ s: BatteryStatus ) -> String {
-		if s.backend == "none" { return "No charge control found on this Mac" }
-		var parts = [ String ]()
-		if s.remaining != "no estimate" { parts.append( "\( s.remaining ) remaining" ) }
-		if let v = s.voltage { parts.append( String( format: "%.2f V", v ) ) }
-		return parts.isEmpty ? "Estimating…" : parts.joined( separator: " · " )
 	}
 
 	// MARK: Limit
@@ -119,7 +99,8 @@ struct MenuContent: View {
 
 	private func actions( _ s: BatteryStatus ) -> some View {
 		VStack( alignment: .leading, spacing: 8 ) {
-			if s.activity != nil {
+			if let activity = s.activity {
+				Text( activity ).font( .caption ).foregroundStyle( .secondary )
 				Button { model.recover() } label: { Label( "Cancel and restore charging", systemImage: "xmark.circle" ) }
 			} else {
 				HStack {

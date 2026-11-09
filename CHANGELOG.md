@@ -11,6 +11,9 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 - Opt-in Sparkle 2 updates (#412, #347). No telemetry (#188).
 - First launch offers to remove v1.
 
+**Changed**
+- The popover no longer repeats the charge level, status and voltage (the menu bar icon shows it); it opens straight on the controls, and shows the running job's progress when there is one.
+
 **Fixed**
 - Uninstall (Settings or `battery uninstall`) also removes helper state, the log and app preferences, not just the helper.
 - A helper that stops answering while a limit is on now says charging may stay paused; Repair falls back to Login Items guidance; an outdated helper (after an update) is restarted automatically.
