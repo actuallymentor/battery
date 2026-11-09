@@ -7,7 +7,7 @@ enum BatteryGlyph {
 	private static let size = NSSize( width: 25, height: 12 )
 
 	/// `percent` 0...100. `charging` adds a bolt: carved out of the fill, solid on the empty part.
-	static func image( percent: Int, charging: Bool ) -> NSImage {
+	static func image( percent: Int, charging: Bool, paused: Bool = false ) -> NSImage {
 
 		let image = NSImage( size: size, flipped: false ) { _ in
 
@@ -29,7 +29,7 @@ enum BatteryGlyph {
 				NSBezierPath( roundedRect: NSRect( x: inner.minX, y: inner.minY, width: width, height: inner.height ), xRadius: 1.6, yRadius: 1.6 ).fill()
 			}
 
-			if charging, let bolt = NSImage( systemSymbolName: "bolt.fill", accessibilityDescription: nil ) {
+			if charging || paused, let bolt = NSImage( systemSymbolName: paused ? "pause.fill" : "bolt.fill", accessibilityDescription: nil ) {
 				let boltRect = NSRect( x: body.midX - 4.5, y: body.midY - 5, width: 9, height: 10 )
 				let filled = NSRect( x: inner.minX, y: inner.minY, width: width, height: inner.height )
 				let empty = NSRect( x: inner.minX + width, y: inner.minY, width: inner.width - width, height: inner.height )

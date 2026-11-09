@@ -66,6 +66,10 @@ struct MenuContent: View {
 
 	private var gear: some View {
 		Menu {
+			if let s = model.status, model.helper == .ready {
+				Button( s.statusLine ) {}.disabled( true )
+				Divider()
+			}
 			if let s = model.status, s.canLimit, s.activity == nil {
 				Button { model.chargeTo( 100 ) } label: { Label( "Charge to 100%", systemImage: "bolt.fill" ) }
 				if s.canCutAdapter {

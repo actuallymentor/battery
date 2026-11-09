@@ -46,6 +46,8 @@ struct SettingsView: View {
 					Section( "Battery" ) {
 						if let c = s.cycleCount { LabeledContent( "Cycle count", value: "\( c )" ) }
 						if let h = s.healthPercent { LabeledContent( "Health", value: "\( h )%" ) }
+						LabeledContent( "Charging", value: s.chargingEnabled == false ? "Disabled" : "Enabled" )
+						LabeledContent( "Time remaining", value: s.timeEstimate ?? "No estimate" )
 						LabeledContent( "Charge control", value: backendName( s.backend ) )
 					}
 				}

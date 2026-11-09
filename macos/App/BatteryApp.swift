@@ -37,12 +37,13 @@ struct MenuBarLabel: View {
 	var body: some View {
 		HStack( spacing: 3 ) {
 			if style == .battery, helper == .ready, let status {
-				Image( nsImage: BatteryGlyph.image( percent: status.percent, charging: status.acAttached && status.chargingEnabled != false && status.percent < 100 ) )
+				Image( nsImage: BatteryGlyph.image( percent: status.percent, charging: status.acAttached && status.chargingEnabled != false && status.percent < 100, paused: status.chargingPaused ) )
 			} else {
 				Image( systemName: symbol )
 			}
 			if showPercent, let status { Text( "\( status.percent )%" ).monospacedDigit() }
 		}
+		.help( status?.statusLine ?? "Battery" )
 	}
 
 	private var symbol: String {

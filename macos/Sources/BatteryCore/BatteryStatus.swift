@@ -87,6 +87,23 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 		return "Charging"
 	}
 
+	/// "2:10" when macOS has a usable estimate (it reports "no estimate" while it works one out, "0:00" when full)
+	public var timeEstimate: String? { remaining == "no estimate" || remaining == "0:00" ? nil : remaining }
+
+	/// Plugged in, but charging is held off: by the limit, or by a manual pause
+	public var chargingPaused: Bool { acAttached && chargingEnabled == false && discharging != true && activity == nil }
+
+	/// "2:10 left" on battery, "0:40 to full" while charging, nothing otherwise
+	public var timeLine: String? {
+		guard let t = timeEstimate, activity == nil else { return nil }
+		if !acAttached { return "\( t ) left" }
+		if chargingEnabled != false, percent < 100, discharging != true { return "\( t ) to full" }
+		return nil
+	}
+
+	/// State plus time, for the gear menu header and the menu bar tooltip: "Holding at limit", "On battery · 2:10 left"
+	public var statusLine: String { [ headline, timeLine ].compactMap { $0 }.joined( separator: " · " ) }
+
 	public func encoded() -> String {
 		( try? JSONEncoder().encode( self ) ).flatMap { String( data: $0, encoding: .utf8 ) } ?? "{}"
 	}

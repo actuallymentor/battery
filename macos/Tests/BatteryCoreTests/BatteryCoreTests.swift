@@ -276,6 +276,18 @@ final class BatteryStatusTests: XCTestCase {
 		XCTAssertEqual( BatteryStatus( percent: 60, acAttached: true, activity: "Charging to 90%" ).headline, "Charging to 90%" )
 	}
 
+	func testStatusLine() {
+		XCTAssertEqual( BatteryStatus( percent: 50, remaining: "2:10", acAttached: false ).statusLine, "On battery · 2:10 left" )
+		XCTAssertEqual( BatteryStatus( percent: 50, remaining: "0:40", acAttached: true, chargingEnabled: true ).statusLine, "Charging · 0:40 to full" )
+		XCTAssertEqual( BatteryStatus( percent: 80, remaining: "0:00", acAttached: true, chargingEnabled: false, maintain: "80" ).statusLine, "Holding at limit" )
+		XCTAssertEqual( BatteryStatus( percent: 50, acAttached: false ).statusLine, "On battery" )                      // no estimate yet
+		XCTAssertEqual( BatteryStatus( percent: 100, remaining: "0:00", acAttached: true ).statusLine, "Fully charged" )
+		XCTAssertEqual( BatteryStatus( percent: 60, remaining: "1:00", acAttached: true, activity: "Charging to 90%" ).statusLine, "Charging to 90%" )
+		XCTAssertTrue( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, maintain: "80" ).chargingPaused )
+		XCTAssertFalse( BatteryStatus( percent: 80, acAttached: false, chargingEnabled: false ).chargingPaused )          // unplugged: nothing is paused
+		XCTAssertFalse( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, discharging: true ).chargingPaused )
+	}
+
 	func testMaintainTargetParse() {
 		XCTAssertEqual( BatteryStatus( percent: 1, acAttached: true, maintain: "70-80" ).maintainTarget, .level( lower: 70, upper: 80 ) )
 		XCTAssertNil( BatteryStatus( percent: 1, acAttached: true ).maintainTarget )

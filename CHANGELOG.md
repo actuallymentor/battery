@@ -12,6 +12,7 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 - First launch offers to remove v1.
 
 **Changed**
+- Charge state and time remaining, without cluttering the popover: a status line at the top of the gear menu ("Holding at limit", "On battery · 2:10 left"), the same text as the menu bar tooltip, a pause mark on the menu bar battery while plugged in with charging held off, and *Charging* / *Time remaining* rows in Settings → Charging.
 - Menu bar battery fills continuously with the charge level (was five fixed steps, and always full while charging); a bolt is carved into it while charging.
 - Dark mode: follows the system theme; Settings → General → Appearance can force Light or Dark.
 - The popover is a single line: the charge limit switch and a gear. The limit slider and *Allow discharge* moved to Settings → Charging. *Open at login* and *Allow discharge* are on by default.
