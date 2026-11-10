@@ -6,6 +6,7 @@ This repository contains software that limits the battery charging level of Appl
   - `Sources/BatteryCore/` pure logic (SMC plans, controller, CLI parsing, formatting). `cd macos && swift test`
   - `App/` SwiftUI menu bar app, `Daemon/` root helper (SMC, maintain loop, jobs), `CLI/` thin XPC client, `Shared/` XPC protocol
   - `project.yml` XcodeGen spec; the `.xcodeproj` is generated and gitignored
+- `./macos/E2E/` end-to-end suites (CLI + GUI via Accessibility), real Mac only, `scripts/e2e.sh`
 - `./scripts/release/` + `.github/workflows/release.yml` signed release pipeline (tag `v*`)
 - `./legacy/` v1 (shell + Electron). Frozen. `main` keeps serving v1 `update.sh` until the v1 to v2 handover release.
 
@@ -26,3 +27,5 @@ This repository contains software that limits the battery charging level of Appl
 ## Mandatory checks
 
 Before finishing any task: sanity check for bugs, check comments still match the code, run `swift test`, and for UI/daemon changes verify on a real Mac (`babysit mac`), see `.notes/RESEARCH.md`.
+
+For UI/daemon/CLI changes also run `scripts/e2e.sh` (real signed app + helper on the Mac, see `macos/E2E/README.md`) and add a test there for new behavior. No mocks in e2e.

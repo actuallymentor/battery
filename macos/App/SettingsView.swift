@@ -20,7 +20,7 @@ struct SettingsView: View {
 				Section( "Charge limit" ) {
 					VStack( alignment: .leading, spacing: 4 ) {
 						LabeledContent( "Stop charging at", value: "\( model.settings.limit )%" )
-						Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.settings.setLimit( Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
+						Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.limitChanged( to: Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
 						        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
 							.labelsHidden()
 							.accessibilityLabel( "Charge limit" ).accessibilityValue( "\( model.settings.limit ) percent" )

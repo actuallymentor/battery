@@ -19,6 +19,7 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 - (Earlier in this beta) The popover no longer repeats the charge level, status and voltage (the menu bar icon shows it); it opens straight on the limit controls (no presets, no resume-below stepper: the band is a fixed 5 points, ranges stay on the CLI), the one-off actions, Settings and Quit moved behind a gear at the top right, and it shows the running job's progress when there is one.
 
 **Fixed**
+- Charge limit slider: changes made with the keyboard or VoiceOver now apply to the helper (it only applied after a mouse drag was released).
 - Uninstall (Settings or `battery uninstall`) also removes helper state, the log and app preferences, not just the helper.
 - A helper that stops answering while a limit is on now says charging may stay paused; Repair falls back to Login Items guidance; an outdated helper (after an update) is restarted automatically.
 - Range maintain: plugged in inside the band no longer charges to the top (#475).

@@ -43,3 +43,10 @@ OPEN RISK: a dead helper with an active limit leaves charging off (verified). De
 - Signed beta.1 -> beta.2 Sparkle update (local appcast via defaults SUFeedURL override): app swapped, daemon restarted as beta.2, 90% limit resumed, no re-approval. The ad-hoc "dead helper after update" problem does not occur with Developer ID.
 - Sleep/wake verified: wake handler fires on full wake, limit holds.
 - Reboot verified (FileVault on): the root daemon starts at boot before login, reloads the persisted 90% target and holds charging off.
+
+## E2E suites (2026-11-10)
+`macos/E2E` (own SwiftPM package, `scripts/e2e.sh`, README inside). 23 CLI + 19 GUI tests, all green on ArjunMacbook against the signed beta.2 build. No mocks: real helper, SMC, menu bar via Accessibility.
+- Mac setup done: Terminal.app has Accessibility. Runs go through Terminal; a held `babysit mac run` session keeps the screen unlocked (`scripts/e2e/hold.sh`).
+- Found by the suite: slider changes from keyboard/VoiceOver never reached the helper (fixed, `AppModel.limitChanged`); replacing the app leaves the helper "not answering" until Repair (e2e presses it).
+- `babysit mac unlock` types the password into whatever has focus: it landed in a Terminal window once (never executed, Terminal state wiped). hold.sh now unlocks only when the screen is locked.
+- Not automated: sleep/wake and reboot (need the screen/FileVault login), helper install/uninstall approval. Mac left with `caffeinate` stopped.

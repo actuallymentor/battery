@@ -157,6 +157,18 @@ final class AppModel {
 	/// Re-send the band after a value changed while the limit is on.
 	func commitLimitChange() { if status?.maintain != nil { applyLimit( enabled: true ) } }
 
+	private var limitCommit: Task<Void, Never>?
+
+	/// Slider steps from the keyboard or VoiceOver never "end editing": apply shortly after the last change
+	func limitChanged( to n: Int ) {
+		settings.setLimit( n )
+		limitCommit?.cancel()
+		limitCommit = Task { [ weak self ] in
+			try? await Task.sleep( nanoseconds: 400_000_000 )
+			if !Task.isCancelled { self?.commitLimitChange() }
+		}
+	}
+
 	/// The daemon owns the real limit (it persists across reboots, the CLI can change it). When its target differs from the
 	/// last one we know, show that instead of stale edits.
 	private func adoptOutsideChanges() {
