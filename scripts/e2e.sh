@@ -7,6 +7,7 @@
 #   scripts/e2e.sh                 build + install fresh, then CLI and GUI suites
 #   scripts/e2e.sh cli             CLI suite only (no screen needed)
 #   scripts/e2e.sh gui             GUI suite only (holds the screen unlocked while it runs)
+#   scripts/e2e.sh lifecycle       helper uninstall / set up again / approval revoked + granted (types the admin password once, see below)
 #   scripts/e2e.sh all --no-build  test whatever is installed in /Applications
 #   scripts/e2e.sh gui --filter testSlider     only matching tests (swift test --filter)
 #
@@ -21,7 +22,7 @@ MAC="${MAC:-ArjunMacbook}"; export MAC
 suite=all; build=1; filter=""
 while [[ $# -gt 0 ]]; do
 	case "$1" in
-		cli|gui|all) suite="$1" ;;
+		cli|gui|lifecycle|all) suite="$1" ;;
 		--no-build) build=0 ;;
 		--filter) shift; filter="$1" ;;
 		*) echo "unknown argument $1"; exit 2 ;;
@@ -82,6 +83,19 @@ if [[ $suite == gui || $suite == all ]]; then
 	log "GUI suite (screen held unlocked)"
 	ensure_hold
 	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh swift test --filter GUITests ${filter:+--filter $filter} 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+fi
+
+if [[ $suite == lifecycle || $suite == all ]]; then
+	log "Lifecycle suite (really uninstalls the helper; the admin password is typed once, into System Settings, when the test has verified its field is focused)"
+	ensure_hold
+	mac 'rm -f /tmp/e2e/password-wanted /tmp/e2e/password-typed'
+	# Answer the test's password request: it only asks while System Settings is frontmost with the Password field focused
+	( until mac 'test -f /tmp/e2e/password-wanted'; do sleep 2; done
+	  mac 'rm -f /tmp/e2e/password-wanted'; babysit mac unlock "$MAC" > /dev/null; mac 'touch /tmp/e2e/password-typed' ) &
+	watcher=$!
+	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh env E2E_LIFECYCLE=1 swift test --filter LifecycleTests ${filter:+--filter $filter} 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+	kill $watcher 2>/dev/null || true
+	helper_up 30 || { log "Helper is down after the lifecycle suite"; status=1; }
 fi
 
 # The GUI suite ran inside Terminal windows: close them all (no saved state either)

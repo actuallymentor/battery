@@ -49,4 +49,5 @@ OPEN RISK: a dead helper with an active limit leaves charging off (verified). De
 - Mac setup done: Terminal.app has Accessibility. Runs go through Terminal; a held `babysit mac run` session keeps the screen unlocked (`scripts/e2e/hold.sh`).
 - Found by the suite: slider changes from keyboard/VoiceOver never reached the helper (fixed, `AppModel.limitChanged`); replacing the app leaves the helper "not answering" until Repair (e2e presses it).
 - `babysit mac unlock` types the password into whatever has focus: it landed in a Terminal window once (never executed, Terminal state wiped). hold.sh now unlocks only when the screen is locked.
-- Not automated: sleep/wake and reboot (need the screen/FileVault login), helper install/uninstall approval. Mac left with `caffeinate` stopped.
+- Lifecycle suite added (2 tests, `scripts/e2e.sh lifecycle`): uninstall + set up again (no approval needed, macOS remembers it), Login Items switch revoked (password via `babysit mac unlock`, only after the test verifies the focused field) and granted again.
+- Not automated: sleep/wake and reboot (need the screen/FileVault login). Mac left with `caffeinate` stopped.

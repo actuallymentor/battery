@@ -6,6 +6,7 @@ Real signed `Battery.app`, real root helper, real SMC, real menu bar. No mocks, 
 scripts/e2e.sh                       build + install fresh (signed), CLI then GUI
 scripts/e2e.sh cli | gui             one suite
 scripts/e2e.sh all --no-build        test what is installed in /Applications
+scripts/e2e.sh lifecycle             helper uninstall/setup/approval revoke+grant (part of `all`)
 scripts/e2e.sh gui --filter testSlider
 ```
 
@@ -30,4 +31,5 @@ Tests restore a neutral Mac (no limit, no job, no schedule, charging and adapter
 - Replacing `/Applications/Battery.app` leaves the registered helper "not answering" (launchd EX_CONFIG) until the app's own Repair helper button is pressed. `e2e.sh` presses it, no approval needed.
 - The app adopts limits set from the CLI, so GUI tests wait for the status poll before acting on the slider.
 - SwiftUI Form toggles are unlabeled in the AX tree: `GUI.toggle("Label")` finds the checkbox after the label text. Sliders refuse a value set; step them with AXIncrement/AXDecrement (`AX.slide`).
-- Not covered (needs a human or a reboot): sleep/wake, reboot, helper install/uninstall approval. See PROGRESS.md for the manual runs.
+- Lifecycle suite (`LifecycleTests`, opt-in via `E2E_LIFECYCLE=1`, which e2e.sh sets): Settings -> Uninstall, set up again, Login Items switch off/on in System Settings (driven by Accessibility). Switching off needs the admin password unless macOS still has a recent authorization cached. The test only asks once System Settings is frontmost with its Password field focused (drops `/tmp/e2e/password-wanted`); e2e.sh answers with `babysit mac unlock`. The password never passes through test code. Switching on needs none.
+- Not covered (needs a human or a reboot): sleep/wake, reboot. See PROGRESS.md for the manual runs.
