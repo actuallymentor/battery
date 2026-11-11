@@ -20,12 +20,15 @@ trap 'exit 130' INT
 visudo_folder=/private/etc/sudoers.d
 visudo_file=${visudo_folder}/battery
 configfolder=$HOME/.battery
-pidfile=$configfolder/battery.pid
 logfile=$configfolder/battery.log
+calibration_progress_file=$configfolder/calibration.progress
 maintain_percentage_tracker_file=$configfolder/maintain.percentage
 maintain_voltage_tracker_file=$configfolder/maintain.voltage
+maintain_force_discharge_file=$configfolder/maintain.force-discharge
 daemon_path=$HOME/Library/LaunchAgents/battery.plist
-calibrate_pidfile=$configfolder/calibrate.pid
+launchd_job_label=com.actuallymentor.battery.app
+launchd_job_domain="gui/$(id -u)"
+launchd_job_service="$launchd_job_domain/$launchd_job_label"
 path_configfile=/etc/paths.d/50-battery
 
 # Percentage limits
@@ -93,40 +96,31 @@ Usage:
   battery status
     output battery SMC status, % and time remaining
 
-  battery logs LINES[integer, optional]
-    output logs of the battery CLI and GUI
-    eg: battery logs 100
+  battery stop
+    terminate the current background job (maintenance, etc.), enable charging, and disable forced discharging
+    the terminated job will not start automatically on the next reboot
 
-  battery dump_controls
-    display SMC controls and, on macOS Tahoe 26 and later, native charge-limit preferences
-
-  battery maintain PERCENTAGE[${percentage_min}-100,stop] or RANGE[lower-upper]
-    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
-    it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
+  battery maintain PERCENTAGE[${percentage_min}-100] or RANGE[lower-upper]
+    reboot-persistent battery charge level maintenance: keep the battery at a specified percentage or range
     eg: battery maintain 80           # maintain at 80%
-    eg: battery maintain 70-80        # maintain between 70-80%
-    eg: battery maintain stop
+    eg: battery maintain 70-80        # maintain between 70% and 80%
+    use --force-discharge to discharge the battery to the target level first
 
-  battery maintain VOLTAGE[${voltage_min}V-${voltage_max}V,stop] (HYSTERESIS[${voltage_hyst_min}V-${voltage_hyst_max}V])
-    reboot-persistent battery level maintenance: keep battery at a certain voltage
-  default hysteresis: 0.1V
+  battery maintain VOLTAGE[${voltage_min}V-${voltage_max}V] (HYSTERESIS[${voltage_hyst_min}V-${voltage_hyst_max}V])
+    reboot-persistent battery voltage maintenance: keep the battery voltage within a specified range
+    default hysteresis: 0.1V
     eg: battery maintain 11.4V       # keeps battery between 11.3V and 11.5V
     eg: battery maintain 11.4V 0.3V  # keeps battery between 11.1V and 11.7V
+    use --force-discharge to discharge the battery to the target voltage first, but never below 20% charge
 
   battery charging SETTING[on/off]
-    manually set the battery to (not) charge
-    on macOS releases since 2026, charging can resume after charge level drops.
-    'battery charging off' does not work if charge level is below ${percentage_min}%
+    manually disable or enable battery charging
+    'battery charging off' still allows battery charging up to ${percentage_min}%
     eg: battery charging on
 
   battery adapter SETTING[on/off]
     manually set the adapter to (not) charge even when plugged in
     eg: battery adapter off
-
-  battery calibrate
-    calibrate the battery by discharging it to 15%, then recharging it to 100%, and keeping it there for 1 hour
-    battery maintenance is restored upon completion
-    menubar battery app execution and/or battery maintain command will interrupt calibration
 
   battery charge LEVEL[${percentage_min}-100]
     charge the battery to a certain percentage; battery maintenance is restored upon completion
@@ -135,6 +129,23 @@ Usage:
   battery discharge LEVEL[1-100]
     block adapter power until the battery reaches the specified level; battery maintenance is restored upon completion
     eg: battery discharge 90
+
+  battery discharge VOLTAGE[${voltage_min}V-${voltage_max}V]
+    block adapter power until voltage is at or below the target; battery maintenance is restored upon completion
+    eg: battery discharge 11.4V
+
+  battery calibrate
+    on macOS Sequoia and earlier, cycle the battery through discharge and recharge stages, giving the system a
+    chance to recalibrate battery charge and capacity estimates; newer macOS versions may handle this automatically
+    the command will discharge the battery to 15%, charge it to 100%, maintain charging for 1 hour, and then
+    discharge it back to 80%.
+
+  battery logs LINES[integer, optional]
+    output logs of the battery CLI and GUI
+    eg: battery logs 100
+
+  battery dump_controls
+    display SMC controls and, on macOS Tahoe 26 and later, native charge-limit preferences
 
   battery update
     update the battery utility to the latest version
@@ -204,63 +215,6 @@ function log() {
 			printf '%s\n' "$line" >&3
 		fi
 	} 3>>"$logfile"
-}
-
-function valid_percentage() {
-	if ! [[ "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 0 ]] || [[ "$1" -gt 100 ]]; then
-		return 1
-	else
-		return 0
-	fi
-}
-
-function valid_maintenance_percentage() {
-	valid_percentage "$1" && [[ "$1" -ge "$percentage_min" ]]
-}
-
-function valid_maintenance_percentage_range() {
-	# Check if input matches range format: NUMBER-NUMBER
-	if ! [[ "$1" =~ ^[0-9]+-[0-9]+$ ]]; then
-		return 1
-	fi
-
-	# Extract lower and upper bounds
-	local lower="${1%-*}"
-	local upper="${1#*-}"
-
-	# Validate both numbers are valid maintenance percentages
-	if ! valid_maintenance_percentage "$lower" || ! valid_maintenance_percentage "$upper"; then
-		return 1
-	fi
-
-	# Check lower < upper
-	if [[ "$lower" -ge "$upper" ]]; then
-		return 1
-	fi
-
-	return 0
-}
-
-function valid_voltage() {
-	if [[ "$1" =~ ^[0-9]+(\.[0-9]+)?V$ ]]; then
-		return 0
-	fi
-	return 1
-}
-
-function read_and_validate_pidfile() {
-	local pidfile="$1" argument_pattern="$2" pid command
-	[[ -f "$pidfile" ]] || return 1
-	pid=$(cat "$pidfile") || return 1
-	if [[ "$pid" =~ ^[1-9][0-9]*$ && "$pid" != "1" ]]; then
-		command=$(ps -ww -p "$pid" -o command=)
-		if [[ "$command" =~ ^/bin/bash[[:space:]]+.*/battery[[:space:]]+$argument_pattern ]]; then
-			echo "$pid"
-			return 0
-		fi
-	fi
-	rm -f "$pidfile"
-	return 1
 }
 
 function smc_read_hex() {
@@ -578,6 +532,122 @@ function get_discharging_control_status() {
 }
 
 ## ###############
+## launchd helpers
+## ###############
+
+# Print whether the job is absent, registered but stopped, or running. No arguments.
+function launchd_job_get_state() {
+	assert_not_running_as_root >&2
+	local jobs
+	jobs=$(launchctl list) || {
+		log "❌ 'launchctl list' failed (exit $?) ${jobs:+: $jobs}" >>"$logfile"
+		return 1
+	}
+	printf '%s\n' "$jobs" | awk -v label="$launchd_job_label" '
+		$3 == label {
+			print ($1 == "-" ? "registered_and_not_running" : "registered_and_running")
+			found = 1
+			exit
+		}
+		END { if (!found) print "not_registered_and_not_running" }' || {
+			log "❌ awk failed while reading 'launchctl list' output (exit $?)" >>"$logfile"
+			return 1
+		}
+} 2>>"$logfile"
+
+# Print the running job's Battery action. No arguments; the plist must describe the loaded job.
+# Return 1 when not running and 2 on query or extraction failure.
+function launchd_job_get_running_action() {
+	local state definition action_pattern='<string>([a-z0-9_]+)</string>'
+	state=$(launchd_job_get_state) || return 2
+	[[ "$state" == "registered_and_running" ]] || return 1
+	# XML extraction works on Big Sur; plutil's raw format requires macOS 12.
+	definition=$(plutil -extract ProgramArguments.1 xml1 -o - "$daemon_path") || {
+		log "❌ plutil extract ProgramArguments.1 failed for LaunchAgent plist (exit $?)${definition:+: $definition}" >>"$logfile"
+		return 2
+	}
+	if [[ "$definition" =~ $action_pattern ]]; then
+		printf '%s\n' "${BASH_REMATCH[1]}"
+	else
+		log "❌ Unable to read the Battery background action from the LaunchAgent plist" >>"$logfile"
+		return 2
+	fi
+} 2>>"$logfile"
+
+# Create/overwrite the LaunchAgent plist; requires an unloaded job and removes the plist on failure.
+# Arguments: RUN_AT_LOAD (true/false) LOGFILE (output file path) ACTION [ARGUMENTS...].
+function launchd_job_write_plist() {
+	assert_not_running_as_root
+	local run_at_load="$1" job_log="$2" argument state result=0 index=1
+	shift 2 || return
+
+	state=$(launchd_job_get_state) || return
+	if [[ "$state" != "not_registered_and_not_running" ]]; then
+		log "❌ LaunchAgent must be unloaded before writing its plist"
+		exit 1
+	fi
+
+	mkdir -p "${daemon_path%/*}" || result=1
+	plutil -convert xml1 -o "$daemon_path" - <<< '{}' || result=1
+	plutil -insert Label -string "$launchd_job_label" "$daemon_path" || result=1
+	plutil -insert ProgramArguments -array "$daemon_path" || result=1
+	plutil -insert ProgramArguments.0 -string "$battery_binary" "$daemon_path" || result=1
+	for argument in "$@"; do
+		plutil -insert "ProgramArguments.$index" -string "$argument" "$daemon_path" || result=1
+		index=$((index + 1))
+	done
+	plutil -insert StandardInPath -string /dev/null "$daemon_path" || result=1
+	plutil -insert StandardOutPath -string "$job_log" "$daemon_path" || result=1
+	plutil -insert StandardErrorPath -string "$job_log" "$daemon_path" || result=1
+	plutil -insert RunAtLoad -bool "$run_at_load" "$daemon_path" || result=1
+	plutil -insert KeepAlive -bool false "$daemon_path" || result=1
+	plutil -lint -s "$daemon_path" || result=1
+	if [[ "$result" -ne 0 ]]; then
+		log "❌ Failed to create LaunchAgent plist"
+		rm -f "$daemon_path" || log "❌ Failed to remove incomplete LaunchAgent plist (exit $?)"
+	fi
+	return "$result"
+}
+
+# Remove the job's registration from the user's GUI launchd domain, stopping it if running.
+# No arguments; an absent job succeeds. Leaves the plist file on disk.
+function launchd_job_bootout() {
+	assert_not_running_as_root
+	local state
+	state=$(launchd_job_get_state) || return
+	[[ "$state" == "not_registered_and_not_running" ]] && return 0
+	launchctl bootout "$launchd_job_service" || {
+		log "❌ launchctl bootout failed (exit $?)"
+		return 1
+	}
+}
+
+# Remove the previous job from launchd, write its replacement plist, then enable, register, and start it.
+# Arguments: RUN_AT_LOAD (true/false) LOGFILE (output file path) ACTION [ARGUMENTS...].
+function launchd_job_start_new() {
+	launchd_job_bootout || return
+	launchd_job_write_plist "$@" || return
+	launchctl enable "$launchd_job_service" || { log "❌ launchctl enable failed (exit $?)"; return 1; }
+	launchctl bootstrap "$launchd_job_domain" "$daemon_path" || { log "❌ launchctl bootstrap failed (exit $?)"; return 1; }
+	# Jobs without RunAtLoad need an explicit start after registration.
+	if [[ "$1" == "false" ]]; then
+		launchctl kickstart "$launchd_job_service" || { log "❌ launchctl kickstart failed (exit $?)"; return 1; }
+	fi
+	return 0
+}
+
+# Disable the job, remove it from launchd, and delete its plist, attempting every step after failures.
+# No arguments; return 1 if any cleanup step fails.
+function launchd_job_stop_and_remove() {
+	assert_not_running_as_root
+	local result=0
+	launchctl disable "$launchd_job_service" || { log "❌ launchctl disable failed (exit $?)"; result=1; }
+	launchd_job_bootout || result=1
+	rm -f "$daemon_path" || { log "❌ Failed to remove LaunchAgent plist (exit $?)"; result=1; }
+	return "$result"
+}
+
+## ###############
 ## Statistics
 ## ###############
 
@@ -607,12 +677,93 @@ function get_voltage() {
 	echo "$voltage"
 }
 
-function is_maintenance_running() {
-	read_and_validate_pidfile "$pidfile" 'maintain_'
+## ########################################
+## Maintenance arguments and config helpers
+## ########################################
+
+function valid_percentage() {
+	[[ "$1" =~ ^[0-9]+$ && "$1" -ge 0 && "$1" -le 100 ]]
 }
 
-function is_calibration_running() {
-	read_and_validate_pidfile "$calibrate_pidfile" 'calibrate([[:space:]]|$)'
+function valid_maintenance_percentage() {
+	valid_percentage "$1" && [[ "$1" -ge "$percentage_min" ]]
+}
+
+function valid_maintenance_percentage_range() {
+	local lower="${1%-*}"
+	local upper="${1#*-}"
+	valid_maintenance_percentage "$lower" && valid_maintenance_percentage "$upper" && [[ "$lower" -lt "$upper" ]]
+}
+
+function valid_voltage() {
+	[[ "$1" =~ ^[0-9]+(\.[0-9]+)?V$ ]]
+}
+
+function valid_maintenance_voltage() {
+	local voltage="${1%V}" hysteresis="${2%V}"
+	valid_voltage "$1" && valid_voltage "$2" &&
+		[[ "$(echo "$voltage >= $voltage_min && $voltage <= $voltage_max && $hysteresis >= $voltage_hyst_min && $hysteresis <= $voltage_hyst_max" | bc -l)" == "1" ]]
+}
+
+# Save a validated true/false pending flag. Example: maintenance_force_discharge_config_save true
+function maintenance_force_discharge_config_save() {
+	printf '%s\n' "$1" >"$maintain_force_discharge_file" || {
+		log "❌ Failed to save force-discharge request"
+		return 1
+	}
+}
+
+# Load and validate cfg_force_discharge
+function maintenance_force_discharge_config_load() {
+	cfg_force_discharge=false
+	if [[ -e "$maintain_force_discharge_file" ]]; then
+		cfg_force_discharge=$(cat "$maintain_force_discharge_file") &&
+			[[ "$cfg_force_discharge" == "true" || "$cfg_force_discharge" == "false" ]] || {
+			log "❌ Invalid force-discharge config value; expected true or false"
+			return 1
+		}
+	fi
+	return 0
+}
+
+# Save maintenance percentage and '--force-discharge' flag
+# Examples: percentage_maintenance_config_save 80 false; percentage_maintenance_config_save 70-80 true
+function percentage_maintenance_config_save() {
+	rm -f "$maintain_voltage_tracker_file" && printf '%s\n' "$1" >"$maintain_percentage_tracker_file" || {
+		log "❌ Failed to save percentage maintenance target"
+		return 1
+	}
+	maintenance_force_discharge_config_save "$2"
+}
+
+# Load and validate cfg_percentage and cfg_force_discharge
+function percentage_maintenance_config_load() {
+	cfg_percentage=$(cat "$maintain_percentage_tracker_file") &&
+		{ valid_maintenance_percentage "$cfg_percentage" || valid_maintenance_percentage_range "$cfg_percentage"; } || {
+		log "❌ Invalid maintenance percentage config value"
+		return 1
+	}
+	maintenance_force_discharge_config_load
+}
+
+# Save validated voltage, hysteresis and '--force-discharge' flag
+# Example: voltage_maintenance_config_save 11.4V 0.1V true; target values are saved without V.
+function voltage_maintenance_config_save() {
+	rm -f "$maintain_percentage_tracker_file" && printf '%s %s\n' "${1%V}" "${2%V}" >"$maintain_voltage_tracker_file" || {
+		log "❌ Failed to save voltage maintenance target."
+		return 1
+	}
+	maintenance_force_discharge_config_save "$3"
+}
+
+# Load and validate cfg_voltage, cfg_voltage_hysteresis, and cfg_force_discharge
+function voltage_maintenance_config_load() {
+	read -r cfg_voltage cfg_voltage_hysteresis < "$maintain_voltage_tracker_file" &&
+		valid_maintenance_voltage "${cfg_voltage}V" "${cfg_voltage_hysteresis}V" || {
+		log "❌ Invalid maintenance voltage or hysteresis config values"
+		return 1
+	}
+	maintenance_force_discharge_config_load
 }
 
 ## ##################
@@ -628,6 +779,10 @@ function determine_unprivileged_user() {
 	if [[ -z "$username" && -n "$SUDO_USER" && "$SUDO_USER" != "root" ]]; then
 		username="$SUDO_USER"
 	fi
+	if [[ -z "$username" ]]; then
+		username=$(stat -f '%Su' /dev/console) || username=""
+		if [[ "$username" == "root" ]]; then username=""; fi
+	fi
 	if [[ -z "$username" && -n "$USER" && "$USER" != "root" ]]; then
 		username="$USER"
 	fi
@@ -640,6 +795,14 @@ function determine_unprivileged_user() {
 	fi
 	echo "$username"
 }
+
+function run_as_unprivileged_user() (
+	if [[ $EUID -ne 0 ]]; then "$@"; return; fi
+	local username
+	username=$(determine_unprivileged_user "$SUDO_USER") || return
+	assert_unprivileged_user "$username"
+	sudo -H -u "$username" "$@"
+)
 
 function exit_on_error() {
 	[[ "$1" -eq 0 ]] && return 0
@@ -699,11 +862,11 @@ function fixup_installation_owner_mode() {
 	ensure_owner_mode $username staff 644 "$daemon_path"
 
 	ensure_owner_mode $username staff 755 "$configfolder"
-	ensure_owner_mode $username staff 644 "$pidfile"
 	ensure_owner_mode $username staff 644 "$logfile"
+	ensure_owner_mode $username staff 644 "$calibration_progress_file"
 	ensure_owner_mode $username staff 644 "$maintain_percentage_tracker_file"
 	ensure_owner_mode $username staff 644 "$maintain_voltage_tracker_file"
-	ensure_owner_mode $username staff 644 "$calibrate_pidfile"
+	ensure_owner_mode $username staff 644 "$maintain_force_discharge_file"
 
 	ensure_owner_mode root wheel 755 "$visudo_folder"
 	ensure_owner_mode root wheel 440 "$visudo_file"
@@ -907,6 +1070,24 @@ if [[ "$action" == "update" ]]; then
 	exit 0
 fi
 
+# Stop the shared background job and restore normal charging controls.
+if [[ "$action" == "stop" ]]; then
+
+	stop_result=0
+	launchd_job_stop_and_remove || {
+		stop_result=1
+		log "❌ Battery background job cleanup failed; continuing with charging control restoration"
+	}
+	disable_discharging
+	enable_charging
+	if [[ "$(get_charging_control_status)" != "enabled" ||
+	      "$(get_discharging_control_status)" != "not discharging" ]]; then
+		log "❌ Unable to confirm normal charging controls after stopping the background job"
+	fi
+
+	exit "$stop_result"
+fi
+
 # Uninstall helper
 if [[ "$action" == "uninstall" ]]; then
 
@@ -916,11 +1097,11 @@ if [[ "$action" == "uninstall" ]]; then
 		read
 	fi
 
-	$battery_binary maintain stop
-	$battery_binary remove_daemon
+	# Battery menubar UI app calls this action as root
+	run_as_unprivileged_user "$battery_binary" stop || log "❌ Failed to stop Battery cleanly; continuing uninstall and final process cleanup"
 
-	enable_charging
 	disable_discharging
+	enable_charging
 
 	sudo rm -fv /usr/local/bin/battery
 	sudo rm -fv /usr/local/bin/smc
@@ -1072,8 +1253,8 @@ if [[ "$action" == "charging" ]]; then
 
 	log "Setting $action to $setting"
 
-	# Disable running daemon
-	$battery_binary maintain stop
+	# Stop the current background job before changing controls.
+	$battery_binary stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
@@ -1095,8 +1276,8 @@ if [[ "$action" == "adapter" ]]; then
 
 	log "Setting $action to $setting"
 
-	# Disable running daemon
-	$battery_binary maintain stop
+	# Stop the current background job before changing controls.
+	$battery_binary stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
@@ -1123,7 +1304,7 @@ if [[ "$action" == "charge" ]]; then
 
 	# Stop battery maintenance if invoked by user from Terminal
 	if [[ "$BATTERY_HELPER_MODE" != "1" ]]; then
-		$battery_binary maintain stop
+		$battery_binary stop
 	fi
 
 	# Start charging
@@ -1163,36 +1344,50 @@ fi
 # Discharging on/off controller
 if [[ "$action" == "discharge" ]]; then
 
-	if ! valid_percentage "$setting"; then
-		log "Error: $setting is not a valid setting for battery discharge. Please use a number between 0 and 100"
+	if valid_percentage "$setting"; then
+		discharge_target="$setting"
+		discharge_unit="%"
+	elif valid_voltage "$setting"; then
+		discharge_unit=V
+		discharge_target="${setting%V}"
+		if [[ "$(echo "$discharge_target >= $voltage_min && $discharge_target <= $voltage_max" | bc -l)" != "1" ]]; then
+			log "❌ Discharge voltage must be between ${voltage_min}V and ${voltage_max}V"
+			exit 1
+		fi
+	else
+		log "❌ Invalid discharge target; use a percentage between 0 and 100 or a voltage between ${voltage_min}V and ${voltage_max}V"
 		exit 1
 	fi
 
-	# Stop battery maintenance if invoked by user from Terminal
+	# Stop existing battery background job if invoked by user from Terminal
 	if [[ "$BATTERY_HELPER_MODE" != "1" ]]; then
-		$battery_binary maintain stop
+		$battery_binary stop || exit 1
 	fi
 
-	# Start discharging
-	battery_percentage=$(get_battery_percentage)
-	log "Discharging to $setting% from $battery_percentage%"
+	log "Discharging to $discharge_target$discharge_unit"
 	enable_discharging
 
-	# Loop until battery charging level is reached
-	while [[ "$battery_percentage" -gt "$setting" ]]; do
+	# Both target types complete when the measured value is at or below the target.
+	while true; do
+		if [[ "$discharge_unit" == "V" ]]; then
+			discharge_level=$(get_voltage)
+		else
+			discharge_level=$(get_battery_percentage)
+		fi
+		above_target=$(echo "$discharge_level > $discharge_target" | bc -l) || exit 1
+		[[ "$above_target" == "1" ]] || break
 
-		log "Battery at $battery_percentage% (target $setting%)"
+		log "Battery at $discharge_level$discharge_unit (target $discharge_target$discharge_unit)"
 		update_magsafe_led_color
 		caffeinate -is sleep 60
-		exit_on_error "$?" "Error: Discharging wait failed; discharging stopped."
-		battery_percentage=$(get_battery_percentage)
+		exit_on_error "$?" "Error: Discharging wait failed; Interrupted."
 
 	done
 
 	disable_charging
 	disable_discharging
 	update_magsafe_led_color
-	log "Discharging completed at $battery_percentage%"
+	log "Discharging completed at $discharge_level$discharge_unit"
 
 	# Try restoring maintenance if invoked by user from Terminal
 	if [[ "$BATTERY_HELPER_MODE" != "1" ]]; then
@@ -1203,68 +1398,31 @@ if [[ "$action" == "discharge" ]]; then
 
 fi
 
-# Maintain at level
+# Maintain at level using saved configuration
 if [[ "$action" == "maintain_synchronous" ]]; then
 
+	assert_not_running_as_root
 	log_system_capabilities
 
-	# Checking if the calibration process is running
-	if pid=$(is_calibration_running); then
-		kill "$pid"
-		log "🚨 Calibration process has been stopped"
-	fi
+	percentage_maintenance_config_load || exit 1
+	# A single percentage supplies both bounds; the loader already validated them.
+	lower_bound="${cfg_percentage%-*}"
+	upper_bound="${cfg_percentage#*-}"
 
-	# Recover old maintain status if old setting is found
-	if [[ "$setting" == "recover" ]]; then
-
-		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
-		if [[ $maintain_percentage ]]; then
-			log "Recovering maintenance percentage $maintain_percentage"
-			setting=$(echo $maintain_percentage)
-		else
-			log "No setting to recover, exiting"
-			exit 0
-		fi
-	fi
-
-	# Parse setting - could be single value or range
-	lower_bound=""
-	upper_bound=""
-	is_range=false
-
-	if valid_maintenance_percentage_range "$setting"; then
-		# Range format: lower-upper
-		is_range=true
-		lower_bound="${setting%-*}"
-		upper_bound="${setting#*-}"
-	elif valid_maintenance_percentage "$setting"; then
-		# Single value format (backward compatible)
-		is_range=false
-		lower_bound="$setting"
-		upper_bound="$setting"
-	else
-		log " ❌ Error: $setting is not a valid setting for battery maintain. Please use a number between ${percentage_min} and 100, or a range like 70-80"
-		exit 1
-	fi
-
-	# Check if the user requested that the battery maintenance first discharge to the desired level
-	if [[ "$subsetting" == "--force-discharge" ]]; then
-		# Before we start maintaining the battery level, first discharge to the target level
-		discharge_target="$lower_bound"
-		log "Triggering discharge to $discharge_target before enabling charging limiter"
-		BATTERY_HELPER_MODE=1 $battery_binary discharge "$discharge_target"
-		log "Discharge pre battery-maintenance complete, continuing to battery maintenance loop"
-	else
-		log "Not triggering discharge as it is not requested"
+	if [[ "$cfg_force_discharge" == "true" ]]; then
+		log "Triggering initial discharge to $lower_bound before maintenance"
+		BATTERY_HELPER_MODE=1 "$battery_binary" discharge "$lower_bound"
+		printf '%s\n' false >"$maintain_force_discharge_file" || { log "❌ Failed to clear completed force-discharge request"; }
+		log "Initial discharge completed; continuing to maintenance"
 	fi
 
 	# Read the initial charge level
 	battery_percentage=$(get_battery_percentage)
 
-	if [[ "$is_range" == true ]]; then
-		log "Maintaining battery between $lower_bound% and $upper_bound% from $battery_percentage%"
+	if [[ "$lower_bound" != "$upper_bound" ]]; then
+		log "Maintaining battery between $lower_bound% and $upper_bound% (currently ${battery_percentage}%)"
 	else
-		log "Charging to and maintaining at $setting% from $battery_percentage%"
+		log "Maintaining battery at $cfg_percentage% (currently ${battery_percentage}%)"
 	fi
 
 	# Stop charging if current charge level is within specified range
@@ -1313,28 +1471,23 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 fi
 
-# Maintain at voltage
+# Maintain at voltage using saved configuration
 if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 
+	assert_not_running_as_root
 	log_system_capabilities
 
-	# Recover old maintain status if old setting is found
-	if [[ "$setting" == "recover" ]]; then
-
-		maintain_voltage=$(cat $maintain_voltage_tracker_file 2>/dev/null)
-		if [[ $maintain_voltage ]]; then
-			log "Recovering maintenance voltage $maintain_voltage"
-			setting=$(echo $maintain_voltage | awk '{print $1}')
-			subsetting=$(echo $maintain_voltage | awk '{print $2}')
-		else
-			log "No setting to recover, exiting"
-			exit 0
-		fi
+	voltage_maintenance_config_load || exit 1
+	if [[ "$cfg_force_discharge" == "true" ]]; then
+		log "Triggering initial discharge to ${cfg_voltage}V before maintenance"
+		BATTERY_HELPER_MODE=1 "$battery_binary" discharge "${cfg_voltage}V"
+		printf '%s\n' false >"$maintain_force_discharge_file" || { log "❌ Failed to clear completed force-discharge request"; }
+		log "Initial discharge completed; continuing to maintenance"
 	fi
 
 	voltage=$(get_voltage)
-	lower_voltage=$(echo "$setting - $subsetting" | bc -l)
-	upper_voltage=$(echo "$setting + $subsetting" | bc -l)
+	lower_voltage=$(echo "$cfg_voltage - $cfg_voltage_hysteresis" | bc -l)
+	upper_voltage=$(echo "$cfg_voltage + $cfg_voltage_hysteresis" | bc -l)
 	log "Keeping voltage between ${lower_voltage}V and ${upper_voltage}V"
 
 	# Stop charging if current voltage is already within specified range
@@ -1381,157 +1534,158 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 
 fi
 
-# Asynchronous battery level maintenance
+# Start or recover a battery maintenance job using saved configuration
 if [[ "$action" == "maintain" ]]; then
 
 	assert_not_running_as_root
 
-	disable_discharging
-
-	# Kill old process silently
-	if pid=$(is_maintenance_running); then
-		log "Killing old maintain process at $pid"
-		kill "$pid"
-	fi
-
-	if pid=$(is_calibration_running); then
-		kill "$pid"
-		log "🚨 Calibration process has been stopped"
-	fi
-
+	# Deprecated compatibility alias; internal callers use stop directly.
 	if [[ "$setting" == "stop" ]]; then
-		log "Killing running maintain daemons & enabling charging as default state"
-		rm -f "$pidfile"
-		$battery_binary disable_daemon
-		enable_charging
+		$battery_binary stop || exit 1
 		$battery_binary status
 		exit 0
 	fi
 
-	# Check if setting is a voltage
-	is_voltage=false
+	if [[ "$setting" == "recover" ]]; then
+		if percentage_maintenance_config_load; then
+			maintenance_action=maintain_synchronous
+			log "Recovering percentage maintenance: $cfg_percentage%"
+		elif voltage_maintenance_config_load; then
+			maintenance_action=maintain_voltage_synchronous
+			log "Recovering voltage maintenance: ${cfg_voltage}V ±${cfg_voltage_hysteresis}V"
+		else
+			log "No usable maintenance configuration to recover, exiting"
+			exit 0
+		fi
+
+		launchd_job_bootout || exit 1
+		disable_discharging
+
+		launchd_job_start_new true "$logfile" "$maintenance_action"
+		log "Maintenance job recovered: $maintenance_action"
+		exit $?
+	fi
+
 	if valid_voltage "$setting"; then
-		setting="${setting//V/}"
-
-		if valid_voltage "$subsetting"; then
-			subsetting="${subsetting//V/}"
-		else
-			subsetting="0.1"
+		shift 2
+		arg_voltage="$setting"
+		arg_hysteresis=0.1V
+		arg_force_discharge=false
+		if [[ $# -gt 0 && "$1" != "--force-discharge" ]]; then
+			arg_hysteresis="$1"
+			shift
 		fi
-
-		if (($(echo "$setting < $voltage_min" | bc -l) || $(echo "$setting > $voltage_max" | bc -l))); then
-			log "Error: ${setting}V is not a valid setting. Please use a value between ${voltage_min}V and ${voltage_max}V"
+		valid_maintenance_voltage "$arg_voltage" "$arg_hysteresis" || {
+			log "❌ Maintenance voltage must be ${voltage_min}V-${voltage_max}V and hysteresis ${voltage_hyst_min}V-${voltage_hyst_max}V"
 			exit 1
-		fi
-		if (($(echo "$subsetting < $voltage_hyst_min" | bc -l) || $(echo "$subsetting > $voltage_hyst_max" | bc -l))); then
-			log "Error: ${subsetting}V is not a valid setting. Please use a value between ${voltage_hyst_min}V and ${voltage_hyst_max}V"
-			exit 1
-		fi
+		}
+		if [[ "$1" == "--force-discharge" ]]; then arg_force_discharge=true; shift; fi
 
-		is_voltage=true
+		# Stop the previous writer before saving a new target or pending discharge request.
+		launchd_job_bootout || exit 1
+		disable_discharging
 
-	elif [[ "$setting" == "recover" && -f "$maintain_voltage_tracker_file" ]]; then
-		is_voltage=true
+		voltage_maintenance_config_save "$arg_voltage" "$arg_hysteresis" "$arg_force_discharge" || exit 1
 
-	# Check if setting is a percentage range or single value
-	elif ! valid_maintenance_percentage "$setting" && ! valid_maintenance_percentage_range "$setting"; then
-		log "Called with $setting $action"
-		# If setting is not a valid percentage/range and not a special keyword, exit with an error.
-		if ! { [[ "$setting" == "stop" ]] || [[ "$setting" == "recover" ]]; }; then
-			log " ❌ Error: $setting is not a valid setting for battery maintain. Please use a number between ${percentage_min} and 100, a range like 70-80, or an action keyword like 'stop' or 'recover'."
-			exit 1
-		fi
-
+		launchd_job_start_new true "$logfile" maintain_voltage_synchronous || exit 1
+		log "Maintenance job started: maintain_voltage_synchronous"
+		exit 0
 	fi
 
-	# Start maintenance script
-	if [ "$is_voltage" = true ]; then
-		if [[ "$setting" == "recover" ]]; then
-			log "Starting voltage maintenance recovery"
-		else
-			log "Starting battery maintenance at ${setting}V ±${subsetting}V"
+	if valid_maintenance_percentage "$setting" || valid_maintenance_percentage_range "$setting"; then
+		shift 2
+		arg_force_discharge=false
+		if [[ "$1" == "--force-discharge" ]]; then arg_force_discharge=true; shift; fi
+
+		# Stop the previous writer before saving a new target or pending discharge request.
+		launchd_job_bootout || exit 1
+		disable_discharging
+
+		percentage_maintenance_config_save "$setting" "$arg_force_discharge" || exit 1
+
+		launchd_job_start_new true "$logfile" maintain_synchronous || exit 1
+		log "Maintenance job started: maintain_synchronous"
+		exit 0
+	fi
+
+	log "❌ A maintenance target or recover argument is required; use 'battery help' for details"
+	exit 1
+
+fi
+
+# Start calibration in the shared job, or display progress from the current or previous run.
+if [[ "$action" == "calibrate" ]]; then
+
+	assert_not_running_as_root
+	[[ $# -eq 1 ]] || { log "❌ battery calibrate takes no arguments; use 'battery stop' to interrupt calibration"; exit 1; }
+
+	if running_action=$(launchd_job_get_running_action); then
+		if [[ "$running_action" == "calibrate_synchronous" ]]; then
+			cat "$calibration_progress_file"
+			printf "\n====\n\033[93mCalibration is in progress.\033[0m\n"
+            printf "Use 'battery stop' or 'battery maintain' to interrupt it.\n\n"
+			exit 0
 		fi
-		nohup $battery_binary maintain_voltage_synchronous $setting $subsetting >>"$logfile" 2>&1 &
 	else
-		if valid_maintenance_percentage_range "$setting"; then
-			log "Starting battery maintenance between ${setting/-/% and }%"
-		else
-			log "Starting battery maintenance at $setting% $subsetting"
-		fi
-		nohup $battery_binary maintain_synchronous $setting $subsetting >>"$logfile" 2>&1 &
+		[[ $? -eq 1 ]] || { log "❌ Unable to determine the running background job before calibration"; exit 1; }
 	fi
 
-	# Store pid of maintenance process and setting
-	echo $! >$pidfile
-	pid=$(cat "$pidfile" 2>/dev/null)
-
-	if [[ "$setting" != "recover" ]]; then
-
-		rm "$maintain_percentage_tracker_file" "$maintain_voltage_tracker_file" 2>/dev/null
-
-		if [[ "$is_voltage" = true ]]; then
-			log "Saving voltage maintenance setting $setting $subsetting"
-			echo "$setting $subsetting" >$maintain_voltage_tracker_file
-			log "Maintaining battery at ${setting}V ±${subsetting}V"
-
-		else
-			log "Saving percentage maintenance setting $setting"
-			echo $setting >$maintain_percentage_tracker_file
-			if valid_maintenance_percentage_range "$setting"; then
-				log "Maintaining battery between ${setting/-/% and }%"
-			else
-				log "Maintaining battery at $setting%"
-			fi
-		fi
-
+	if [[ -e "$calibration_progress_file" ]]; then
+		cat "$calibration_progress_file"
+        printf "\n====\n"
+		grep -F '✅ Calibration completed.' "$calibration_progress_file" >/dev/null || {
+			[[ $? -eq 1 ]] || exit 1
+			printf '\033[91mCalibration ended without completing.\033[0m\n'
+		}
+		rm "$calibration_progress_file" || { log "❌ Failed to remove the previous calibration progress file"; exit 1; }
+		printf "Run 'battery calibrate' again to start a new calibration.\n"
+        printf "Run 'battery maintain recover' to restore the maintenance.\n"
+		exit 0
 	fi
 
-	# Enable the daemon that continues maintaining after reboot
-	$battery_binary create_daemon
-
+	$battery_binary stop || exit 1
+	: >"$calibration_progress_file" || { log "❌ Failed to create the calibration progress file"; }
+	launchd_job_start_new false "$logfile" calibrate_synchronous || exit 1
+	printf "Calibration started in the background.\n"
+    printf "\033[93mRun 'battery calibrate' to check the progress; use 'battery stop' to interrupt.\033[0m\n"
+    printf "Saved maintenance stays inactive; run 'battery maintain recover' after calibration to restore it.\n"
 	exit 0
 
 fi
 
-# Battery calibration
-if [[ "$action" == "calibrate" ]]; then
+# All calibration phases stay in the shared job's process group for launchd cleanup.
+if [[ "$action" == "calibrate_synchronous" ]]; then
 
-	# Stop the maintaining
-	$battery_binary maintain stop &>/dev/null
+	function record_calibration_progress() {
+		log "$1"
+		printf '%s %s\n' "$(date +%D-%T)" "$1" >>"$calibration_progress_file"
+	}
 
-	# Kill old process silently
-	if pid=$(is_calibration_running); then
-		kill "$pid"
-	fi
-	echo $$ >$calibrate_pidfile
+	assert_not_running_as_root
+	log_system_capabilities
+	log "🛠️ Starting battery calibration"
 
-	echo -e "Starting battery calibration\n"
+	record_calibration_progress "[ 1 of 4 ] Discharging battery to 15%"
+	BATTERY_HELPER_MODE=1 $battery_binary discharge 15
+	exit_on_error "$?" "Calibration stopped: discharging to 15% failed."
 
-	echo "[ 1 ] Discharging battery to 15%"
-	BATTERY_HELPER_MODE=1 $battery_binary discharge 15 &>/dev/null
-	exit_on_error "$?" "Error: Calibration stopped: discharging to 15% failed."
+	record_calibration_progress "[ 2 of 4 ] Charging to 100%"
+	BATTERY_HELPER_MODE=1 $battery_binary charge 100
+	exit_on_error "$?" "Calibration stopped: charging to 100% failed."
 
-	echo "[ 2 ] Charging to 100%"
-	BATTERY_HELPER_MODE=1 $battery_binary charge 100 &>/dev/null
-	exit_on_error "$?" "Error: Calibration stopped: charging to 100% failed."
-
-	echo "[ 3 ] Reached 100%, waiting for 1 hour"
-	enable_charging &>/dev/null
+	record_calibration_progress "[ 3 of 4 ] Reached 100%, waiting for 1 hour"
+	enable_charging
+	disable_discharging
 	sleep 3600
-	exit_on_error "$?" "Error: Calibration stopped: one-hour wait failed."
+	exit_on_error "$?" "Calibration stopped: one-hour wait failed."
 
-	echo "[ 4 ] Discharging battery to 80%"
-	BATTERY_HELPER_MODE=1 $battery_binary discharge 80 &>/dev/null
-	exit_on_error "$?" "Error: Calibration stopped: discharging to 80% failed."
+	record_calibration_progress "[ 4 of 4 ] Discharging battery to 80%"
+	BATTERY_HELPER_MODE=1 $battery_binary discharge 80
+	exit_on_error "$?" "Calibration stopped: discharging to 80% failed."
 
-	# Remove pidfile
-	rm -f $calibrate_pidfile
-
-	# Recover old maintain status
-	echo "[ 5 ] Restarting battery maintenance"
-	$battery_binary maintain recover &>/dev/null
-
-	echo -e "\n✅ Done\n"
+	# Keep this completion message in sync with the match in the calibrate action.
+	record_calibration_progress "✅ Calibration completed."
+	log "Saved maintenance stays inactive; run battery maintain recover to restore it."
 	exit 0
 
 fi
@@ -1540,28 +1694,38 @@ fi
 if [[ "$action" == "status" ]]; then
 
 	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, charging set to '$(get_charging_control_status)'"
-	if is_maintenance_running >/dev/null; then
-		maintain_percentage=$(cat $maintain_percentage_tracker_file 2>/dev/null)
-		if [[ $maintain_percentage ]]; then
-			if valid_maintenance_percentage_range "$maintain_percentage"; then
-				maintain_level="between ${maintain_percentage/-/% and }%"
-			else
-				maintain_level="at $maintain_percentage%"
-			fi
-		else
-			maintain_level=$(cat $maintain_voltage_tracker_file 2>/dev/null)
-			maintain_level=$(echo "$maintain_level" | awk '{print "at " $1 " V ±" $2 " V"}')
-		fi
-		log "Your battery is being maintained $maintain_level."
+
+	if running_action=$(launchd_job_get_running_action); then
+		maintenance_level=""
+		case "$running_action" in
+			calibrate_synchronous)
+				log "Battery calibration using 'battery calibrate' is in progress."
+				;;
+			maintain_synchronous)
+				maintenance_level="(failed to determine the percentage maintenance level)"
+				if percentage_maintenance_config_load; then
+					maintenance_level="at $cfg_percentage%."
+					[[ "$cfg_percentage" == *-* ]] && maintenance_level="between ${cfg_percentage/-/% and }%."
+				fi
+				;;
+			maintain_voltage_synchronous)
+				maintenance_level="(failed to determine the voltage maintenance level)"
+				voltage_maintenance_config_load && maintenance_level="at ${cfg_voltage}V ±${cfg_voltage_hysteresis}V."
+				;;
+			*) log "Running background job: $running_action" ;;
+		esac
+		[[ -n "$maintenance_level" ]] && log "Your battery is being maintained $maintenance_level"
 	else
-		log "Your battery is not being maintained."
+		case "$?" in
+			1) log "Your battery is not being maintained." ;;
+			*) log "❌ Unable to determine the running background job" ;;
+		esac
 	fi
-	if is_calibration_running >/dev/null; then
-		log "Battery calibration using 'battery calibrate' is in progress."
-	fi
+
 	if mcl_prefs_detect_macos_calibration; then
 		printf '\033[93m⚠️  macOS battery calibration detected. macOS may temporarily override the charge limit and charge the battery to 100%%.\033[0m\n'
 	fi
+
 	exit 0
 
 fi
@@ -1570,84 +1734,6 @@ fi
 if [[ "$action" == "status_csv" ]]; then
 
 	echo "$(get_battery_percentage),$(get_remaining_time),$(get_charging_control_status),$(get_discharging_control_status),$(get_maintain_percentage)"
-
-fi
-
-# launchd daemon creator, inspiration: https://www.launchd.info/
-if [[ "$action" == "create_daemon" ]]; then
-
-	assert_not_running_as_root
-
-	daemon_definition="
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-	<dict>
-		<key>Label</key>
-		<string>com.battery.app</string>
-		<key>ProgramArguments</key>
-		<array>
-			<string>$battery_binary</string>
-			<string>maintain</string>
-			<string>recover</string>
-		</array>
-		<key>StandardOutPath</key>
-		<string>$logfile</string>
-		<key>StandardErrorPath</key>
-		<string>$logfile</string>
-		<key>RunAtLoad</key>
-		<true/>
-		<key>KeepAlive</key>
-		<false/>
-		<key>AbandonProcessGroup</key>
-		<true/>
-	</dict>
-</plist>
-"
-
-	mkdir -p "${daemon_path%/*}"
-
-	# check if daemon already exists
-	if test -f "$daemon_path"; then
-
-		log "LaunchAgent configuration file already exists, checking for differences"
-		daemon_definition_difference=$(diff --brief --ignore-space-change --strip-trailing-cr --ignore-blank-lines <(cat "$daemon_path" 2>/dev/null) <(echo "$daemon_definition"))
-
-		# remove leading and trailing whitespaces
-		daemon_definition_difference=$(echo "$daemon_definition_difference" | xargs)
-		if [[ "$daemon_definition_difference" != "" ]]; then
-
-			log "Updating LaunchAgent configuration file"
-			echo "$daemon_definition" >"$daemon_path"
-
-		fi
-	else
-
-		# daemon not available, create new launch deamon
-		log "Creating LaunchAgent configuration file"
-		echo "$daemon_definition" >"$daemon_path"
-
-	fi
-
-	log "Enabling battery LaunchAgent"
-	launchctl enable "gui/$(id -u $USER)/com.battery.app"
-	exit 0
-
-fi
-
-# Disable daemon
-if [[ "$action" == "disable_daemon" ]]; then
-
-	log "Disabling battery LaunchAgent"
-	launchctl disable "gui/$(id -u $USER)/com.battery.app"
-	exit 0
-
-fi
-
-# Remove daemon
-if [[ "$action" == "remove_daemon" ]]; then
-
-	rm $daemon_path 2>/dev/null
 	exit 0
 
 fi

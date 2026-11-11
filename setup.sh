@@ -115,7 +115,7 @@ touch $pidfile
 sudo chown -h $calling_user $pidfile
 sudo chmod -h 644 $pidfile
 
-# Fix permissions for 'create_daemon' action
+# Fix permissions for LaunchAgent configuration
 echo "[  9 ] Fix ownership and permissions for $(dirname "$launch_agent_plist")"
 sudo chown -h $calling_user "$(dirname "$launch_agent_plist")"
 sudo chmod -h 755 "$(dirname "$launch_agent_plist")"
