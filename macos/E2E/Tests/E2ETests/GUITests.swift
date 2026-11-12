@@ -244,6 +244,26 @@ final class GUITests: E2ECase {
 		XCTAssertTrue( texts.contains { $0.contains( "2.0." ) }, "helper version should show, saw \( texts )" )
 	}
 
+	/// The switch flips on the click itself (it used to wait a poll for the helper, inviting repeat clicks), then the link follows
+	func testTerminalSwitchFlipsAtOnceAndTheLinkFollows() throws {
+		_ = try XCTUnwrap( GUI.openSettings( tab: "Helper" ) )
+		let link = "/usr/local/bin/battery"
+		let linked = { ( try? FileManager.default.destinationOfSymbolicLink( atPath: link ) ) != nil }
+		// The label is markdown ("Use `battery` in Terminal"): match on the plain tail, as the switch or its label text
+		let terminalSwitch = { GUI.settings?.find( role: "AXCheckBox", label: "in Terminal", contains: true ) ?? GUI.toggle( "Use battery in Terminal" ) }
+		let was = linked()
+		defer { if linked() != was { terminalSwitch()?.press(); _ = eventually( 5 ) { linked() == was ? true : nil } } }
+
+		for want in [ !was, was ] {
+			let toggle = try XCTUnwrap( terminalSwitch(), GUI.snapshot )
+			XCTAssertEqual( toggle.on, !want )
+			toggle.press()
+			XCTAssertNotNil( eventually( 0.5, every: 0.05 ) { terminalSwitch()?.on == want ? true : nil }, "the switch should flip right away" )
+			XCTAssertNotNil( eventually( 5 ) { linked() == want ? true : nil }, "the helper should \( want ? "add" : "remove" ) \( link )" )
+			XCTAssertNotNil( eventually( 5 ) { terminalSwitch()?.enabled == true ? true : nil }, "the switch should unlock once done" )
+		}
+	}
+
 	/// The feed follows stable releases only: a beta must not offer a check that can only fail
 	func testBetaHasNoUpdateCheck() throws {
 		try XCTSkipUnless( CLI.battery( "version" ).out.contains( "-" ), "stable build" )

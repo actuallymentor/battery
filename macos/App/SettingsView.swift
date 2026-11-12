@@ -83,6 +83,7 @@ struct SettingsView: View {
 				}
 				Section( "Command line" ) {
 					Toggle( "Use `battery` in Terminal", isOn: Binding( get: { model.cliInstalled }, set: { model.setCLIInstalled( $0 ) } ) )
+						.disabled( model.cliPending )
 				}
 				Section( "Updates" ) {
 					if Updater.isBeta {

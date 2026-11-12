@@ -6,6 +6,7 @@
 - First launch opens a setup window ("One-time setup required" → **Open Login Items**) instead of waiting for a click on the menu bar icon. It also opens when approval is switched off later, and says "All set" once the helper runs.
 
 ### Fixed
+- Settings → Helper → "Use `battery` in Terminal" flips on the click and is locked until done. Before, it lagged a few seconds and looked broken, inviting repeat clicks.
 - Raising the limit while charging is held now charges up to the new limit. Before, a battery inside the new 5% band stayed held (82% held at 80, raised to 85: no charging).
 
 ## 2.0.0-beta.1 (2026-11-12)

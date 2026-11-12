@@ -63,6 +63,7 @@ final class AppModel {
 
 	func refresh() async {
 		launchAtLogin = SMAppService.mainApp.status == .enabled
+		if !cliPending { cliInstalled = Self.cliLinked }     // removed or added outside the app
 		guard inFlight == 0 else { return }
 
 		do {
@@ -208,10 +209,20 @@ final class AppModel {
 
 	// MARK: Command line
 
-	var cliInstalled: Bool { ( try? FileManager.default.destinationOfSymbolicLink( atPath: "/usr/local/bin/battery" ) ) == "/Applications/Battery.app/Contents/Helpers/battery" }
+	/// What the Terminal switch shows. A click flips it at once and locks it (`cliPending`) until the helper is done, then it
+	/// shows what is on disk. Read straight from disk, SwiftUI never noticed the change and the switch lagged a poll behind.
+	private( set ) var cliInstalled = AppModel.cliLinked
+	private( set ) var cliPending = false
+	private static var cliLinked: Bool { ( try? FileManager.default.destinationOfSymbolicLink( atPath: "/usr/local/bin/battery" ) ) == "/Applications/Battery.app/Contents/Helpers/battery" }
 
 	func setCLIInstalled( _ on: Bool ) {
-		perform { [ self ] in if on { try await client.installCLI() } else { try await client.uninstallCLI() } }
+		guard !cliPending else { return }
+		cliInstalled = on
+		cliPending = true
+		perform { [ self ] in
+			defer { cliPending = false; cliInstalled = Self.cliLinked }
+			if on { try await client.installCLI() } else { try await client.uninstallCLI() }
+		}
 	}
 
 	// MARK: v1 migration
