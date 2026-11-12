@@ -56,7 +56,7 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 				percent: reading.snapshot.percent, voltage: reading.voltage, remaining: reading.snapshot.remaining, acAttached: reading.snapshot.acAttached,
 				chargingEnabled: control.chargingEnabled, discharging: control.adapterCut,
 				maintain: maintainer?.target?.persisted, forceDischarge: maintainer?.forceDischarge ?? false,
-				activity: jobs?.activity, smcKeys: caps.keys.sorted(), daemonVersion: batteryVersion,
+				activity: jobs?.activity, smcKeys: caps.keys.sorted(), daemonVersion: batteryFullVersion,
 				backend: control.backend.rawValue, isCharging: reading.isCharging, amperage: reading.amperage,
 				warning: warning, scheduleDays: scheduler?.days ?? 0, nextTopOff: scheduler?.nextRun,
 				cycleCount: reading.cycleCount, healthPercent: reading.healthPercent )

@@ -32,6 +32,14 @@ public struct AX {
 	public var closeButton: AX? { ( attr( kAXCloseButtonAttribute ) ).map { AX( $0 as! AXUIElement ) } }
 	public var extrasMenuBar: AX? { ( attr( "AXExtrasMenuBar" ) ).map { AX( $0 as! AXUIElement ) } }
 
+	/// On-screen frame (top-left origin, like CGEvent coordinates)
+	public var frame: CGRect? {
+		guard let p = attr( kAXPositionAttribute ), let s = attr( kAXSizeAttribute ) else { return nil }
+		var origin = CGPoint.zero, size = CGSize.zero
+		AXValueGetValue( p as! AXValue, .cgPoint, &origin ); AXValueGetValue( s as! AXValue, .cgSize, &size )
+		return CGRect( origin: origin, size: size )
+	}
+
 	/// The label a user would hear: title, else description, else string value
 	public var label: String { [ title, desc, value as? String ?? "" ].first { !$0.isEmpty } ?? "" }
 	public var on: Bool { ( value as? NSNumber )?.intValue == 1 }

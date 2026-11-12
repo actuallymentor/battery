@@ -2,6 +2,8 @@ import Foundation
 
 /// App, daemon and CLI all report the same version: MARKETING_VERSION, embedded in each binary's Info.plist.
 let batteryVersion = Bundle.main.object( forInfoDictionaryKey: "CFBundleShortVersionString" ) as? String ?? "dev"
+/// "2.0.0-beta.1 (42)": what the daemon reports, so the app also notices a rebuild of the same version
+let batteryFullVersion = "\( batteryVersion ) (\( Bundle.main.object( forInfoDictionaryKey: "CFBundleVersion" ) as? String ?? "0" ))"
 
 /// Daemon log file, world-readable
 let batteryStateDir = "/var/db/co.palokaj.battery"

@@ -25,12 +25,19 @@ jobs:
   # A tag must never ship code whose tests or identity checks fail
   verify:
     name: Tests and identity checks
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Ship what the e2e suites tested: Xcode 26. Newest stable 26.x on the image, never a beta or the next major as it becomes default.
+      - name: Select Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -viE 'beta|release_candidate' | sort -V | tail -1)
+          [[ -n "$xcode" ]] || { echo "No stable Xcode 26 on this image:"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
       - name: Identity constants agree
         run: scripts/check-identity.sh
       - name: Core tests
@@ -40,7 +47,7 @@ jobs:
   release:
     name: Build, sign & notarize
     needs: verify
-    runs-on: macos-15
+    runs-on: macos-26
     environment: release
     timeout-minutes: 120
     permissions:
@@ -54,6 +61,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Ship what the e2e suites tested: Xcode 26. Newest stable 26.x on the image, never a beta or the next major as it becomes default.
+      - name: Select Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -viE 'beta|release_candidate' | sort -V | tail -1)
+          [[ -n "$xcode" ]] || { echo "No stable Xcode 26 on this image:"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
 
       # No credentials exist on the runner yet while project code builds
       - name: Build app

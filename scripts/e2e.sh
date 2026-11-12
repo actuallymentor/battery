@@ -60,9 +60,11 @@ if [[ $build == 1 ]]; then
 	for f in .env.release AuthKey.p8 developer-id.p12; do babysit mac scp "$MAC" ".secrets/$f" "mac:e2e/sec/$f" > /dev/null; done
 	mac 'bash ~/e2e/scripts/e2e/mac-build.sh' || { mac 'tail -30 ~/e2e/build.log'; exit 1; }
 	mac 'open -a /Applications/Battery.app'
-	# A replaced app leaves its registered helper "not answering" until the app's own Repair runs (needs no approval)
-	if ! helper_up 15; then
-		log "Helper not answering after the replace, pressing the app's Repair helper button"
+	# The old helper keeps running across the replace; the app notices the new build and restarts it, no click
+	if helper_up 60; then
+		log "Helper answering after the replace"
+	else
+		log "FAIL: helper not answering after the replace, pressing Repair to carry on"; heal_failed=1
 		ensure_hold
 		mac 'cd ~/e2e/macos/E2E && swift build --product axdump 2>&1 | grep error: ; bash ~/e2e/scripts/e2e/term.sh $PWD/.build/debug/axdump menu press:Repair >/dev/null'
 		helper_up 45 || { echo "Helper still down after Repair: approve it in System Settings -> Login Items"; exit 1; }
@@ -71,31 +73,46 @@ fi
 
 mac 'cd ~/e2e/macos/E2E && swift build --build-tests 2>&1 | grep -E "error|Compiling|Build" | tail -3'
 
-status=0
-args=(); [[ -n "$filter" ]] && args=(--filter "$filter")
+status=${heal_failed:-0}
 
 if [[ $suite == cli || $suite == all ]]; then
 	log "CLI suite"
-	mac "set -o pipefail; cd ~/e2e/macos/E2E && swift test --filter CLITests ${filter:+--filter $filter} 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+	mac "set -o pipefail; cd ~/e2e/macos/E2E && swift test --filter \"CLITests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
 fi
 
 if [[ $suite == gui || $suite == all ]]; then
 	log "GUI suite (screen held unlocked)"
 	ensure_hold
-	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh swift test --filter GUITests ${filter:+--filter $filter} 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh swift test --filter \"GUITests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
 fi
 
 if [[ $suite == lifecycle || $suite == all ]]; then
 	log "Lifecycle suite (really uninstalls the helper; the admin password is typed once, into System Settings, when the test has verified its field is focused)"
 	ensure_hold
-	mac 'rm -f /tmp/e2e/password-wanted /tmp/e2e/password-typed'
-	# Answer the test's password request: it only asks while System Settings is frontmost with the Password field focused
-	( until mac 'test -f /tmp/e2e/password-wanted'; do sleep 2; done
-	  mac 'rm -f /tmp/e2e/password-wanted'; babysit mac unlock "$MAC" > /dev/null; mac 'touch /tmp/e2e/password-typed' ) &
+	mac 'rm -f /tmp/e2e/password-wanted /tmp/e2e/password-typed /tmp/e2e/password-refused'
+	# Answer the test's password request. The test asks only once System Settings is frontmost with its Password field focused;
+	# check System Settings is still frontmost right before typing (`unlock` types into whatever has focus), else refuse.
+	( until mac 'test -f /tmp/e2e/password-wanted'; do sleep 1; done
+	  if mac 'rm -f /tmp/e2e/password-wanted; lsappinfo info -only name "$(lsappinfo front)" | grep -q "\"System Settings\""'; then
+		babysit mac unlock "$MAC" > /dev/null; mac 'touch /tmp/e2e/password-typed'
+	  else
+		mac 'touch /tmp/e2e/password-refused'
+	  fi ) &
 	watcher=$!
-	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh env E2E_LIFECYCLE=1 swift test --filter LifecycleTests ${filter:+--filter $filter} 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh env E2E_LIFECYCLE=1 swift test --filter \"LifecycleTests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
 	kill $watcher 2>/dev/null || true
 	helper_up 30 || { log "Helper is down after the lifecycle suite"; status=1; }
+
+	# A dead helper job (registered + approved, gone from launchd) stays dead without the app, and the app heals it on launch, no click.
+	# Needs root to kill the job: babysit's stored sudo password, never typed by us.
+	log "Dead helper is healed by the app on launch"
+	mac 'osascript -e "quit app \"Battery\""; sleep 2'
+	babysit mac sudo "$MAC" launchctl bootout system/co.palokaj.battery.daemon > /dev/null 2>&1 || true
+	if helper_up 3; then log "FAIL: bootout left the helper running"; status=1
+	else
+		mac 'open -a /Applications/Battery.app'
+		helper_up 30 && log "healed" || { log "FAIL: the app did not heal a dead helper"; status=1; }
+	fi
 fi
 
 # The GUI suite ran inside Terminal windows: close them all (no saved state either)

@@ -51,3 +51,13 @@ OPEN RISK: a dead helper with an active limit leaves charging off (verified). De
 - `babysit mac unlock` types the password into whatever has focus: it landed in a Terminal window once (never executed, Terminal state wiped). hold.sh now unlocks only when the screen is locked.
 - Lifecycle suite added (2 tests, `scripts/e2e.sh lifecycle`): uninstall + set up again (no approval needed, macOS remembers it), Login Items switch revoked (password via `babysit mac unlock`, only after the test verifies the focused field) and granted again.
 - Not automated: sleep/wake and reboot (need the screen/FileVault login). Mac left with `caffeinate` stopped.
+
+## Pre-beta fixes (2026-11-12)
+Review of the e2e/beta work found and fixed:
+- Helper not answering while registered+approved: the app now repairs it itself (2 silent polls, once per launch). Verified: `launchctl bootout` with the app quit stays dead; opening the app brings it back in ~8s, no click. Now checked by `e2e.sh` (via `babysit mac sudo`).
+- What really happens on an app replace (macOS 26.1): the OLD daemon keeps running; launchd marks EX_CONFIG only while the bundle is missing and retries once it is back. The earlier permanent "spawn failed" did not reproduce. The helper now reports version+build, so the app restarts a leftover helper from any other build (same-version rebuilds included).
+- Slider: mid-drag pauses reached the helper (my keyboard debounce; SwiftUI's onEditingChanged is unreliable for drags on macOS). Pending apply now waits while the mouse button is down. New real-mouse e2e test (CGEvents) failed before, passes after (3x).
+- Betas don't start Sparkle (feed = latest stable = v1, 404); Settings links to GitHub Releases. Override with a `SUFeedURL` default for update tests.
+- CI: `macos-26` runner + newest stable Xcode 26 (was macos-15 / Xcode 16 default, not what was tested).
+- e2e: build numbers `0.<epoch>` (older than any CI build, so Sparkle on the test Mac still accepts releases); password watcher re-checks System Settings is frontmost before typing; `--filter` now narrows within a suite (was ORed).
+- Totals: 23 CLI + 21 GUI + 2 lifecycle + dead-helper check, 70 core tests, all green.

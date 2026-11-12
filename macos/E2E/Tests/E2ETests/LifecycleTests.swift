@@ -12,25 +12,26 @@ final class LifecycleTests: XCTestCase {
 
 	private let daemon = "co.palokaj.battery.daemon"
 	private let settingsID = "com.apple.systempreferences"
-	private let wanted = "/tmp/e2e/password-wanted", typed = "/tmp/e2e/password-typed"
+	private let wanted = "/tmp/e2e/password-wanted", typed = "/tmp/e2e/password-typed", refused = "/tmp/e2e/password-refused"
 
 	override func setUpWithError() throws {
 		try XCTSkipUnless( ProcessInfo.processInfo.environment[ "E2E_LIFECYCLE" ] == "1", "Unregisters the helper: run scripts/e2e.sh lifecycle" )
 		continueAfterFailure = false
 		XCTAssertTrue( AX.trusted, "Runner has no Accessibility permission" )
 		XCTAssertFalse( Screen.locked, "Screen is locked" )
-		[ wanted, typed ].forEach { try? FileManager.default.removeItem( atPath: $0 ) }
+		[ wanted, typed, refused ].forEach { try? FileManager.default.removeItem( atPath: $0 ) }
 		try? FileManager.default.createDirectory( atPath: "/tmp/e2e", withIntermediateDirectories: true )
 	}
 
 	/// Whatever a test did, the Mac ends with the helper approved, registered and answering
 	override func tearDown() {
 		guard ProcessInfo.processInfo.environment[ "E2E_LIFECYCLE" ] == "1" else { return }
-		if !helperUp( 3 ) {
-			if loginSwitch?.on == false { loginSwitch?.press() }
+		if !helperUp() {
+			settingsApp?.find { $0.role == "AXButton" && $0.title == "Cancel" }?.press()     // a password sheet left open
+			if let s = loginSwitch(), !s.on { s.press() }
 			GUI.launch()
-			if let enable = enableButton() { enable.press() }
-			_ = eventually( 30 ) { helperUp( 3 ) ? true : nil }
+			enableButton()?.press()
+			_ = eventually( 30 ) { self.helperUp() ? true : nil }
 		}
 		quitSystemSettings()
 		CLI.restore()
@@ -38,16 +39,20 @@ final class LifecycleTests: XCTestCase {
 
 	// MARK: Helpers
 
-	private func helperUp( _ timeout: TimeInterval = 5 ) -> Bool { CLI.battery( "status" ).ok }
+	/// The CLI waits up to 15s for an absent helper: cap it, polls repeat anyway
+	private func helperUp() -> Bool { CLI.battery( [ "status" ], timeout: 5 ).ok }
 	private var registered: Bool { sh( "/bin/launchctl", [ "print", "system/\( daemon )" ] ).ok }
 
 	private func enableButton() -> AX? { GUI.openPopover()?.find( role: "AXButton", label: "Enable helper" ) }
 
 	/// Login Items -> App Background Activity -> the "Battery" switch
 	private var settingsApp: AX? { AX.app( bundleID: settingsID ) }
-	private var loginSwitch: AX? {
+	private var currentSwitch: AX? { settingsApp?.find { $0.identifier == "background-switch-Battery" } }
+
+	/// Opens the pane (brings System Settings forward) and waits for the switch
+	private func loginSwitch() -> AX? {
 		_ = sh( "/usr/bin/open", [ "x-apple.systempreferences:com.apple.LoginItems-Settings.extension" ] )
-		return eventually( 15 ) { self.settingsApp?.find { $0.identifier == "background-switch-Battery" } }
+		return eventually( 15 ) { self.currentSwitch }
 	}
 
 	private func quitSystemSettings() {
@@ -87,7 +92,7 @@ final class LifecycleTests: XCTestCase {
 		XCTAssertTrue( GUI.launch() )
 		XCTAssertTrue( helperUp(), "needs a working helper to start from" )
 
-		let toggle = try XCTUnwrap( loginSwitch, "Battery switch not found in Login Items" )
+		let toggle = try XCTUnwrap( loginSwitch(), "Battery switch not found in Login Items" )
 		XCTAssertTrue( toggle.on, "helper should start approved" )
 		toggle.press()
 
@@ -110,18 +115,22 @@ final class LifecycleTests: XCTestCase {
 				return XCTFail( "Password field is not focused in the frontmost System Settings, not typing anything" )
 			}
 			FileManager.default.createFile( atPath: wanted, contents: nil )
-			XCTAssertNotNil( eventually( 90, every: 1 ) { FileManager.default.fileExists( atPath: self.typed ) ? true : nil }, "nobody typed the password (scripts/e2e.sh lifecycle does)" )
-			let modify = try XCTUnwrap( eventually( 10 ) { sw.find { $0.role == "AXButton" && $0.title == "Modify Settings" } } )
-			modify.press()
+			let answer = eventually( 90, every: 1 ) { [ typed, refused ].first { FileManager.default.fileExists( atPath: $0 ) } }
+			guard answer == typed else {
+				sw.find { $0.role == "AXButton" && $0.title == "Cancel" }?.press()
+				return XCTFail( answer == refused ? "System Settings lost focus before typing, nothing typed" : "nobody typed the password (scripts/e2e.sh lifecycle does)" )
+			}
+			// The sheet may already have taken the password on its own
+			eventually( 5 ) { sw.find { $0.role == "AXButton" && $0.title == "Modify Settings" } }?.press()
 		}
 
-		XCTAssertNotNil( eventually( 20 ) { self.loginSwitch?.on == false ? true : nil }, "switch should be off" )
+		XCTAssertNotNil( eventually( 20 ) { self.currentSwitch?.on == false ? true : nil }, "switch should be off" )
 		XCTAssertNotNil( eventually( 20 ) { self.helperUp() ? nil : true }, "helper should stop answering once approval is revoked" )
 		XCTAssertNotNil( eventually( 20 ) { GUI.openPopover()?.find( role: "AXStaticText", label: "Approve the helper" ) }, "app should ask for approval:\n\( GUI.snapshot )" )
 		XCTAssertNotNil( GUI.popover?.find( role: "AXButton", label: "Open Login Items" ) )
 
 		// Granting needs no password
-		try XCTUnwrap( loginSwitch ).press()
+		try XCTUnwrap( loginSwitch() ).press()
 		XCTAssertNotNil( eventually( 30 ) { self.helperUp() ? true : nil }, "helper should answer once approved again" )
 		XCTAssertNotNil( eventually( 15 ) { GUI.openPopover()?.find( role: "AXCheckBox", label: "Charge limit" ) } )
 	}

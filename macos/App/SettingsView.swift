@@ -20,8 +20,7 @@ struct SettingsView: View {
 				Section( "Charge limit" ) {
 					VStack( alignment: .leading, spacing: 4 ) {
 						LabeledContent( "Stop charging at", value: "\( model.settings.limit )%" )
-						Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.limitChanged( to: Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1,
-						        onEditingChanged: { editing in if !editing { model.commitLimitChange() } } )
+						Slider( value: Binding( get: { Double( model.settings.limit ) }, set: { model.limitChanged( to: Int( $0 ) ) } ), in: Double( LimitSettings.sliderRange.lowerBound )...Double( LimitSettings.sliderRange.upperBound ), step: 1 )
 							.labelsHidden()
 							.accessibilityLabel( "Charge limit" ).accessibilityValue( "\( model.settings.limit ) percent" )
 					}
@@ -86,9 +85,15 @@ struct SettingsView: View {
 					Toggle( "Use `battery` in Terminal", isOn: Binding( get: { model.cliInstalled }, set: { model.setCLIInstalled( $0 ) } ) )
 				}
 				Section( "Updates" ) {
-					Toggle( "Check for updates automatically", isOn: Binding( get: { autoUpdate }, set: { autoUpdate = $0; updater.automatic = $0 } ) )
-					Button( "Check now" ) { updater.check() }
-					Text( "Off by default. Nothing is downloaded or installed without you." ).font( .caption ).foregroundStyle( .secondary )
+					if Updater.isBeta {
+						// The feed follows the latest stable release: a beta would only find v1 there (no appcast, an error)
+						Text( "Beta builds don't update themselves. New betas are on GitHub." ).font( .caption ).foregroundStyle( .secondary )
+						Link( "Open GitHub Releases", destination: URL( string: "https://github.com/actuallymentor/battery/releases" )! )
+					} else {
+						Toggle( "Check for updates automatically", isOn: Binding( get: { autoUpdate }, set: { autoUpdate = $0; updater.automatic = $0 } ) )
+						Button( "Check now" ) { updater.check() }
+						Text( "Off by default. Nothing is downloaded or installed without you." ).font( .caption ).foregroundStyle( .secondary )
+					}
 				}
 				.onAppear { autoUpdate = updater.automatic }
 				Section {

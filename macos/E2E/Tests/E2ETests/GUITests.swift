@@ -156,6 +156,34 @@ final class GUITests: E2ECase {
 		XCTAssertNotNil( eventually( 10 ) { csv().maintain == "65-70" ? true : nil }, "moving the slider while the limit is on re-applies it: got \( csv().maintain )" )
 	}
 
+	/// A mouse drag applies once, on release: pausing on the way (longer than the keyboard debounce) must not reach the helper
+	func testSliderDragAppliesOnlyOnRelease() throws {
+		let w = try XCTUnwrap( GUI.openSettings( tab: "Charging" ), GUI.snapshot )
+		let slider = try XCTUnwrap( w.find( role: "AXSlider", label: "Charge limit" ) )
+		CLI.battery( "maintain", "80" )
+		_ = eventually( 15 ) { slider.number == 80 && GUI.row( "Charging" ) == "Disabled" ? true : nil }
+		let f = try XCTUnwrap( slider.frame )
+		let before = csv().maintain
+
+		// Where a value sits on the track (the knob's travel is inset by half a knob at each end; close enough for a 20-100 range)
+		func x( _ v: Double ) -> CGFloat { f.minX + 10 + ( f.width - 20 ) * CGFloat( ( v - 20 ) / 80 ) }
+		let start = CGPoint( x: x( 80 ), y: f.midY ), pause = CGPoint( x: x( 50 ), y: f.midY ), end = CGPoint( x: x( 60 ), y: f.midY )
+
+		Mouse.down( start )
+		Mouse.drag( from: start, to: pause )
+		Thread.sleep( forTimeInterval: 1.5 )
+		XCTAssertLessThan( slider.number ?? 80, 70, "the drag should move the slider" )
+		XCTAssertEqual( csv().maintain, before, "a value passed mid-drag reached the helper" )
+
+		Mouse.drag( from: pause, to: end )
+		Mouse.up( end )
+		let applied = eventually( 10 ) { () -> String? in let m = csv().maintain; return m != before ? m : nil }
+		let upper = applied.flatMap { Int( $0.split( separator: "-" ).last ?? "" ) }
+		XCTAssertNotNil( upper, "release should apply the new limit, still \( csv().maintain )" )
+		XCTAssertEqual( Double( upper ?? 0 ), slider.number ?? -1, "the helper gets what the slider shows" )
+		XCTAssertTrue( ( 55...65 ).contains( upper ?? 0 ), "released near 60, got \( upper ?? -1 )" )
+	}
+
 	func testAllowDischargeToggleSticks() throws {
 		try XCTSkipUnless( Self.canCutAdapter, "this Mac cannot cut the adapter" )
 		let w = try XCTUnwrap( GUI.openSettings( tab: "Charging" ), GUI.snapshot )
@@ -214,6 +242,14 @@ final class GUITests: E2ECase {
 		let w = try XCTUnwrap( GUI.openSettings( tab: "Helper" ) )
 		let texts = w.all { $0.role == "AXStaticText" }.compactMap { $0.value as? String }
 		XCTAssertTrue( texts.contains { $0.contains( "2.0." ) }, "helper version should show, saw \( texts )" )
+	}
+
+	/// The feed follows stable releases only: a beta must not offer a check that can only fail
+	func testBetaHasNoUpdateCheck() throws {
+		try XCTSkipUnless( CLI.battery( "version" ).out.contains( "-" ), "stable build" )
+		let w = try XCTUnwrap( GUI.openSettings( tab: "Helper" ) )
+		XCTAssertNil( w.find( role: "AXButton", label: "Check now" ), "a beta should not offer Check now" )
+		XCTAssertNotNil( w.find( role: "AXStaticText", label: "Beta builds don't update themselves", contains: true ) )
 	}
 
 	// MARK: App lifecycle

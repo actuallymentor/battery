@@ -33,6 +33,9 @@ final class AppModel {
 	private var poll: Task<Void, Never>?
 	private var alertedLow = false
 	private var restartedHelper = false
+	/// Auto-repair of a registered helper that stopped answering: once per launch, after two silent polls in a row
+	private var healedHelper = false
+	private var silentPolls = 0
 	/// Last target we adopted or sent: a different one in the daemon means someone else (CLI, reboot) changed it.
 	private var knownTarget: String?
 	private var actionTail: Task<Void, Never>?
@@ -64,6 +67,7 @@ final class AppModel {
 			guard inFlight == 0 else { return }     // an action started while we waited: this snapshot is already stale
 			status = fresh
 			limitWasActive = fresh.maintain != nil
+			silentPolls = 0
 			restartOutdatedHelper( fresh.daemonVersion )
 			adoptOutsideChanges()
 			helper = .ready
@@ -76,7 +80,7 @@ final class AppModel {
 			switch daemon.status {
 			case .notRegistered, .notFound: helper = .notRegistered
 			case .requiresApproval: helper = .needsApproval
-			default: helper = .unreachable
+			default: helper = .unreachable; healUnreachableHelper()
 			}
 		}
 	}
@@ -92,8 +96,8 @@ final class AppModel {
 	/// Registered but not answering (app was moved, bundle replaced, stale job spec): start over.
 	/// Observed on macOS 26: when the helper is already approved, one unregister + register refreshes the job;
 	/// if it still doesn't answer, a second round does. Approval itself is only asked when it was switched off.
-	/// If the job was removed from launchd behind our back (observed after `launchctl bootout`), register() alone doesn't
-	/// resubmit it: only switching the Login Items toggle off and on does, so we send the user there.
+	/// A job removed from launchd behind our back (`launchctl bootout`) comes back with unregister + register (2026-11-12, macOS 26.1);
+	/// if it ever doesn't, switching the Login Items toggle off and on does, so we send the user there as a last resort.
 	func repairHelper() {
 		Task {
 			var answering = false
@@ -118,8 +122,18 @@ final class AppModel {
 	/// An update swaps the app but not the running daemon: it keeps the old code, and a later respawn can fail on the stale job spec.
 	/// Once per launch, when the versions differ, re-register so the new daemon takes over.
 	private func restartOutdatedHelper( _ running: String ) {
-		guard !restartedHelper, running != batteryVersion else { return }
+		guard !restartedHelper, running != batteryFullVersion else { return }
 		restartedHelper = true
+		repairHelper()
+	}
+
+	/// Approved and registered, yet silent: the job is dead (seen after the app is replaced: launchd "spawn failed", EX_CONFIG) and
+	/// nothing limits charging until someone clicks Repair. Don't wait for that click. Two polls in a row (~10s) so a helper that is
+	/// merely slow to start isn't restarted; once per launch, the Repair button covers the rest.
+	private func healUnreachableHelper() {
+		silentPolls += 1
+		guard !healedHelper, silentPolls >= 2 else { return }
+		healedHelper = true
 		repairHelper()
 	}
 
@@ -159,12 +173,15 @@ final class AppModel {
 
 	private var limitCommit: Task<Void, Never>?
 
-	/// Slider steps from the keyboard or VoiceOver never "end editing": apply shortly after the last change
+	/// Keyboard and VoiceOver steps never "end editing": they apply shortly after the last step. A mouse drag applies once, on
+	/// release: while the button is held the pending apply waits, so a value passed on the way (a pause at 30% on the way to 80%)
+	/// never reaches the helper. The button state, not onEditingChanged: on macOS that fires unreliably for drags (seen in e2e).
 	func limitChanged( to n: Int ) {
 		settings.setLimit( n )
 		limitCommit?.cancel()
 		limitCommit = Task { [ weak self ] in
-			try? await Task.sleep( nanoseconds: 400_000_000 )
+			try? await Task.sleep( for: .milliseconds( 400 ) )
+			while NSEvent.pressedMouseButtons & 1 != 0, !Task.isCancelled { try? await Task.sleep( for: .milliseconds( 50 ) ) }
 			if !Task.isCancelled { self?.commitLimitChange() }
 		}
 	}

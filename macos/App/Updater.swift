@@ -5,7 +5,11 @@ import Sparkle
 @MainActor
 final class Updater {
 
-	private let controller = SPUStandardUpdaterController( startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil )
+	/// Pre-release versions (2.0.0-beta.1) are installed by hand: the appcast follows the latest *stable* release, where a beta finds
+	/// nothing (today: v1, no appcast). Sparkle stays off, unless a feed is set by hand (`defaults write co.palokaj.battery SUFeedURL …`, update tests).
+	static let isBeta = batteryVersion.contains( "-" ) && UserDefaults.standard.string( forKey: "SUFeedURL" ) == nil
+
+	private let controller = SPUStandardUpdaterController( startingUpdater: !Updater.isBeta, updaterDelegate: nil, userDriverDelegate: nil )
 
 	var automatic: Bool {
 		get { controller.updater.automaticallyChecksForUpdates }
