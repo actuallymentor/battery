@@ -33,8 +33,8 @@ final class AppModel {
 	private var poll: Task<Void, Never>?
 	private var alertedLow = false
 	private var restartedHelper = false
-	/// Auto-repair of a registered helper that stopped answering: once per launch, after two silent polls in a row
-	private var healedHelper = false
+	/// Auto-repair of a registered helper that stopped answering: after two silent polls in a row, at most every 10 minutes
+	private var lastHeal: Date?
 	private var silentPolls = 0
 	/// Last target we adopted or sent: a different one in the daemon means someone else (CLI, reboot) changed it.
 	private var knownTarget: String?
@@ -127,13 +127,13 @@ final class AppModel {
 		repairHelper()
 	}
 
-	/// Approved and registered, yet silent: the job is dead (seen after the app is replaced: launchd "spawn failed", EX_CONFIG) and
+	/// Approved and registered, yet silent: the job is dead (gone from launchd, or "spawn failed" after the app was replaced) and
 	/// nothing limits charging until someone clicks Repair. Don't wait for that click. Two polls in a row (~10s) so a helper that is
-	/// merely slow to start isn't restarted; once per launch, the Repair button covers the rest.
+	/// merely slow to start isn't restarted; at most every 10 minutes so one that keeps dying isn't churned. Repair covers the gaps.
 	private func healUnreachableHelper() {
 		silentPolls += 1
-		guard !healedHelper, silentPolls >= 2 else { return }
-		healedHelper = true
+		guard silentPolls >= 2, lastHeal.map( { Date().timeIntervalSince( $0 ) > 600 } ) ?? true else { return }
+		lastHeal = Date()
 		repairHelper()
 	}
 

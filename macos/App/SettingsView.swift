@@ -28,7 +28,7 @@ struct SettingsView: View {
 					if model.status?.canCutAdapter == true {
 						VStack( alignment: .leading, spacing: 2 ) {
 							Toggle( "Allow discharge", isOn: Binding( get: { model.settings.force }, set: { model.settings.force = $0; model.commitLimitChange() } ) )
-							Text( "While plugged in above the limit, run on the battery instead of the adapter until it drops to the limit. Can conflict with clamshell mode." )
+							Text( "While plugged in above the limit, run on the battery instead of the adapter until it drops to the limit. Paused while the lid is closed." )
 								.font( .caption ).foregroundStyle( .secondary ).fixedSize( horizontal: false, vertical: true )
 						}
 					}

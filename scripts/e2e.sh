@@ -94,12 +94,12 @@ if [[ $suite == lifecycle || $suite == all ]]; then
 	# check System Settings is still frontmost right before typing (`unlock` types into whatever has focus), else refuse.
 	( until mac 'test -f /tmp/e2e/password-wanted'; do sleep 1; done
 	  if mac 'rm -f /tmp/e2e/password-wanted; lsappinfo info -only name "$(lsappinfo front)" | grep -q "\"System Settings\""'; then
-		babysit mac unlock "$MAC" > /dev/null; mac 'touch /tmp/e2e/password-typed'
+		babysit mac unlock "$MAC" > /dev/null; mac 'touch /tmp/e2e/password-typed'; log "typed the admin password into System Settings"
 	  else
-		mac 'touch /tmp/e2e/password-refused'
+		mac 'touch /tmp/e2e/password-refused'; log "System Settings was not frontmost, refused to type"
 	  fi ) &
 	watcher=$!
-	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh env E2E_LIFECYCLE=1 swift test --filter \"LifecycleTests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh env E2E_LIFECYCLE=1 swift test --filter \"LifecycleTests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure|^lifecycle:' | cut -c1-300 | uniq" || status=1
 	kill $watcher 2>/dev/null || true
 	helper_up 30 || { log "Helper is down after the lifecycle suite"; status=1; }
 

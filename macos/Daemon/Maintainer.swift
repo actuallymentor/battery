@@ -127,8 +127,12 @@ final class Maintainer {
 
 		if forceDischarge, case .level( _, let upper ) = target {
 			let cut = control.adapterCutByUs
-			let want = Controller.forceDischargeCut( percent: percent, upper: upper, acAttached: state.acAttached, currentlyCut: cut )
-			if want != cut { control.adapter( on: !want ) }
+			let lid = Power.lidClosed
+			let want = Controller.forceDischargeCut( percent: percent, upper: upper, acAttached: state.acAttached, currentlyCut: cut, lidClosed: lid )
+			if want != cut {
+				log( want ? "force discharge: \( percent )% > \( upper )%, adapter off" : "force discharge: adapter on (\( lid ? "lid closed" : "\( percent )% at or under \( upper )%" ))" )
+				control.adapter( on: !want )
+			}
 		}
 
 		let d = Controller.decide( target, state )

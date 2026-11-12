@@ -25,6 +25,14 @@ enum Power {
 		return dict?.takeRetainedValue() as? [ String: Any ]
 	}
 
+	/// Lid closed (clamshell). IOPMrootDomain's AppleClamshellState; false when unknown (no lid, or unreadable).
+	static var lidClosed: Bool {
+		let root = IOServiceGetMatchingService( kIOMainPortDefault, IOServiceMatching( "IOPMrootDomain" ) )
+		guard root != 0 else { return false }
+		defer { IOObjectRelease( root ) }
+		return ( IORegistryEntryCreateCFProperty( root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0 )?.takeRetainedValue() as? Bool ) ?? false
+	}
+
 	static func read() -> Reading? {
 		guard let p = properties(), let percent = ( p[ "CurrentCapacity" ] as? NSNumber )?.intValue else { return nil }
 		let ac = ( p[ "ExternalConnected" ] as? NSNumber )?.boolValue ?? false

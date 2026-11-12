@@ -103,6 +103,7 @@ final class LifecycleTests: XCTestCase {
 			if sw.find( { $0.role == "AXTextField" && $0.title == "Password" } ) != nil { return true }
 			return sw.find( { $0.identifier == "background-switch-Battery" } )?.on == false ? false : nil
 		}
+		print( "lifecycle: approval revoke \( asked == true ? "asked for the admin password" : "needed no password (cached authorization)" )" )
 		XCTAssertNotNil( asked, "neither a password sheet nor a switched-off toggle:\n\( sw.windows.map { $0.dump( depth: 6 ) }.joined() )" )
 
 		if asked == true {

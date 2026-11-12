@@ -5,6 +5,9 @@ import XCTest
 class E2ECase: XCTestCase {
 
 	/// Whether this Mac can cut the adapter (tahoe/legacy backends). Decides which behaviors exist to test.
+	/// Lid closed (clamshell): force discharge must leave the adapter alone then
+	static var lidClosed: Bool { sh( "/usr/sbin/ioreg", [ "-r", "-c", "IOPMrootDomain", "-d1" ] ).out.contains( "\"AppleClamshellState\" = Yes" ) }
+
 	static var canCutAdapter: Bool { { let p = CLI.battery( "probe" ).out; return p.contains( "CHIE=true" ) || p.contains( "CH0I=true" ) || p.contains( "CH0J=true" ) }() }
 
 	override func setUp() {

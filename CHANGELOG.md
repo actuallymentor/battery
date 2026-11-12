@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0-beta (unreleased)
+## 2.0.0-beta.1 (2026-11-12)
 
 Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 
@@ -20,7 +20,8 @@ Native Swift rewrite. v1 (Electron + shell) moved to `legacy/`.
 
 **Fixed**
 - Charge limit slider: changes made with the keyboard or VoiceOver now apply to the helper (it only applied after a mouse drag was released). A mouse drag still applies only on release, so pausing mid-drag no longer sends the values in between.
-- A helper that is approved but not answering (job gone from launchd, dead after the app was replaced) is repaired automatically ~10s after launch, instead of leaving charging unlimited until someone clicks Repair. The app also restarts a helper left over from a different build of the same version (the helper now reports version and build).
+- A helper that is approved but not answering (job gone from launchd, dead after the app was replaced) is repaired automatically within ~10 s (at most every 10 minutes), instead of leaving charging unlimited until someone clicks Repair. The app also restarts a helper left over from a different build of the same version (the helper now reports version and build).
+- *Allow discharge* never cuts the adapter while the lid is closed: clamshell mode needs it (external displays dropped, or the Mac slept and woke into another cut, #417, #179, #121). Charging stays held off.
 - Beta builds don't run the updater: the update feed follows stable releases only, so *Check now* could only fail. Settings links to GitHub Releases instead.
 - Uninstall (Settings or `battery uninstall`) also removes helper state, the log and app preferences, not just the helper.
 - A helper that stops answering while a limit is on now says charging may stay paused; Repair falls back to Login Items guidance; an outdated helper (after an update) is restarted automatically.

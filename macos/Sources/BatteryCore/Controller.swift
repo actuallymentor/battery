@@ -81,8 +81,10 @@ public enum Controller {
 
 	/// `--force-discharge`: cut the adapter while above the band, restore once back inside it.
 	/// A cut adapter makes macOS report "not on AC", so `currentlyCut` must keep the decision stable (no flapping every tick).
-	public static func forceDischargeCut( percent: Int, upper: Int, acAttached: Bool, currentlyCut: Bool ) -> Bool {
-		percent > upper && ( acAttached || currentlyCut )
+	/// Never with the lid closed: clamshell mode needs the adapter (#417, #179, #121). Cut, the Mac sleeps or drops its external
+	/// displays, and since sleep restores the adapter it would wake and be cut again. Charging stays held off, it just doesn't discharge.
+	public static func forceDischargeCut( percent: Int, upper: Int, acAttached: Bool, currentlyCut: Bool, lidClosed: Bool = false ) -> Bool {
+		!lidClosed && percent > upper && ( acAttached || currentlyCut )
 	}
 
 	/// Requested vs effective: we hold charging off, yet current still flows into the pack.

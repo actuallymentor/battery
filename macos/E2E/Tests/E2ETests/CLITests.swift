@@ -116,6 +116,13 @@ final class CLITests: E2ECase {
 		let c = csv()
 		try XCTSkipUnless( c.percent >= 35 && c.percent > 30, "needs charge above the limit under test" )
 		XCTAssertTrue( CLI.battery( "maintain", "25-30", "--force-discharge" ).ok )
+		if Self.lidClosed {
+			// Clamshell needs the adapter: charging is held, the adapter stays on
+			XCTAssertNil( eventually( 20 ) { csv().discharging == "discharging" ? true : nil }, "lid closed: force-discharge must not cut the adapter" )
+			XCTAssertFalse( csv().chargingEnabled, "charging is still held off above the limit" )
+			CLI.battery( "maintain", "stop" )
+			return
+		}
 		XCTAssertNotNil( eventually( 20 ) { csv().discharging == "discharging" ? true : nil }, "force-discharge should switch to battery power while above the limit" )
 		CLI.battery( "maintain", "stop" )
 		XCTAssertNotNil( eventually( 20 ) { csv().discharging == "not discharging" ? true : nil }, "stopping must put the adapter back" )

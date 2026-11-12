@@ -566,6 +566,12 @@ final class ControllerExtrasTests: XCTestCase {
 		XCTAssertTrue( Controller.forceDischargeCut( percent: 81, upper: 80, acAttached: true, currentlyCut: false ) )
 	}
 
+	func testForceDischargeNeverCutsWithTheLidClosed() {
+		XCTAssertFalse( Controller.forceDischargeCut( percent: 90, upper: 80, acAttached: true, currentlyCut: false, lidClosed: true ) )
+		// Lid closed while cut: restore the adapter
+		XCTAssertFalse( Controller.forceDischargeCut( percent: 90, upper: 80, acAttached: false, currentlyCut: true, lidClosed: true ) )
+	}
+
 	func testEffectWarning() {
 		XCTAssertNotNil( Controller.effectWarning( heldFor: 200, chargingEnabled: false, acAttached: true, isCharging: true, amperage: 900 ) )
 		XCTAssertNil( Controller.effectWarning( heldFor: 30, chargingEnabled: false, acAttached: true, isCharging: true, amperage: 900 ) )   // firmware still acting

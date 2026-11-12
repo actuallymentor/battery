@@ -80,7 +80,7 @@ public enum Report {
 
 	  battery maintain PERCENTAGE[0-100,stop] or RANGE[lower-upper]
 	    reboot-persistent battery level maintenance: turn off charging above, and on below a certain value
-	    it has the option of a --force-discharge flag that discharges even when plugged in (this does NOT work well with clamshell mode)
+	    it has the option of a --force-discharge flag that discharges even when plugged in (paused while the lid is closed: clamshell mode needs the adapter)
 	    eg: battery maintain 80           # maintain at 80%
 	    eg: battery maintain 70-80        # maintain between 70-80%
 	    eg: battery maintain stop
