@@ -56,6 +56,7 @@ smc_binary="$binfolder/smc"
 sw_vers_binary="/usr/bin/sw_vers"
 defaults_binary="/usr/bin/defaults"
 notifyutil_binary="/usr/bin/notifyutil"
+plutil_binary="/usr/bin/plutil"
 
 # GitHub URLs for setup and updates.
 # Temporarily set to your username and branch to test update functionality with your fork.
@@ -182,7 +183,10 @@ ALL ALL = NOPASSWD: $battery_binary _reset_charge_limit_mcl_prefs
 ALL ALL = NOPASSWD: $defaults_binary read com.apple.smartcharging.topoffprotection MCLFeatureState
 ALL ALL = NOPASSWD: $defaults_binary read com.apple.smartcharging.topoffprotection mclLimitValue
 
-# Allow passwordless battery-charging–related SMC write commands
+# Allow detection of forced battery gauging on macOS 27
+ALL ALL = NOPASSWD: $plutil_binary -extract batteryGaugingMitigationInfo.lastFullChargeReq xml1 -o - /private/var/root/Library/Preferences/com.apple.powerd.batterygauging.plist
+
+# Allow passwordless battery-charging-related SMC write commands
 Cmnd_Alias    CHARGING_OFF = $smc_binary -k CH0B -w 02, $smc_binary -k CH0C -w 02, $smc_binary -k CHTE -w 01000000
 Cmnd_Alias    CHARGING_ON = $smc_binary -k CH0B -w 00, $smc_binary -k CH0C -w 00, $smc_binary -k CHTE -w 00000000
 Cmnd_Alias    FORCE_DISCHARGE_OFF = $smc_binary -k CH0I -w 00, $smc_binary -k CHIE -w 00, $smc_binary -k CH0J -w 00
@@ -374,11 +378,66 @@ function mcl_maintain_disabled_charging() {
 	return 0
 }
 
-# Returns success only when the shared notification action detects calibration.
-function mcl_prefs_detect_macos_calibration() {
-	[[ "$charging_backend" == "mcl_prefs" ]] || return 1
-	"$battery_binary" _notify_mcl_prefs_changed >/dev/null 2>&1
-	[[ "$?" -eq 2 ]]
+# Prints none, suspected, or detected; returns failure when the request cannot be read.
+function mcl_prefs_get_macos_calibration_status() {
+	[[ "$charging_backend" == "mcl_prefs" ]] || { echo none; return 0; }
+	local request output
+	if ! request=$(sudo -n "$plutil_binary" -extract batteryGaugingMitigationInfo.lastFullChargeReq xml1 -o - /private/var/root/Library/Preferences/com.apple.powerd.batterygauging.plist); then
+		log "⚠️  macOS battery calibration detection: failed to read the plist${request:+: $request}" >&2
+		return 1
+	fi
+	case "$request" in
+		*'<true/>'*) ;;
+		*'<false/>'*) echo none; return 0 ;; # the required condition is not satisfied
+		*) log "⚠️  macOS battery calibration detection: unexpected plist value" >&2; return 1 ;;
+	esac
+
+	# Check whether the sufficient condition is met
+	if ! output=$(/usr/bin/log show --last 6h --info --debug --style compact --predicate 'process == "PowerUIAgent"'); then
+		log "⚠️  macOS battery calibration detection: failed to read PowerUIAgent logs" >&2
+		echo suspected
+	elif grep -Eiq 'ChargingUpForGauging|mitigations are in place' <<<"$output"; then
+		echo detected
+	else
+		$battery_binary _notify_mcl_prefs_changed >&2 # Try triggering PowerUIAgent logs for a later check
+		echo suspected
+	fi
+}
+
+function detect_and_report_macos27_calibration() {
+	[[ "$charging_backend" == "mcl_prefs" ]] || return 0
+	local status message now last_notification
+	status=$(mcl_prefs_get_macos_calibration_status) || return 1
+	if [[ "$status" == "none" ]]; then
+		macos_calibration_last_suspected_notification=0
+		macos_calibration_last_detected_notification=0
+		return 0
+	fi
+	message="⚠️  macOS battery calibration $status. macOS may temporarily override the MCL and charge the battery to 100%."
+	log "$message"
+	[[ "$1" == "show_system_notification" ]] || return 0
+
+	case "$status" in
+		suspected) last_notification=${macos_calibration_last_suspected_notification:-0} ;;
+		detected) last_notification=${macos_calibration_last_detected_notification:-0} ;;
+		*) return 0 ;;
+	esac
+	now=$(date +%s)
+	if [[ "$last_notification" -ne 0 ]] && ((now - last_notification < 86400)); then return 0; fi
+
+	message+=$'\n'"Use 'battery status' to see when it ends."
+	if ! /usr/bin/osascript \
+		-e 'on run {message}' \
+		-e 'display notification message with title "actuallymentor/battery"' \
+		-e 'end run' \
+		"$message" ; then
+		log "⚠️ Failed to send the macOS battery calibration desktop notification" >&2
+		return 1
+	fi
+	case "$status" in
+		suspected) macos_calibration_last_suspected_notification=$now ;;
+		detected) macos_calibration_last_detected_notification=$now ;;
+	esac
 }
 
 ## ###########################################
@@ -562,7 +621,7 @@ function launchd_job_get_running_action() {
 	state=$(launchd_job_get_state) || return 2
 	[[ "$state" == "registered_and_running" ]] || return 1
 	# XML extraction works on Big Sur; plutil's raw format requires macOS 12.
-	definition=$(plutil -extract ProgramArguments.1 xml1 -o - "$daemon_path") || {
+	definition=$("$plutil_binary" -extract ProgramArguments.1 xml1 -o - "$daemon_path") || {
 		log "❌ plutil extract ProgramArguments.1 failed for LaunchAgent plist (exit $?)${definition:+: $definition}" >>"$logfile"
 		return 2
 	}
@@ -588,20 +647,20 @@ function launchd_job_write_plist() {
 	fi
 
 	mkdir -p "${daemon_path%/*}" || result=1
-	plutil -convert xml1 -o "$daemon_path" - <<< '{}' || result=1
-	plutil -insert Label -string "$launchd_job_label" "$daemon_path" || result=1
-	plutil -insert ProgramArguments -array "$daemon_path" || result=1
-	plutil -insert ProgramArguments.0 -string "$battery_binary" "$daemon_path" || result=1
+	"$plutil_binary" -convert xml1 -o "$daemon_path" - <<< '{}' || result=1
+	"$plutil_binary" -insert Label -string "$launchd_job_label" "$daemon_path" || result=1
+	"$plutil_binary" -insert ProgramArguments -array "$daemon_path" || result=1
+	"$plutil_binary" -insert ProgramArguments.0 -string "$battery_binary" "$daemon_path" || result=1
 	for argument in "$@"; do
-		plutil -insert "ProgramArguments.$index" -string "$argument" "$daemon_path" || result=1
+		"$plutil_binary" -insert "ProgramArguments.$index" -string "$argument" "$daemon_path" || result=1
 		index=$((index + 1))
 	done
-	plutil -insert StandardInPath -string /dev/null "$daemon_path" || result=1
-	plutil -insert StandardOutPath -string "$job_log" "$daemon_path" || result=1
-	plutil -insert StandardErrorPath -string "$job_log" "$daemon_path" || result=1
-	plutil -insert RunAtLoad -bool "$run_at_load" "$daemon_path" || result=1
-	plutil -insert KeepAlive -bool false "$daemon_path" || result=1
-	plutil -lint -s "$daemon_path" || result=1
+	"$plutil_binary" -insert StandardInPath -string /dev/null "$daemon_path" || result=1
+	"$plutil_binary" -insert StandardOutPath -string "$job_log" "$daemon_path" || result=1
+	"$plutil_binary" -insert StandardErrorPath -string "$job_log" "$daemon_path" || result=1
+	"$plutil_binary" -insert RunAtLoad -bool "$run_at_load" "$daemon_path" || result=1
+	"$plutil_binary" -insert KeepAlive -bool false "$daemon_path" || result=1
+	"$plutil_binary" -lint -s "$daemon_path" || result=1
 	if [[ "$result" -ne 0 ]]; then
 		log "❌ Failed to create LaunchAgent plist"
 		rm -f "$daemon_path" || log "❌ Failed to remove incomplete LaunchAgent plist (exit $?)"
@@ -898,6 +957,10 @@ function is_latest_version_installed() {
 case "$action" in
 	status_csv) ;;
 	*) log "🔋 Running '$(basename "$0") $*'" >>"$logfile" ;;
+esac
+
+case "$action" in
+	maintain|charging|adapter|charge|discharge|calibrate) detect_and_report_macos27_calibration ;;
 esac
 
 # If the config folder or log file were just created by the code above while
@@ -1223,27 +1286,15 @@ if [[ "$action" == "_set_charge_limit_mcl_prefs" || "$action" == "_reset_charge_
 	fi
 fi
 
-# Exits 0 on success, 1 on failure, and 2 when macOS battery calibration is detected.
+# Post the MCL preference change notification
 if [[ "$action" == "_notify_mcl_prefs_changed" ]]; then
 	sleep "${setting:-0}"
 	output=$("$notifyutil_binary" -p "com.apple.smartcharging.defaultschanged" 2>&1)
 	result=$?
 	if [[ "$result" -ne 0 || -n "$output" ]]; then
 		# Apple's notifyutil can report a posting error on stdout and still exit 0.
-		log "❌ Failed to send the charge limit notification (exit status $result): $output"
+		log "❌ Failed to send the charge limit notification (exit status $result): $output" >&2
 		exit 1
-	fi
-	if ! sleep 1; then
-		log "❌ The wait before checking for macOS battery calibration failed."
-		exit 1
-	fi
-	if ! output=$(/usr/bin/log show --last 2s --style compact --predicate 'process == "PowerUIAgent"'); then
-		log "❌ Failed to read PowerUIAgent logs while checking for macOS battery calibration."
-		exit 1
-	fi
-	if grep -Fiq 'ChargingUpForGauging' <<<"$output"; then
-		log "❌ macOS battery calibration detected. macOS may temporarily override the charge limit and charge the battery to 100%."
-		exit 2
 	fi
 	exit 0
 fi
@@ -1461,6 +1512,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 		fi
 
 		update_magsafe_led_color
+		detect_and_report_macos27_calibration show_system_notification
 		sleep 60
 
 		battery_percentage=$(get_battery_percentage)
@@ -1524,6 +1576,7 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 		fi
 
 		update_magsafe_led_color
+		detect_and_report_macos27_calibration show_system_notification
 		sleep 60
 
 		voltage=$(get_voltage)
@@ -1722,9 +1775,7 @@ if [[ "$action" == "status" ]]; then
 		esac
 	fi
 
-	if mcl_prefs_detect_macos_calibration; then
-		printf '\033[93m⚠️  macOS battery calibration detected. macOS may temporarily override the charge limit and charge the battery to 100%%.\033[0m\n'
-	fi
+	detect_and_report_macos27_calibration
 
 	exit 0
 
@@ -1797,9 +1848,8 @@ if [[ "$action" == "dump_controls" ]]; then
 	print_mcl_prefs_control mclLimitValue "Charge limit percentage"
 
 	printf '\n'
-	if mcl_prefs_detect_macos_calibration; then
-		printf '\033[93m⚠️  macOS battery calibration detected.\033[0m\n'
-	fi
+	detect_and_report_macos27_calibration
+	printf '\n'
 
 	exit 0
 
