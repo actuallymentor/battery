@@ -470,7 +470,7 @@ function update_magsafe_led_color() {
 # Re:discharging, we're using keys uncovered by @howie65: https://github.com/actuallymentor/battery/issues/20#issuecomment-1364540704
 # CH0I seems to be the "disable the adapter" key
 function enable_discharging() {
-	log "🔽🪫 Enabling battery discharging"
+	log "🔽🪫 Enabling forced discharge"
 	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
 		smc_write_hex CHIE 08
 	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
@@ -482,7 +482,7 @@ function enable_discharging() {
 }
 
 function disable_discharging() {
-	log "🔼🪫 Disabling battery discharging"
+	log "🔼🪫 Disabling forced discharge"
 	if [[ "$smc_supports_adapter_chie" == "true" ]]; then
 		smc_write_hex CHIE 00
 	elif [[ "$smc_supports_adapter_ch0j" == "true" ]]; then
@@ -704,6 +704,38 @@ function launchd_job_stop_and_remove() {
 	launchd_job_bootout || result=1
 	rm -f "$daemon_path" || { log "❌ Failed to remove LaunchAgent plist (exit $?)"; result=1; }
 	return "$result"
+}
+
+# Log the running background job and its maintenance target, if applicable.
+function log_current_background_job() {
+	local running_action maintenance_level=""
+	local cfg_percentage cfg_force_discharge cfg_voltage cfg_voltage_hysteresis
+	if running_action=$(launchd_job_get_running_action); then
+		case "$running_action" in
+			calibrate_synchronous)
+				log "Battery calibration using 'battery calibrate' is in progress."
+				;;
+			maintain_synchronous)
+				maintenance_level="(failed to determine the percentage maintenance level)"
+				if percentage_maintenance_config_load; then
+					maintenance_level="at $cfg_percentage%."
+					[[ "$cfg_percentage" == *-* ]] && maintenance_level="between ${cfg_percentage/-/% and }%."
+				fi
+				;;
+			maintain_voltage_synchronous)
+				maintenance_level="(failed to determine the voltage maintenance level)"
+				voltage_maintenance_config_load && maintenance_level="at ${cfg_voltage}V ±${cfg_voltage_hysteresis}V."
+				;;
+			*) log "Running background job: $running_action" ;;
+		esac
+		[[ -n "$maintenance_level" ]] && log "Your battery is being maintained $maintenance_level"
+	else
+		case "$?" in
+			1) log "Your battery is NOT being maintained." ;;
+			*) log "❌ Unable to determine the running background job" ;;
+		esac
+	fi
+	return 0
 }
 
 ## ###############
@@ -1148,6 +1180,7 @@ if [[ "$action" == "stop" ]]; then
 		log "❌ Unable to confirm normal charging controls after stopping the background job"
 	fi
 
+	log_current_background_job
 	exit "$stop_result"
 fi
 
@@ -1595,7 +1628,6 @@ if [[ "$action" == "maintain" ]]; then
 	# Deprecated compatibility alias; internal callers use stop directly.
 	if [[ "$setting" == "stop" ]]; then
 		$battery_binary stop || exit 1
-		$battery_binary status
 		exit 0
 	fi
 
@@ -1616,6 +1648,7 @@ if [[ "$action" == "maintain" ]]; then
 
 		launchd_job_start_new true "$logfile" "$maintenance_action"
 		log "Maintenance job recovered: $maintenance_action"
+		log_current_background_job
 		exit $?
 	fi
 
@@ -1642,6 +1675,7 @@ if [[ "$action" == "maintain" ]]; then
 
 		launchd_job_start_new true "$logfile" maintain_voltage_synchronous || exit 1
 		log "Maintenance job started: maintain_voltage_synchronous"
+		log_current_background_job
 		exit 0
 	fi
 
@@ -1658,6 +1692,7 @@ if [[ "$action" == "maintain" ]]; then
 
 		launchd_job_start_new true "$logfile" maintain_synchronous || exit 1
 		log "Maintenance job started: maintain_synchronous"
+		log_current_background_job
 		exit 0
 	fi
 
@@ -1702,6 +1737,7 @@ if [[ "$action" == "calibrate" ]]; then
 	printf "Calibration started in the background.\n"
     printf "\033[93mRun 'battery calibrate' to check the progress; use 'battery stop' to interrupt.\033[0m\n"
     printf "Saved maintenance stays inactive; run 'battery maintain recover' after calibration to restore it.\n"
+	log_current_background_job
 	exit 0
 
 fi
@@ -1748,32 +1784,7 @@ if [[ "$action" == "status" ]]; then
 
 	log "Battery at $(get_battery_percentage)% ($(get_remaining_time) remaining), $(get_voltage)V, charging set to '$(get_charging_control_status)'"
 
-	if running_action=$(launchd_job_get_running_action); then
-		maintenance_level=""
-		case "$running_action" in
-			calibrate_synchronous)
-				log "Battery calibration using 'battery calibrate' is in progress."
-				;;
-			maintain_synchronous)
-				maintenance_level="(failed to determine the percentage maintenance level)"
-				if percentage_maintenance_config_load; then
-					maintenance_level="at $cfg_percentage%."
-					[[ "$cfg_percentage" == *-* ]] && maintenance_level="between ${cfg_percentage/-/% and }%."
-				fi
-				;;
-			maintain_voltage_synchronous)
-				maintenance_level="(failed to determine the voltage maintenance level)"
-				voltage_maintenance_config_load && maintenance_level="at ${cfg_voltage}V ±${cfg_voltage_hysteresis}V."
-				;;
-			*) log "Running background job: $running_action" ;;
-		esac
-		[[ -n "$maintenance_level" ]] && log "Your battery is being maintained $maintenance_level"
-	else
-		case "$?" in
-			1) log "Your battery is not being maintained." ;;
-			*) log "❌ Unable to determine the running background job" ;;
-		esac
-	fi
+	log_current_background_job
 
 	detect_and_report_macos27_calibration
 
