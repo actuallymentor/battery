@@ -512,7 +512,6 @@ function enable_charging() {
 	else
 		log "⚠️ Unable to reset charging state"
 	fi
-	disable_discharging
 	update_magsafe_led_color
 }
 
@@ -588,6 +587,17 @@ function get_discharging_control_status() {
 	else
 		echo "discharging"
 	fi
+}
+
+function restore_charging_controls() {
+	disable_discharging
+	enable_charging
+	if [[ "$(get_charging_control_status)" != "enabled" ||
+	      "$(get_discharging_control_status)" != "not discharging" ]]; then
+		log "❌ Failed to restore charging controls"
+		return 1
+	fi
+	return 0
 }
 
 ## ###############
@@ -1173,12 +1183,7 @@ if [[ "$action" == "stop" ]]; then
 		stop_result=1
 		log "❌ Battery background job cleanup failed; continuing with charging control restoration"
 	}
-	disable_discharging
-	enable_charging
-	if [[ "$(get_charging_control_status)" != "enabled" ||
-	      "$(get_discharging_control_status)" != "not discharging" ]]; then
-		log "❌ Unable to confirm normal charging controls after stopping the background job"
-	fi
+	restore_charging_controls
 
 	log_current_background_job
 	exit "$stop_result"
@@ -1196,8 +1201,7 @@ if [[ "$action" == "uninstall" ]]; then
 	# Battery menubar UI app calls this action as root
 	run_as_unprivileged_user "$battery_binary" stop || log "❌ Failed to stop Battery cleanly; continuing uninstall and final process cleanup"
 
-	disable_discharging
-	enable_charging
+	restore_charging_controls
 
 	sudo rm -fv /usr/local/bin/battery
 	sudo rm -fv /usr/local/bin/smc
@@ -1342,7 +1346,7 @@ if [[ "$action" == "charging" ]]; then
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
-		enable_charging
+		restore_charging_controls
 	elif [[ "$setting" == "off" ]]; then
 		disable_charging
 	else
@@ -1394,7 +1398,7 @@ if [[ "$action" == "charge" ]]; then
 	# Start charging
 	battery_percentage=$(get_battery_percentage)
 	log "Charging to $setting% from $battery_percentage%"
-	enable_charging # also disables discharging
+	restore_charging_controls
 
 	# Loop until battery charging level is reached
 	while [[ "$battery_percentage" -lt "$setting" ]]; do
@@ -1539,7 +1543,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 			log "Charge level ($battery_percentage%) is below lower bound ($lower_bound%)"
 			if [[ "$is_charging" == "disabled" ]]; then
-				enable_charging
+				restore_charging_controls
 			fi
 
 		fi
@@ -1603,7 +1607,7 @@ if [[ "$action" == "maintain_voltage_synchronous" ]]; then
 
 			log "Battery voltage (${voltage}V) is below lower bound (${lower_voltage}V)"
 			if [[ "$is_charging" == "disabled" ]]; then
-				enable_charging
+				restore_charging_controls
 			fi
 
 		fi
@@ -1763,8 +1767,7 @@ if [[ "$action" == "calibrate_synchronous" ]]; then
 	exit_on_error "$?" "Calibration stopped: charging to 100% failed."
 
 	record_calibration_progress "[ 3 of 4 ] Reached 100%, waiting for 1 hour"
-	enable_charging
-	disable_discharging
+	restore_charging_controls
 	sleep 3600
 	exit_on_error "$?" "Calibration stopped: one-hour wait failed."
 
