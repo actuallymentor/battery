@@ -32,7 +32,8 @@ public struct MaintainState: Equatable, Sendable {
 
 	/// Remembered even while `enabled` is false: the slider shows it, the switch turns it back on
 	public private( set ) var target: MaintainTarget?
-	public private( set ) var force = false
+	/// On by default, like the app's "Allow discharge" toggle; every `set` states it explicitly anyway
+	public private( set ) var force = true
 	public private( set ) var enabled = false
 
 	/// A job owns the hardware: keep everything, do nothing until `resume` or `release`
@@ -141,7 +142,7 @@ public struct MaintainState: Equatable, Sendable {
 	}
 
 	public static func parse( _ line: String ) -> ( target: MaintainTarget, force: Bool, enabled: Bool )? {
-		let words = line.split( separator: " " ).map( String.init )
+		let words = line.split( whereSeparator: \.isWhitespace ).map( String.init )
 		let setting = words.filter { !$0.hasPrefix( "--" ) }.joined( separator: " " )
 		return ( try? MaintainTarget( persisted: setting ) ).map { ( $0, words.contains( "--force-discharge" ), !words.contains( "--off" ) ) }
 	}

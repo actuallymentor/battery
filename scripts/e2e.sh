@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 mac() { babysit mac ssh "$MAC" "$@"; }
-run() { mac "bash ~/e2e/scripts/e2e/mac-run.sh $*"; }
+run() { mac "bash ~/e2e/scripts/e2e/mac-run.sh $(printf '%q ' "$@")"; }   # a --filter regex survives the remote shell
 log() { echo "🧪 $*"; }
 
 # Ship macos/ + scripts/ to the Mac's ~/e2e (the Mac builds and runs everything itself)

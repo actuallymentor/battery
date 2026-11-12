@@ -23,6 +23,8 @@ final class Maintainer {
 	/// Pick up the persisted target after a reboot / daemon restart.
 	private func load() {
 		guard let raw = try? String( contentsOf: file, encoding: .utf8 ), let saved = MaintainState.parse( raw ) else { return }
+		// An update can change the backend (CHTE gone, firmware found): what was fine yesterday may be refused today
+		if let why = Limits.check( maintain: saved.target, force: saved.force, caps: control.caps ) { return log( "saved target \( saved.target.display ) dropped: \( why )" ) }
 		set( saved.target, force: saved.force, enabled: saved.enabled, persist: false )
 	}
 

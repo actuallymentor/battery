@@ -108,10 +108,10 @@ daemon_plist="$APP_PATH/Contents/Library/LaunchDaemons/$daemon_id.plist"
 [[ -f "$daemon_plist" ]] || fail "Missing $daemon_id.plist in the bundle"
 [[ "$(plutil -extract Label raw "$daemon_plist")" == "$daemon_id" ]] || fail "Daemon plist Label is not $daemon_id"
 mach_services=$(plutil -extract MachServices xml1 -o - "$daemon_plist")
-grep -q "<key>$daemon_id</key>" <<<"$mach_services" || fail "Daemon plist MachServices lacks $daemon_id"
+grep -qF "<key>$daemon_id</key>" <<<"$mach_services" || fail "Daemon plist MachServices lacks $daemon_id"
 associated=$(plutil -extract AssociatedBundleIdentifiers xml1 -o - "$daemon_plist")
-grep -q "<string>$app_id</string>" <<<"$associated" || fail "Daemon plist AssociatedBundleIdentifiers lacks $app_id"
-grep -q "^let batteryDaemonName = \"$daemon_id\"$" "$REPO_ROOT/macos/Shared/BatteryXPC.swift" || fail "Shared/BatteryXPC.swift batteryDaemonName is not $daemon_id"
+grep -qF "<string>$app_id</string>" <<<"$associated" || fail "Daemon plist AssociatedBundleIdentifiers lacks $app_id"
+grep -qxF "let batteryDaemonName = \"$daemon_id\"" "$REPO_ROOT/macos/Shared/BatteryXPC.swift" || fail "Shared/BatteryXPC.swift batteryDaemonName is not $daemon_id"
 
 # Every SMAppService daemon plist must point at an executable inside the bundle
 for plist in "$APP_PATH"/Contents/Library/LaunchDaemons/*.plist; do

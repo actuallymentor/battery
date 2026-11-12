@@ -129,31 +129,30 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 				scheduler.set( days: days )
 				reply( true, days > 0 ? "Top off every \( days ) days" : "Schedule off" )
 
-			/// Full removal: restore charging, forget the schedule, drop the CLI link, delete persisted state and the log. The app unregisters the daemon right after.
-			case .uninstall:
-				jobs.cancel()
-				maintainer.stop()
-				scheduler.set( days: 0 )
-				control.resetAll()
-				CLILink.uninstall()
-				// Last: nothing may write state or log lines after this
-				try? FileManager.default.removeItem( atPath: batteryStateDir )
-				try? FileManager.default.removeItem( atPath: batteryLogPath )
-				reply( true, "Charging restored, helper state removed" )
-
 			case .probe:
 				let values = SMCCapabilities.probeKeys.map { "\( $0 )=\( smc?.read( $0 ) ?? "-" )" }.joined( separator: " " )
 				reply( true, "\( caps.summary )\n\( values )" )
 
-			case .status, .statusCSV, .logs, .version, .help, .update, .reinstall, .installCLI, .uninstallCLI, .legacyFound, .removeLegacy:
+			case .status, .statusCSV, .logs, .version, .help, .update, .reinstall, .uninstall, .installCLI, .uninstallCLI, .legacyFound, .removeLegacy:
 				reply( false, "Not a daemon command" )     // local to the CLI, or handled above
 			}
 		}
 	}
 
-	/// Commands that need no SMC: still answered on a Mac without AppleSMC. Nil = not one of these.
+	/// Commands that must work without AppleSMC too (a Mac where it failed to open still gets cleaned up). Nil = not one of these.
 	private func housekeeping( _ command: Command, uid: uid_t? ) -> ( Bool, String )? {
 		switch command {
+		/// Full removal: restore charging, forget the schedule, drop the CLI link, delete persisted state and the log. The app unregisters the daemon right after.
+		case .uninstall:
+			jobs?.cancel()
+			maintainer?.stop()
+			scheduler?.set( days: 0 )
+			control?.resetAll()
+			CLILink.uninstall()
+			// Last: nothing may write state or log lines after this
+			try? FileManager.default.removeItem( atPath: batteryStateDir )
+			try? FileManager.default.removeItem( atPath: batteryLogPath )
+			return ( true, "Charging restored, helper state removed" )
 		case .installCLI:
 			let ( ok, text ) = CLILink.install()
 			log( "install CLI: \( text )" )

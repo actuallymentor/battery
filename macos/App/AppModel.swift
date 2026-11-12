@@ -79,6 +79,7 @@ final class AppModel {
 			helper = .ready
 			restartOutdatedHelper( fresh.daemonVersion )
 			checkLowBattery()
+			migrateLimitFromDefaults( fresh )
 			if legacyLeftovers.isEmpty, !defaults.bool( forKey: Pref.legacyDeclined ) { legacyLeftovers = ( try? await client.legacyFound() ) ?? [] }
 		} catch {
 			// Not answering: find out why
@@ -88,6 +89,17 @@ final class AppModel {
 			default: helper = .unreachable; healUnreachableHelper()
 			}
 		}
+		settle()
+	}
+
+	/// beta.1 kept the limit in UserDefaults while the switch was off and the helper forgot it. Hand it to the helper once.
+	private func migrateLimitFromDefaults( _ s: BatteryStatus ) {
+		guard let limit = defaults.object( forKey: "chargeLimit" ) as? Int else { return }
+		defaults.removeObject( forKey: "chargeLimit" )
+		let force = ( defaults.object( forKey: "forceDischarge" ) as? Bool ?? true ) && s.canCutAdapter
+		defaults.removeObject( forKey: "forceDischarge" )
+		guard s.limit == nil else { return }     // the helper already has one (it was on at upgrade time)
+		perform { [ self ] in try await client.send( .maintain( .set( LimitSettings.target( limit: limit ), forceDischarge: force, enabled: false ) ) ) }
 	}
 
 	// MARK: Helper lifecycle
@@ -102,7 +114,7 @@ final class AppModel {
 	}
 
 	func registerHelper() {
-		do { try daemon.register() } catch { self.error = error.localizedDescription }
+		do { try daemon.register(); error = nil } catch { self.error = error.localizedDescription }
 		if daemon.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
 		Task { await refresh() }
 	}
@@ -163,7 +175,7 @@ final class AppModel {
 	func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
 
 	private func setLaunchAtLogin( _ on: Bool ) {
-		do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
+		do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }; error = nil }
 		catch { self.error = error.localizedDescription }
 		loginItem = SMAppService.mainApp.status == .enabled
 	}
@@ -171,7 +183,7 @@ final class AppModel {
 	// MARK: Knobs: controls backed by the daemon
 
 	/// A control the daemon owns. On a click it shows the asked-for value and locks until the daemon has answered and
-	/// the next snapshot is in; then it shows the truth again. Without this a switch bounces back for a beat and invites a second click.
+	/// the poll after the last queued action is in (`settle`); then it shows the truth again. Without this a switch bounces back for a beat and invites a second click.
 	enum Knob: Hashable { case limitOn, limit, force, schedule, cli }
 	private var pending: [ Knob: Any ] = [:]
 
@@ -187,7 +199,10 @@ final class AppModel {
 	/// The popover switch
 	var limitOn: Bool {
 		get { shown( .limitOn, status?.maintain != nil ) }
-		set { flip( .limitOn, to: newValue ) { [ self ] in try await client.send( newValue ? .maintain( .set( target, forceDischarge: force, enabled: true ) ) : .maintain( .stop ) ) } }
+		set {
+			let command: Command = newValue ? .maintain( .set( target, forceDischarge: force, enabled: true ) ) : .maintain( .stop )
+			flip( .limitOn, to: newValue ) { [ self ] in try await client.send( command ) }
+		}
 	}
 
 	/// The slider. Edits show at once; they reach the daemon shortly after the last step, or on mouse release (see `limitChanged`).
@@ -198,7 +213,10 @@ final class AppModel {
 
 	var allowDischarge: Bool {
 		get { shown( .force, status?.forceDischarge ?? true ) }
-		set { flip( .force, to: newValue ) { [ self ] in try await client.send( .maintain( .set( target, forceDischarge: newValue && canCutAdapter, enabled: limitOn ) ) ) } }
+		set {
+			let command = Command.maintain( .set( target, forceDischarge: newValue && canCutAdapter, enabled: limitOn ) )
+			flip( .force, to: newValue ) { [ self ] in try await client.send( command ) }
+		}
 	}
 
 	var scheduleOn: Bool {
@@ -239,7 +257,8 @@ final class AppModel {
 			try? await Task.sleep( for: .milliseconds( 400 ) )
 			while NSEvent.pressedMouseButtons & 1 != 0, !Task.isCancelled { try? await Task.sleep( for: .milliseconds( 50 ) ) }
 			guard !Task.isCancelled, let self else { return }
-			perform( { try await self.client.send( .maintain( .set( self.target, forceDischarge: self.force, enabled: self.limitOn ) ) ) } ) { [ weak self ] in
+			let command = Command.maintain( .set( target, forceDischarge: force, enabled: limitOn ) )
+			perform( { try await self.client.send( command ) } ) { [ weak self ] in
 				if self?.limitEdits == edit { self?.pending[ .limit ] = nil }     // a newer edit is on its way: keep showing it
 			}
 		}
@@ -303,14 +322,24 @@ final class AppModel {
 	/// a fresh snapshot is in before `done` runs (so a knob never shows a stale truth in between).
 	private func perform( _ action: @escaping () async throws -> Void, done: ( () -> Void )? = nil ) {
 		inFlight += 1
+		if let done { settled.append( done ) }
 		let previous = actionTail
 		actionTail = Task { [ self ] in
 			await previous?.value
 			do { try await action(); error = nil } catch { self.error = error.localizedDescription }
 			inFlight -= 1
 			await refresh()
-			done?()
 		}
+	}
+
+	/// Knob releases, run once the poll after the last queued action has really happened (an early-returned
+	/// `refresh` while more actions wait must not release a knob onto a stale truth).
+	private var settled: [ () -> Void ] = []
+	private func settle() {
+		guard inFlight == 0 else { return }
+		let now = settled
+		settled = []
+		now.forEach { $0() }
 	}
 
 	func dismissError() { error = nil }
