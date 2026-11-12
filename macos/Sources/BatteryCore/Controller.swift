@@ -79,6 +79,13 @@ public enum Controller {
 		return .idle
 	}
 
+	/// A raised limit means "charge up to it". Without this, a battery held inside the new band stays held: at 82%, raising
+	/// 80 to 85 gives the band 80-85 and charging never resumes. Only raising counts, so plugging in inside the band still holds (#475).
+	public static func refillsAfterRetarget( from old: MaintainTarget?, to new: MaintainTarget, percent: Int ) -> Bool {
+		guard case .level( _, let oldUpper )? = old, case .level( _, let newUpper ) = new else { return false }
+		return newUpper > oldUpper && percent < newUpper
+	}
+
 	/// `--force-discharge`: cut the adapter while above the band, restore once back inside it.
 	/// A cut adapter makes macOS report "not on AC", so `currentlyCut` must keep the decision stable (no flapping every tick).
 	/// Never with the lid closed: clamshell mode needs the adapter (#417, #179, #121). Cut, the Mac sleeps or drops its external

@@ -15,11 +15,11 @@ Apple Silicon, **macOS 14+**. Intel Macs: use [AlDente](https://apphousekitchen.
 | DMG | Releases page, once the first signed beta is published. Drag `Battery.app` to `/Applications` |
 | Homebrew | cask planned, not available yet |
 
-First launch: **Enable helper** → approve *Battery* in *System Settings → General → Login Items & Extensions*. One time, no password prompts afterwards. Coming from v1? Battery offers to remove the old install.
+First launch: a setup window opens. **Open Login Items** → switch on *Battery* in *System Settings → General → Login Items & Extensions*. One time, no password prompts afterwards. Coming from v1? Battery offers to remove the old install.
 
 ## Use
 
-Menu bar icon: one line with the charge limit switch and a gear. The gear holds the one-off *Charge to 100%* / *Discharge to* / *Calibrate*, *Settings…* and *Quit*. Settings → Charging has the limit slider (charging resumes 5 points below it) and *Allow discharge* (on by default where the Mac supports it). *Open at login* is on by default.
+Menu bar icon: one line with the charge limit switch and a gear. The gear holds the one-off *Charge to 100%* / *Discharge to* / *Calibrate*, *Settings…* and *Quit*. Settings → Charging has the limit slider (charging resumes 5 points below it; raising it charges up to the new limit) and *Allow discharge* (on by default where the Mac supports it). *Open at login* is on by default.
 Settings: open at login, menu bar % and icon, low-battery alert, scheduled top-off every N days, opt-in updates, `battery` in Terminal, uninstall.
 
 ## CLI

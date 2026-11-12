@@ -117,24 +117,24 @@ struct HelperSetup: View {
 			case .unreachable:
 				Button( "Repair helper" ) { model.repairHelper() }.buttonStyle( .borderedProminent )
 			default:
-				Button( "Enable helper" ) { model.registerHelper() }.buttonStyle( .borderedProminent )
+				Button( "Open Login Items" ) { model.registerHelper() }.buttonStyle( .borderedProminent )
 			}
 		}
 	}
 
 	private var title: String {
 		switch model.helper {
-		case .needsApproval: return "Approve the helper"
+		case .needsApproval: return "Switch on Battery in Login Items"
 		case .unreachable: return "Helper not responding"
-		default: return "One-time setup"
+		default: return "One-time setup required"
 		}
 	}
 
 	private var message: String {
 		switch model.helper {
-		case .needsApproval: return "In System Settings → General → Login Items & Extensions, switch on Battery under App Background Activity."
+		case .needsApproval: return "Battery's helper is waiting for your approval. Press the button below, then switch on Battery under App Background Activity."
 		case .unreachable: return "The helper is registered but not answering (often after moving or replacing the app). Repair re-registers it and may ask for approval again."
-		default: return "Limiting charge needs a small background helper with admin rights. macOS will ask you to approve it once."
+		default: return "Battery needs a small background helper to control charging. Press the button below to open Login Items, then switch on Battery."
 		}
 	}
 

@@ -16,6 +16,9 @@ final class AppModel {
 	private( set ) var error: String?
 	/// Last known truth while the helper answered: a limit that holds charging off keeps doing so with no helper to lift it.
 	private( set ) var limitWasActive = false
+	/// The setup window opens on its own once per launch, the first time the helper needs setting up or approving
+	var setupPrompted = false
+	var needsSetup: Bool { helper == .notRegistered || helper == .needsApproval }
 	/// Actions in flight. Polling pauses while > 0 so an old snapshot can't overwrite a fresh change.
 	private var inFlight = 0
 	var busy: Bool { inFlight > 0 }

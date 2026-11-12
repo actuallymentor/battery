@@ -39,11 +39,18 @@ final class Maintainer {
 		if let why = Limits.check( maintain: t, force: force, caps: control.caps ) { return why }
 
 		log( "maintain start \( t.display ) [\( control.backend.rawValue )]\( force ? " force-discharge" : "" )" )
+		let percent = Power.read()?.snapshot.percent ?? 100
+		refilling = control.backend != .firmwareLimit && Controller.refillsAfterRetarget( from: target, to: t, percent: percent )
 		target = t
 		forceDischarge = force
 		suspended = false
-		refilling = false
 		heldSince = nil
+
+		// Limit raised above the battery: charge up to it (the firmware backend does this on its own)
+		if refilling {
+			log( "maintain \( t.display ): limit raised, \( percent )% -> charging on" )
+			control.charging( true )
+		}
 
 		// A replaced job may have left the adapter cut; only force-discharge is allowed to keep it that way
 		if !force, control.adapterCutByUs { control.adapter( on: true ) }

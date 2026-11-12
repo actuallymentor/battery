@@ -17,10 +17,14 @@ struct BatteryApp: App {
 		} label: {
 			MenuBarLabel( status: model.status, helper: model.helper, showPercent: showPercent, style: IconStyle( rawValue: iconStyle ) ?? .battery )
 				.onChange( of: appearance, initial: true ) { applyAppearance() }
+				.modifier( SetupPrompt( model: model ) )
 		}
 		.menuBarExtraStyle( .window )
 
 		Settings { SettingsView( model: model, updater: updater ) }
+
+		Window( "Set Up Battery", id: SetupWindow.id ) { SetupWindow( model: model ) }
+			.windowResizability( .contentSize )
 
 	}
 

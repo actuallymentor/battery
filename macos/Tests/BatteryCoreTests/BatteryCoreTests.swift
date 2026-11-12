@@ -572,6 +572,18 @@ final class ControllerExtrasTests: XCTestCase {
 		XCTAssertFalse( Controller.forceDischargeCut( percent: 90, upper: 80, acAttached: false, currentlyCut: true, lidClosed: true ) )
 	}
 
+	func testRaisingTheLimitChargesUpToIt() {
+		let at = { ( l: Int, u: Int ) in MaintainTarget.level( lower: l, upper: u ) }
+		XCTAssertTrue( Controller.refillsAfterRetarget( from: at( 75, 80 ), to: at( 80, 85 ), percent: 82 ) )     // held inside the new band
+		XCTAssertFalse( Controller.refillsAfterRetarget( from: at( 75, 80 ), to: at( 80, 85 ), percent: 85 ) )    // already there
+		XCTAssertFalse( Controller.refillsAfterRetarget( from: at( 80, 85 ), to: at( 75, 80 ), percent: 78 ) )    // lowered
+		XCTAssertFalse( Controller.refillsAfterRetarget( from: at( 75, 80 ), to: at( 75, 80 ), percent: 78 ) )    // same target re-sent (Allow discharge toggle)
+		XCTAssertFalse( Controller.refillsAfterRetarget( from: nil, to: at( 80, 85 ), percent: 82 ) )             // first start / boot: plain band rules
+		// Then the tick keeps charging inside the band until the top
+		XCTAssertEqual( Controller.decide( at( 80, 85 ), BatteryState( percent: 83, chargingEnabled: true, acAttached: true, refilling: true ) ).action, .none )
+		XCTAssertEqual( Controller.decide( at( 80, 85 ), BatteryState( percent: 85, chargingEnabled: true, acAttached: true, refilling: true ) ).action, .disableCharging )
+	}
+
 	func testEffectWarning() {
 		XCTAssertNotNil( Controller.effectWarning( heldFor: 200, chargingEnabled: false, acAttached: true, isCharging: true, amperage: 900 ) )
 		XCTAssertNil( Controller.effectWarning( heldFor: 30, chargingEnabled: false, acAttached: true, isCharging: true, amperage: 900 ) )   // firmware still acting
