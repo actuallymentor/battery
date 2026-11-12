@@ -1,0 +1,14 @@
+# Ship what the e2e suites tested: Xcode 26. Newest stable 26.x on the image, never a beta or the next major as it becomes default.
+name: Select Xcode 26
+description: xcode-select the newest stable Xcode 26.x on the runner image
+
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode 26
+      shell: bash
+      run: |
+        xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -viE 'beta|release_candidate' | sort -V | tail -1)
+        [[ -n "$xcode" ]] || { echo "No stable Xcode 26 on this image:"; ls -d /Applications/Xcode*; exit 1; }
+        sudo xcode-select -s "$xcode"
+        xcodebuild -version

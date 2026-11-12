@@ -31,11 +31,17 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		events.start()
 	}
 
-	// Callers must be our own signed app or CLI. Debug builds are ad-hoc signed, so skip there.
-	private let requirement = """
-		anchor apple generic and certificate leaf[subject.OU] = "CAWM399GFD" \
-		and ( identifier "co.palokaj.battery" or identifier "co.palokaj.battery.cli" )
-		"""
+	// Callers must be our own signed app or CLI. The team comes from this binary's own Info.plist (project.yml DEVELOPMENT_TEAM,
+	// embedded as BatteryTeamID), the identifiers from the mach name: <app>.daemon -> <app> and <app>.cli.
+	// Debug builds are ad-hoc signed and have no team, so skip there. scripts/release/sign.sh re-verifies this exact requirement.
+	private let requirement: String = {
+		let team = Bundle.main.object( forInfoDictionaryKey: "BatteryTeamID" ) as? String ?? ""
+		let app = batteryDaemonName.split( separator: "." ).dropLast().joined( separator: "." )
+		return """
+			anchor apple generic and certificate leaf[subject.OU] = "\( team )" \
+			and ( identifier "\( app )" or identifier "\( app ).cli" )
+			"""
+	}()
 
 	func listener( _ listener: NSXPCListener, shouldAcceptNewConnection c: NSXPCConnection ) -> Bool {
 		#if !DEBUG

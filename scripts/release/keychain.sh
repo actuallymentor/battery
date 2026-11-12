@@ -4,8 +4,9 @@
 # Creates or destroys the temporary CI keychain.
 #
 # Usage:
-#   keychain.sh setup     imports both Developer ID identities and stores the notary API key
-#   keychain.sh cleanup   deletes the keychain and every decoded credential, safe to run twice
+#   keychain.sh setup                imports the Developer ID identity and stores the notary API key
+#   keychain.sh setup --no-notary    signing only, no notary credentials needed (local e2e builds)
+#   keychain.sh cleanup              deletes the keychain and every decoded credential, safe to run twice
 #
 # Decoded secrets only ever exist in $SECRETS_DIR (mode 700) and are removed as soon as
 # they are imported. Nothing in here prints a secret value.
@@ -53,11 +54,12 @@ function import_apple_ca() {
 
 function setup() {
 
-	require_env CI_KEYCHAIN_PASSWORD \
-		DEVELOPER_ID_APPLICATION_P12_BASE64 DEVELOPER_ID_APPLICATION_P12_PASSWORD \
-		NOTARY_API_KEY_P8_BASE64 NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID APPLE_TEAM_ID
+	local notary="$1"
 
-	[[ "$APPLE_TEAM_ID" == "$TEAM_ID" ]] || fail "APPLE_TEAM_ID does not match the team in lib.sh"
+	require_env CI_KEYCHAIN_PASSWORD DEVELOPER_ID_APPLICATION_P12_BASE64 DEVELOPER_ID_APPLICATION_P12_PASSWORD APPLE_TEAM_ID
+	[[ $notary == 0 ]] || require_env NOTARY_API_KEY_P8_BASE64 NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID
+
+	[[ "$APPLE_TEAM_ID" == "$TEAM_ID" ]] || fail "APPLE_TEAM_ID does not match DEVELOPMENT_TEAM in project.yml"
 
 	# A half-finished setup must not leave credentials behind, EXIT also covers fail()
 	trap 'cleanup' EXIT
@@ -96,20 +98,23 @@ function setup() {
 	log "Imported signing identities"
 
 	# Store the App Store Connect API key as a notarytool profile, then drop the key file
-	local p8="$SECRETS_DIR/notary.p8"
-	printf '%s' "$NOTARY_API_KEY_P8_BASE64" | base64 --decode >"$p8"
-	xcrun notarytool store-credentials "$NOTARY_PROFILE" \
-		--key "$p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER_ID" \
-		--keychain "$KEYCHAIN" >/dev/null
-	rm -f "$p8"
-	log "Stored notarization credentials"
+	if [[ $notary == 1 ]]; then
+		local p8="$SECRETS_DIR/notary.p8"
+		printf '%s' "$NOTARY_API_KEY_P8_BASE64" | base64 --decode >"$p8"
+		xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+			--key "$p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER_ID" \
+			--keychain "$KEYCHAIN" >/dev/null
+		rm -f "$p8"
+		log "Stored notarization credentials"
+	fi
 
 	trap - EXIT
 
 }
 
-case "${1:-}" in
-	setup) setup ;;
-	cleanup) cleanup ;;
-	*) fail "Usage: $0 setup|cleanup" ;;
+case "${1:-}:${2:-}" in
+	setup:) setup 1 ;;
+	setup:--no-notary) setup 0 ;;
+	cleanup:) cleanup ;;
+	*) fail "Usage: $0 setup [--no-notary] | cleanup" ;;
 esac

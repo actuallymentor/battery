@@ -11,6 +11,9 @@
 #   scripts/e2e.sh all --no-build  test whatever is installed in /Applications
 #   scripts/e2e.sh gui --filter testSlider     only matching tests (swift test --filter)
 #
+# This side is babysit plumbing only: ship sources and secrets, hold the screen, answer the password request, sudo.
+# The Mac does the rest itself: scripts/e2e/mac-build.sh (signed build + install) and scripts/e2e/mac-run.sh (suites, helper checks).
+#
 # One-time Mac setup: grant Terminal.app Accessibility (System Settings -> Privacy & Security -> Accessibility).
 # The GUI suite runs inside Terminal because that's the process holding the grant.
 #
@@ -31,12 +34,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 mac() { babysit mac ssh "$MAC" "$@"; }
+run() { mac "bash ~/e2e/scripts/e2e/mac-run.sh $*"; }
 log() { echo "🧪 $*"; }
 
-# Is the root helper answering `battery status`? Polls for up to $1 seconds.
-helper_up() {
-	local tries=$(( $1 / 3 + 1 ))
-	mac "for i in \$(seq 1 $tries); do /Applications/Battery.app/Contents/Helpers/battery status 2>&1 | grep -q '^Battery at' && exit 0; sleep 3; done; exit 1"
+# Ship macos/ + scripts/ to the Mac's ~/e2e (the Mac builds and runs everything itself)
+ship_sources() {
+	tar czf /tmp/e2e.tgz --exclude=.build --exclude='*.xcodeproj' macos scripts
+	babysit mac scp "$MAC" /tmp/e2e.tgz mac:/tmp/e2e.tgz > /dev/null
+	mac 'mkdir -p ~/e2e && cd ~/e2e && rm -rf macos/E2E/Sources macos/E2E/Tests scripts && tar xzf /tmp/e2e.tgz'
 }
 
 # The Mac re-locks the moment a screen session ends: hold one open while GUI work runs
@@ -51,39 +56,38 @@ ensure_hold() {
 babysit mac list 2>&1 | grep -q "$MAC" || { echo "No Mac named $MAC registered with babysit"; exit 1; }
 
 log "Syncing sources"
-scripts/e2e/sync.sh
+ship_sources
 
 if [[ $build == 1 ]]; then
 	[[ -f .secrets/.env.release ]] || { echo "Signing credentials missing in .secrets/ (needed so the helper keeps its approval across builds). Use --no-build to skip."; exit 1; }
 	log "Building and installing a signed app (credentials are copied over and deleted again)"
 	mac 'rm -rf ~/e2e/sec && mkdir -p ~/e2e/sec && chmod 700 ~/e2e/sec'
-	for f in .env.release AuthKey.p8 developer-id.p12; do babysit mac scp "$MAC" ".secrets/$f" "mac:e2e/sec/$f" > /dev/null; done
+	for f in .env.release developer-id.p12; do babysit mac scp "$MAC" ".secrets/$f" "mac:e2e/sec/$f" > /dev/null; done
 	mac 'bash ~/e2e/scripts/e2e/mac-build.sh' || { mac 'tail -30 ~/e2e/build.log'; exit 1; }
-	mac 'open -a /Applications/Battery.app'
 	# The old helper keeps running across the replace; the app notices the new build and restarts it, no click
-	if helper_up 60; then
+	if run helper-up 60; then
 		log "Helper answering after the replace"
 	else
 		log "FAIL: helper not answering after the replace, pressing Repair to carry on"; heal_failed=1
 		ensure_hold
-		mac 'cd ~/e2e/macos/E2E && swift build --product axdump 2>&1 | grep error: ; bash ~/e2e/scripts/e2e/term.sh $PWD/.build/debug/axdump menu press:Repair >/dev/null'
-		helper_up 45 || { echo "Helper still down after Repair: approve it in System Settings -> Login Items"; exit 1; }
+		run repair
+		run helper-up 45 || { echo "Helper still down after Repair: approve it in System Settings -> Login Items"; exit 1; }
 	fi
 fi
 
-mac 'cd ~/e2e/macos/E2E && swift build --build-tests 2>&1 | grep -E "error|Compiling|Build" | tail -3'
+run build-tests || exit 1
 
 status=${heal_failed:-0}
 
 if [[ $suite == cli || $suite == all ]]; then
 	log "CLI suite"
-	mac "set -o pipefail; cd ~/e2e/macos/E2E && swift test --filter \"CLITests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+	run cli "$filter" || status=1
 fi
 
 if [[ $suite == gui || $suite == all ]]; then
 	log "GUI suite (screen held unlocked)"
 	ensure_hold
-	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh swift test --filter \"GUITests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure' | cut -c1-300 | uniq" || status=1
+	run gui "$filter" || status=1
 fi
 
 if [[ $suite == lifecycle || $suite == all ]]; then
@@ -99,26 +103,17 @@ if [[ $suite == lifecycle || $suite == all ]]; then
 		mac 'touch /tmp/e2e/password-refused'; log "System Settings was not frontmost, refused to type"
 	  fi ) &
 	watcher=$!
-	mac "set -o pipefail; cd ~/e2e/macos/E2E && bash ~/e2e/scripts/e2e/term.sh env E2E_LIFECYCLE=1 swift test --filter \"LifecycleTests${filter:+/.*$filter}\" 2>&1 | grep -E 'error:|with [0-9]+ failure|^lifecycle:' | cut -c1-300 | uniq" || status=1
+	run lifecycle "$filter" || status=1
 	kill $watcher 2>/dev/null || true
-	helper_up 30 || { log "Helper is down after the lifecycle suite"; status=1; }
 
 	# A dead helper job (registered + approved, gone from launchd) stays dead without the app, and the app heals it on launch, no click.
 	# Needs root to kill the job: babysit's stored sudo password, never typed by us.
 	log "Dead helper is healed by the app on launch"
-	mac 'osascript -e "quit app \"Battery\""; sleep 2'
+	run quit-app
 	babysit mac sudo "$MAC" launchctl bootout system/co.palokaj.battery.daemon > /dev/null 2>&1 || true
-	if helper_up 3; then log "FAIL: bootout left the helper running"; status=1
-	else
-		mac 'open -a /Applications/Battery.app'
-		helper_up 30 && log "healed" || { log "FAIL: the app did not heal a dead helper"; status=1; }
-	fi
+	run heal-check || status=1
 fi
 
-# The GUI suite ran inside Terminal windows: close them all (no saved state either)
-mac 'killall Terminal 2>/dev/null; rm -rf ~/Library/Saved\ Application\ State/com.apple.Terminal.savedState; true'
-
-# Leave the Mac the way a user would want it
-mac '/Applications/Battery.app/Contents/Helpers/battery maintain recover >/dev/null; /Applications/Battery.app/Contents/Helpers/battery status'
+run finish
 [[ $status == 0 ]] && log "All green" || log "FAILURES above"
 exit $status

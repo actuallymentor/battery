@@ -17,20 +17,45 @@
 
 set -Eeuo pipefail
 
+function log() {
+	echo -e "🔋 $*"
+}
+
+function fail() {
+	echo "❌ $*" >&2
+	exit 1
+}
+
+# Fail early with a readable message instead of an unbound variable error
+function require_env() {
+	local name
+	for name in "$@"; do
+		[[ -n "${!name:-}" ]] || fail "Missing environment variable $name"
+	done
+}
+
 # Project layout
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PROJECT_YML="$REPO_ROOT/macos/project.yml"
 XCODE_PROJECT="${XCODE_PROJECT:-macos/Battery.xcodeproj}"
 XCODE_SCHEME="${XCODE_SCHEME:-Battery}"
 APP_NAME="${APP_NAME:-Battery}"
 
+# Identity constants have ONE home, project.yml: the team the daemon pins its XPC callers to (through its own Info.plist),
+# the Sparkle key baked into the app's Info.plist, and the Sparkle version Xcode links. Everything here reads them from there.
+function project_setting() { sed -n "$1" "$PROJECT_YML" | head -1; }
+TEAM_ID=$(project_setting 's/^ *DEVELOPMENT_TEAM: *\([A-Z0-9]\{10\}\).*/\1/p')
+SPARKLE_PUBLIC_ED_KEY=$(project_setting 's/^ *SUPublicEDKey: *\(.*\)$/\1/p')
+SPARKLE_VERSION=$(project_setting 's/.*Sparkle: *{.*exactVersion: *\([0-9.]*\).*/\1/p')
+[[ -n "$TEAM_ID" && -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_VERSION" ]] ||
+	fail "Could not read DEVELOPMENT_TEAM / SUPublicEDKey / Sparkle exactVersion from $PROJECT_YML"
+
 # Apple signing identities, see the "release" GitHub environment
-TEAM_ID="CAWM399GFD"
 APP_IDENTITY="Developer ID Application: Mentor Palokaj ($TEAM_ID)"
 DEVELOPER_ID_G2_SHA256="f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a"   # Apple DeveloperIDG2CA.cer
 APPLE_ROOT_SHA256="b0b1730ecbc7ff4505142c49f1295e6eda6bcaed7e2c68c5be91b5a11001f024"         # Apple AppleIncRootCertificate.cer
 
-# Sparkle, the public key is baked into Info.plist as SUPublicEDKey
-SPARKLE_PUBLIC_ED_KEY="xmO49bUIPl43rec5rtC1NoTg5LAFEnVwqnToYuz+NZ0="
-SPARKLE_VERSION="2.10.1"
+# Sparkle release archive, bump together with exactVersion in project.yml
 SPARKLE_SHA256="1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27"
 
 # Version and artifact names follow the electron-builder convention: ${productName}-${version}-${os}-${arch}.${ext}
@@ -51,20 +76,3 @@ DMG_PATH="$OUT_DIR/$ARTIFACT_BASE.dmg"
 # Temporary keychain holding both Developer ID identities and the notary credentials
 KEYCHAIN="$WORK_DIR/battery-release.keychain-db"
 NOTARY_PROFILE="battery-notary"
-
-function log() {
-	echo -e "🔋 $*"
-}
-
-function fail() {
-	echo "❌ $*" >&2
-	exit 1
-}
-
-# Fail early with a readable message instead of an unbound variable error
-function require_env() {
-	local name
-	for name in "$@"; do
-		[[ -n "${!name:-}" ]] || fail "Missing environment variable $name"
-	done
-}

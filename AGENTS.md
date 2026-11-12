@@ -18,7 +18,7 @@ This repository contains software that limits the battery charging level of Appl
 - New XPC methods: add to `Shared/BatteryXPC.swift`, implement in `Daemon/main.swift`, expose via `App/DaemonClient.swift` and/or `CLI/main.swift`.
 - Logic that can be pure goes in `BatteryCore` with tests; fixtures come from `.notes/TRIAGE.md` key dumps.
 - Version: `MARKETING_VERSION` in `macos/project.yml` (release builds override it from the tag; `CFBundleVersion` = CI run number for Sparkle).
-- Constants that must agree across files (team id, bundle ids, mach service, Sparkle key/version) are checked by `scripts/check-identity.sh`. Run it after touching any of them.
+- Identity constants live in `macos/project.yml` (`DEVELOPMENT_TEAM`, bundle ids, `SUPublicEDKey`, Sparkle `exactVersion`): `scripts/release/lib.sh` parses them, the daemon reads its team from its own Info.plist and derives the caller ids from `batteryDaemonName`. `scripts/release/sign.sh` verifies the built binaries and the daemon plist agree, so a drift only surfaces in a signed build (`scripts/e2e.sh` or a tag).
 - Daemon state is main-queue only (`Service.onMain`). Rules that can be pure live in BatteryCore (`JobPlanner`, `Schedule`, `Limits`, `Controller`, `LimitSettings`); the daemon only runs their output.
 - The daemon validates every XPC argument (`Limits`); never rely on the CLI/app having parsed it.
 - The `battery`/`Battery.app` names collide on case-insensitive disks: the CLI target is `BatteryCLI` (product `battery`).

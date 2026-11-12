@@ -24,7 +24,7 @@ settings:
       DEVELOPMENT_TEAM: ""
 packages:
   BatteryCore: { path: . }
-  # Pinned to the version scripts/release/lib.sh verifies and signs with
+  # scripts/release/lib.sh reads this version (and DEVELOPMENT_TEAM, SUPublicEDKey) from this file, keep the one-line form
   Sparkle: { url: "https://github.com/sparkle-project/Sparkle", exactVersion: 2.10.1 }
 
 targets:
@@ -85,6 +85,12 @@ targets:
     dependencies:
       - package: BatteryCore
         product: BatteryCore
+    # Embedded in the binary (__info_plist). The daemon pins its XPC callers to BatteryTeamID, so the team lives only
+    # in DEVELOPMENT_TEAM above; Debug has none and skips the check.
+    info:
+      path: Daemon/Info.plist
+      properties:
+        BatteryTeamID: $(DEVELOPMENT_TEAM)
     settings:
       base:
         PRODUCT_NAME: batteryd

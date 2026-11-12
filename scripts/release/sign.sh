@@ -58,8 +58,23 @@ while read -r item; do
 	fi
 done <<<"$all_items"
 
-# The root daemon only accepts callers with these identifiers (Daemon/main.swift `requirement`) and our team.
-# Debug builds skip that check, so this is the only place a re-signing mistake would show up before users hit it.
+## ###############
+## Identity: the root daemon (Daemon/main.swift `requirement`) only accepts callers signed by the team in its own
+## Info.plist with the identifiers derived from its mach name. Debug builds skip that check, so this is the only
+## place a drift between project.yml, the daemon plist and the signatures shows up before users hit it.
+## ###############
+
+cli="$APP_PATH/Contents/Helpers/battery"
+daemon="$APP_PATH/Contents/MacOS/batteryd"
+
+# A key from a bundle's Info.plist, or from the __info_plist section of a bare Mach-O (CLI, daemon)
+function info_key() {
+	local item="$1" key="$2"
+	if [[ -d "$item" ]]; then plutil -extract "$key" raw "$item/Contents/Info.plist"
+	else otool -X -P "$item" | sed -n '/<?xml/,/<\/plist>/p' | plutil -extract "$key" raw -o - -
+	fi
+}
+
 function assert_identifier() {
 	local item="$1" expected="$2"
 	[[ -e "$item" ]] || fail "Missing $item"
@@ -67,15 +82,36 @@ function assert_identifier() {
 	details=$(codesign -dv "$item" 2>&1)
 	grep -q "^Identifier=$expected$" <<<"$details" || fail "Wrong code-signing identifier on ${item#"$OUT_DIR"/}, expected $expected"
 }
-assert_identifier "$APP_PATH" co.palokaj.battery
-assert_identifier "$APP_PATH/Contents/Helpers/battery" co.palokaj.battery.cli
-assert_identifier "$APP_PATH/Contents/MacOS/batteryd" co.palokaj.battery.daemon
+
+app_id=$(info_key "$APP_PATH" CFBundleIdentifier)
+daemon_id=$(info_key "$daemon" CFBundleIdentifier)
+daemon_team=$(info_key "$daemon" BatteryTeamID)
+[[ -n "$app_id" && -n "$daemon_id" ]] || fail "Could not read bundle identifiers from the built binaries"
+
+# What the daemon derives at runtime must hold: <app>.daemon, <app>.cli, and the team it was built with is ours
+[[ "$daemon_id" == "$app_id.daemon" ]] || fail "Daemon identifier $daemon_id is not $app_id.daemon"
+[[ "$daemon_team" == "$TEAM_ID" ]] || fail "Daemon Info.plist BatteryTeamID '$daemon_team' is not $TEAM_ID (DEVELOPMENT_TEAM missing from the Release build?)"
+assert_identifier "$APP_PATH" "$app_id"
+assert_identifier "$cli" "$app_id.cli"
+assert_identifier "$daemon" "$daemon_id"
+[[ "$(info_key "$cli" CFBundleIdentifier)" == "$app_id.cli" ]] || fail "CLI Info.plist identifier is not $app_id.cli"
 
 # The same requirement the daemon enforces must verify for the app and the CLI
-for client in "$APP_PATH" "$APP_PATH/Contents/Helpers/battery"; do
-	codesign --verify -R="anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\" and ( identifier \"co.palokaj.battery\" or identifier \"co.palokaj.battery.cli\" )" "$client" ||
+for client in "$APP_PATH" "$cli"; do
+	codesign --verify -R="anchor apple generic and certificate leaf[subject.OU] = \"$daemon_team\" and ( identifier \"$app_id\" or identifier \"$app_id.cli\" )" "$client" ||
 		fail "Daemon caller requirement does not verify for ${client#"$OUT_DIR"/}"
 done
+
+# The launchd plist (named after the daemon id, the app registers it by file name) binds Label and the XPC mach name
+# to the daemon id, on behalf of the app. Dotted keys can't go through plutil key paths, hence the xml greps.
+daemon_plist="$APP_PATH/Contents/Library/LaunchDaemons/$daemon_id.plist"
+[[ -f "$daemon_plist" ]] || fail "Missing $daemon_id.plist in the bundle"
+[[ "$(plutil -extract Label raw "$daemon_plist")" == "$daemon_id" ]] || fail "Daemon plist Label is not $daemon_id"
+mach_services=$(plutil -extract MachServices xml1 -o - "$daemon_plist")
+grep -q "<key>$daemon_id</key>" <<<"$mach_services" || fail "Daemon plist MachServices lacks $daemon_id"
+associated=$(plutil -extract AssociatedBundleIdentifiers xml1 -o - "$daemon_plist")
+grep -q "<string>$app_id</string>" <<<"$associated" || fail "Daemon plist AssociatedBundleIdentifiers lacks $app_id"
+grep -q "^let batteryDaemonName = \"$daemon_id\"$" "$REPO_ROOT/macos/Shared/BatteryXPC.swift" || fail "Shared/BatteryXPC.swift batteryDaemonName is not $daemon_id"
 
 # Every SMAppService daemon plist must point at an executable inside the bundle
 for plist in "$APP_PATH"/Contents/Library/LaunchDaemons/*.plist; do

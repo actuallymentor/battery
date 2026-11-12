@@ -1,6 +1,6 @@
 # PROGRESS: Swift port (v2), branch `v2/swift` (local, UNPUSHED)
 
-Updated 2026-11-09. Read with `AGENTS.md`, `.notes/` (TRIAGE.md, RESEARCH.md, HUMAN.md) and `scripts/dev/README.md`.
+Updated 2026-11-09. Read with `AGENTS.md`, `.notes/` (TRIAGE.md, RESEARCH.md, HUMAN.md) and `macos/E2E/README.md`.
 
 ## Rules
 - No push (git/gh) until the user says so. No `Co-Authored-By`. Commits local, gitmoji.
@@ -18,8 +18,7 @@ Updated 2026-11-09. Read with `AGENTS.md`, `.notes/` (TRIAGE.md, RESEARCH.md, HU
 - macOS 27 PowerUI native limit backend (#480): not implemented (private API, untestable here).
 
 ## Dev workflow on the Mac (ArjunMacbook)
-- See `scripts/dev/README.md` (rebuild, install to /Applications, dev daemon). Copy those scripts to the Mac's /tmp.
-- Rebuilding changes the ad-hoc signature: the SMAppService job then fails (EX_CONFIG). "Repair helper" in the app fixes it (works while the Login Items toggle is on), or use `scripts/dev/mac-dev-daemon.sh load|unload` while iterating.
+- `scripts/e2e.sh` builds a signed app on the Mac, installs it and runs the suites; `scripts/e2e.sh all --no-build` tests what is installed. Signed builds keep the helper's approval, so no Repair / re-approval dance (ad-hoc builds would invalidate it on every rebuild).
 - GUI: Mac re-locks after each `babysit mac run` session; do everything in one chain (see RESEARCH.md).
 
 ## Open for the user (see .notes/HUMAN.md)

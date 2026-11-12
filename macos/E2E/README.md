@@ -17,7 +17,12 @@ scripts/e2e.sh gui --filter testSlider
 
 ## How it runs
 
-The Mac builds and tests itself (`scripts/e2e/sync.sh` ships the tree to `~/e2e`). Signing credentials come from `.secrets/`, are copied over for the build and deleted again.
+The Mac builds and tests itself. `scripts/e2e.sh` (local) is babysit plumbing only: ships `macos/` + `scripts/` to `~/e2e`, copies the signing credentials from `.secrets/` (`.env.release`, `developer-id.p12`, deleted again after the build), holds the screen, answers the lifecycle password request, runs the `sudo launchctl bootout`. On the Mac:
+
+- `scripts/e2e/mac-build.sh` real release pipeline (`build.sh`, `keychain.sh setup --no-notary`, `sign.sh`), replaces `/Applications/Battery.app`, launches it
+- `scripts/e2e/mac-run.sh build-tests | cli | gui | lifecycle [filter] | helper-up SECS | repair | quit-app | heal-check | finish` one step each; `gui`/`lifecycle` run inside Terminal.app (the Accessibility grant), output is reduced to `error:` and pass/fail lines
+- `scripts/e2e/hold.sh` (local) keeps the screen unlocked while GUI work runs
+
 Tests restore a neutral Mac (no limit, no job, no schedule, charging and adapter on) in `setUp` and `tearDown`. Tests skip themselves on Macs that can't cut the adapter or are too low on charge.
 
 ## One-time Mac setup
@@ -28,7 +33,7 @@ Tests restore a neutral Mac (no limit, no job, no schedule, charging and adapter
 ## Gotchas
 
 - A locked screen hides every window from Accessibility, and the Mac re-locks when a `babysit mac run` session ends. `scripts/e2e/hold.sh` holds one open (only types the password if the screen is really locked, `unlock` types into whatever has focus). `caffeinate -d -u` stops idle-lock.
-- Replacing `/Applications/Battery.app` leaves the registered helper "not answering" (launchd EX_CONFIG) until the app's own Repair helper button is pressed. `e2e.sh` presses it, no approval needed.
+- Replacing `/Applications/Battery.app` with a signed build: the app notices the new build and restarts the helper, no click. If it does not answer within 60s `e2e.sh` presses Repair (`mac-run.sh repair`), no approval needed.
 - The app adopts limits set from the CLI, so GUI tests wait for the status poll before acting on the slider.
 - SwiftUI Form toggles are unlabeled in the AX tree: `GUI.toggle("Label")` finds the checkbox after the label text. Sliders refuse a value set; step them with AXIncrement/AXDecrement (`AX.slide`).
 - Helper healing (in `e2e.sh`): after the replace the helper must answer without a click (the app restarts it for the new build); after the lifecycle suite, `launchctl bootout` via `babysit mac sudo` kills the job and the app must bring it back on launch.

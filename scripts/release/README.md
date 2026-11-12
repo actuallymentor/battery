@@ -34,10 +34,11 @@ Defaults in `lib.sh`, override via env:
 - SMAppService daemon plist in `Battery.app/Contents/Library/LaunchDaemons/`, `BundleProgram` inside the bundle
 - CLI, daemon, Sparkle: nested anywhere in the bundle, `sign.sh` finds every Mach-O
 - Entitlements: set them in Xcode, signing preserves them
+- Identity: `lib.sh` reads `DEVELOPMENT_TEAM`, `SUPublicEDKey` and the Sparkle `exactVersion` from `macos/project.yml`; `sign.sh` checks the built binaries, the daemon plist and `batteryDaemonName` agree
 
 ## Gotchas
 
 - Scripts run on macOS `/bin/bash` 3.2: no `${arr[@]}` on empty arrays, no `mapfile`, no `${var,,}`
 - Never `set -x`, secrets pass through env
-- Sparkle key mismatch = no user can update, never change `SPARKLE_PUBLIC_ED_KEY` casually
-- Bump `SPARKLE_VERSION` together with `SPARKLE_SHA256`
+- Sparkle key mismatch = no user can update, never change `SUPublicEDKey` in `project.yml` casually
+- Bump the Sparkle `exactVersion` in `project.yml` together with `SPARKLE_SHA256` in `lib.sh`

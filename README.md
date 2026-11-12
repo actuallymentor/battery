@@ -61,7 +61,7 @@ The helper verifies the hardware actually obeys and warns if the Mac keeps charg
 ```
 cd macos && swift test                    # core logic, runs anywhere
 cd macos && xcodegen && xcodebuild -scheme Battery build      # Debug builds are unsigned
-scripts/check-identity.sh                 # team/bundle/service/Sparkle constants must agree (CI runs it)
+scripts/e2e.sh                            # signed build + CLI/GUI/lifecycle suites on a real Mac (babysit)
 scripts/release/                          # tag v* -> tests, signed + notarized dmg, draft release
 ```
 

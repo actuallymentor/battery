@@ -47,12 +47,9 @@ info_plist="$APP_PATH/Contents/Info.plist"
 app_version=$(plutil -extract CFBundleShortVersionString raw "$info_plist")
 [[ "$app_version" == "$VERSION" ]] || fail "App version $app_version does not match tag $TAG"
 
-# Enforce the release key, a wrong SUPublicEDKey silently breaks every future update
+# The built app must carry the key project.yml declares (a stale .xcodeproj would not), a wrong SUPublicEDKey silently breaks every future update
 current_key=$(plutil -extract SUPublicEDKey raw "$info_plist" 2>/dev/null || true)
-if [[ "$current_key" != "$SPARKLE_PUBLIC_ED_KEY" ]]; then
-	[[ -z "$current_key" ]] || log "⚠️ Replacing SUPublicEDKey from the project with the release key"
-	plutil -replace SUPublicEDKey -string "$SPARKLE_PUBLIC_ED_KEY" "$info_plist"
-fi
+[[ "$current_key" == "$SPARKLE_PUBLIC_ED_KEY" ]] || fail "Info.plist SUPublicEDKey '$current_key' does not match project.yml"
 plutil -extract SUFeedURL raw "$info_plist" >/dev/null 2>&1 || log "⚠️ Info.plist has no SUFeedURL, Sparkle will not find updates"
 
 # The SMAppService root daemon must ship inside the bundle
