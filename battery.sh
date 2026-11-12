@@ -183,6 +183,9 @@ ALL ALL = NOPASSWD: $battery_binary _reset_charge_limit_mcl_prefs
 ALL ALL = NOPASSWD: $defaults_binary read com.apple.smartcharging.topoffprotection MCLFeatureState
 ALL ALL = NOPASSWD: $defaults_binary read com.apple.smartcharging.topoffprotection mclLimitValue
 
+# Allow detection of Optimized Battery Charging
+ALL ALL = NOPASSWD: $defaults_binary read com.apple.smartcharging.topoffprotection enabled
+
 # Allow detection of forced battery gauging on macOS 27
 ALL ALL = NOPASSWD: $plutil_binary -extract batteryGaugingMitigationInfo.lastFullChargeReq xml1 -o - /private/var/root/Library/Preferences/com.apple.powerd.batterygauging.plist
 
@@ -389,7 +392,7 @@ function mcl_prefs_get_macos_calibration_status() {
 	case "$request" in
 		*'<true/>'*) ;;
 		*'<false/>'*) echo none; return 0 ;; # the required condition is not satisfied
-		*) log "⚠️  macOS battery calibration detection: unexpected plist value" >&2; return 1 ;;
+		*) log "⚠️  macOS battery calibration detection: unexpected plist value: $request" >&2; return 1 ;;
 	esac
 
 	# Check whether the sufficient condition is met
@@ -437,6 +440,20 @@ function detect_and_report_macos27_calibration() {
 	case "$status" in
 		suspected) macos_calibration_last_suspected_notification=$now ;;
 		detected) macos_calibration_last_detected_notification=$now ;;
+	esac
+}
+
+function detect_and_report_optimized_charging() {
+	[[ "$charging_backend" == "mcl_smc" || "$charging_backend" == "mcl_prefs" ]] || return 0
+	local enabled
+	if ! enabled=$(sudo -n "$defaults_binary" read com.apple.smartcharging.topoffprotection enabled); then
+		log "⚠️  Optimized Battery Charging detection: failed to read the plist${enabled:+: $enabled}" >&2
+		return 1
+	fi
+	case "$enabled" in
+		0) return 0 ;;
+		1) log "⚠️  Optimized Battery Charging is enabled or temporarily disabled. Disable it permanently in System Settings for reliable charge control." ;;
+		*) log "⚠️  Optimized Battery Charging detection: unexpected plist value: $enabled" >&2; return 1 ;;
 	esac
 }
 
@@ -1002,7 +1019,9 @@ case "$action" in
 esac
 
 case "$action" in
-	maintain|charging|adapter|charge|discharge|calibrate) detect_and_report_macos27_calibration ;;
+	maintain|charging|adapter|charge|discharge|calibrate)
+		detect_and_report_macos27_calibration
+		detect_and_report_optimized_charging ;;
 esac
 
 # If the config folder or log file were just created by the code above while
@@ -1790,6 +1809,7 @@ if [[ "$action" == "status" ]]; then
 	log_current_background_job
 
 	detect_and_report_macos27_calibration
+	detect_and_report_optimized_charging
 
 	exit 0
 
@@ -1863,6 +1883,7 @@ if [[ "$action" == "dump_controls" ]]; then
 
 	printf '\n'
 	detect_and_report_macos27_calibration
+	detect_and_report_optimized_charging
 	printf '\n'
 
 	exit 0
