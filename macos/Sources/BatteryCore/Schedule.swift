@@ -45,5 +45,5 @@ public struct Schedule: Equatable, Sendable {
 }
 
 extension ClosedRange where Bound == Int {
-	func clamp( _ v: Int ) -> Int { Swift.min( Swift.max( v, lowerBound ), upperBound ) }
+	public func clamp( _ v: Int ) -> Int { Swift.min( Swift.max( v, lowerBound ), upperBound ) }
 }

@@ -90,7 +90,7 @@ daemon_team=$(info_key "$daemon" BatteryTeamID)
 
 # What the daemon derives at runtime must hold: <app>.daemon, <app>.cli, and the team it was built with is ours
 [[ "$daemon_id" == "$app_id.daemon" ]] || fail "Daemon identifier $daemon_id is not $app_id.daemon"
-[[ "$daemon_team" == "$TEAM_ID" ]] || fail "Daemon Info.plist BatteryTeamID '$daemon_team' is not $TEAM_ID (DEVELOPMENT_TEAM missing from the Release build?)"
+[[ "$daemon_team" == "$TEAM_ID" ]] || fail "Daemon Info.plist BatteryTeamID '$daemon_team' is not $TEAM_ID (BATTERY_TEAM_ID missing from the build?)"
 assert_identifier "$APP_PATH" "$app_id"
 assert_identifier "$cli" "$app_id.cli"
 assert_identifier "$daemon" "$daemon_id"

@@ -1,10 +1,12 @@
 import Foundation
 
-/// Parsed CLI invocation. Mirrors v1 commands; `visudo` / `update_silent` are gone (no sudoers in v2).
-public enum Command: Equatable, Sendable {
+/// Everything a client can ask the daemon, and the CLI's parsed form of it. Mirrors v1 commands; `visudo` /
+/// `update_silent` are gone (no sudoers in v2). Codable: this is the XPC wire type, one JSON blob per call.
+public enum Command: Codable, Equatable, Sendable {
 
-	public enum Maintain: Equatable, Sendable {
-		case set( MaintainTarget, forceDischarge: Bool )
+	public enum Maintain: Codable, Equatable, Sendable {
+		/// Remember a target. `enabled: false` stores it without holding (the app's slider while the limit switch is off).
+		case set( MaintainTarget, forceDischarge: Bool, enabled: Bool )
 		case stop
 		case recover
 	}
@@ -25,6 +27,15 @@ public enum Command: Equatable, Sendable {
 	case reinstall
 	case uninstall
 
+	/// Dev-only SMC key dump, not part of the v1 command set
+	case probe
+	/// Symlink /usr/local/bin/battery to the CLI inside /Applications/Battery.app (root-owned location only)
+	case installCLI
+	case uninstallCLI
+	/// v1 (shell + sudoers + LaunchAgent) leftovers of the calling user
+	case legacyFound
+	case removeLegacy
+
 	/// `args` excludes the program name.
 	public init( arguments args: [ String ] ) throws {
 
@@ -38,8 +49,9 @@ public enum Command: Equatable, Sendable {
 		case "status": self = .status
 		case "status_csv": self = .statusCSV
 		case "calibrate": self = .calibrate
+		case "probe": self = .probe
 		case "schedule":
-			guard let setting, let n = Int( setting ), ( 0...90 ).contains( n ) else { throw BatteryError.missingArgument( "schedule DAYS[0-90, 0 = off]" ) }
+			guard let setting, let n = Int( setting ), Limits.scheduleDays.contains( n ) else { throw BatteryError.missingArgument( "schedule DAYS[0-90, 0 = off]" ) }
 			self = .schedule( days: n )
 		case "update": self = .update
 		case "reinstall": self = .reinstall
@@ -70,13 +82,31 @@ public enum Command: Equatable, Sendable {
 				let rest = Array( args.dropFirst( 2 ) )
 				let force = rest.contains( "--force-discharge" )
 				let hysteresis = rest.first { $0 != "--force-discharge" }
-				self = .maintain( .set( try MaintainTarget( parsing: setting, hysteresis: hysteresis ), forceDischarge: force ) )
+				self = .maintain( .set( try MaintainTarget( parsing: setting, hysteresis: hysteresis ), forceDischarge: force, enabled: true ) )
 			}
 
 		default:
 			throw BatteryError.unknownCommand( action )
 		}
 
+	}
+
+	/// Handled by the CLI itself, never sent to the daemon
+	public var isLocal: Bool {
+		switch self {
+		case .help, .version, .logs, .update, .reinstall, .status, .statusCSV: return true
+		default: return false
+		}
+	}
+
+	// MARK: Wire form
+
+	public func encoded() -> String {
+		( try? JSONEncoder().encode( self ) ).flatMap { String( data: $0, encoding: .utf8 ) } ?? "{}"
+	}
+
+	public static func decode( _ json: String ) -> Command? {
+		try? JSONDecoder().decode( Command.self, from: Data( json.utf8 ) )
 	}
 
 	private static func onOff( _ s: String? ) throws -> Bool {

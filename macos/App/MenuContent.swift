@@ -21,11 +21,7 @@ struct MenuContent: View {
 
 			if !model.legacyLeftovers.isEmpty { LegacyBanner( model: model ) }
 
-			if let error = model.error {
-				Button { model.dismissError() } label: { Label( error, systemImage: "exclamationmark.circle" ).multilineTextAlignment( .leading ) }
-					.buttonStyle( .plain ).font( .caption ).foregroundStyle( .red )
-					.accessibilityHint( "Dismiss" )
-			}
+			ErrorRow( model: model )
 		}
 		.padding( 16 )
 		.frame( width: 270 )
@@ -37,12 +33,12 @@ struct MenuContent: View {
 	/// One line: the limit switch on the left, the gear on the right. The limit value itself is set in Settings.
 	private var topRow: some View {
 		HStack( spacing: 10 ) {
-			if model.helper == .ready, let s = model.status, s.canLimit {
-				Text( "Charge limit \( model.settings.limit )%" ).font( .body )
+			if model.helper == .ready, model.status?.canLimit == true {
+				Text( "Charge limit \( model.limit )%" ).font( .body )
 				Spacer( minLength: 8 )
-				Toggle( "Charge limit", isOn: Binding( get: { s.maintain != nil }, set: { model.applyLimit( enabled: $0 ) } ) )
+				Toggle( "Charge limit", isOn: $model.limitOn )
 					.labelsHidden().toggleStyle( .switch ).controlSize( .small )
-					.disabled( model.busy )
+					.disabled( model.isPending( .limitOn ) )
 			} else {
 				Spacer()
 			}
@@ -73,7 +69,7 @@ struct MenuContent: View {
 			if let s = model.status, s.canLimit, s.activity == nil {
 				Button { model.chargeTo( 100 ) } label: { Label( "Charge to 100%", systemImage: "bolt.fill" ) }
 				if s.canCutAdapter {
-					Button { model.dischargeTo( model.settings.dischargeTarget ) } label: { Label( "Discharge to \( model.settings.dischargeTarget )%", systemImage: "arrow.down.circle" ) }
+					Button { model.dischargeTo( model.dischargeTarget ) } label: { Label( "Discharge to \( model.dischargeTarget )%", systemImage: "arrow.down.circle" ) }
 					Button { confirmCalibrate = true } label: { Label( "Calibrate battery…", systemImage: "gauge.with.dots.needle.bottom.50percent" ) }
 				}
 				Divider()
@@ -106,35 +102,27 @@ struct HelperSetup: View {
 
 	var body: some View {
 		VStack( alignment: .leading, spacing: 10 ) {
-			Label( title, systemImage: "lock.shield" ).font( .headline )
-			Text( message ).font( .callout ).foregroundStyle( .secondary ).fixedSize( horizontal: false, vertical: true )
+			Label( model.helper.title, systemImage: "lock.shield" ).font( .headline )
+			Text( model.helper.message ).font( .callout ).foregroundStyle( .secondary ).fixedSize( horizontal: false, vertical: true )
 			if model.limitWasActive {
 				Text( "Your charge limit may keep the battery from charging until the helper runs again." ).font( .callout ).foregroundStyle( .orange ).fixedSize( horizontal: false, vertical: true )
 			}
-			switch model.helper {
-			case .needsApproval:
-				Button( "Open Login Items" ) { model.openLoginItems() }.buttonStyle( .borderedProminent )
-			case .unreachable:
-				Button( "Repair helper" ) { model.repairHelper() }.buttonStyle( .borderedProminent )
-			default:
-				Button( "Open Login Items" ) { model.registerHelper() }.buttonStyle( .borderedProminent )
-			}
+			Button( model.helper.button ) { model.setUpHelper() }.buttonStyle( .borderedProminent ).disabled( model.busy )
 		}
 	}
 
-	private var title: String {
-		switch model.helper {
-		case .needsApproval: return "Switch on Battery in Login Items"
-		case .unreachable: return "Helper not responding"
-		default: return "One-time setup required"
-		}
-	}
+}
 
-	private var message: String {
-		switch model.helper {
-		case .needsApproval: return "Battery's helper is waiting for your approval. Press the button below, then switch on Battery under App Background Activity."
-		case .unreachable: return "The helper is registered but not answering (often after moving or replacing the app). Repair re-registers it and may ask for approval again."
-		default: return "Battery needs a small background helper to control charging. Press the button below to open Login Items, then switch on Battery."
+/// A failed action, until dismissed. In the popover and under Settings: most actions live there.
+struct ErrorRow: View {
+
+	@Bindable var model: AppModel
+
+	var body: some View {
+		if let error = model.error {
+			Button { model.dismissError() } label: { Label( error, systemImage: "exclamationmark.circle" ).multilineTextAlignment( .leading ) }
+				.buttonStyle( .plain ).font( .caption ).foregroundStyle( .red )
+				.accessibilityHint( "Dismiss" )
 		}
 	}
 

@@ -23,12 +23,22 @@ public struct SMCCapabilities: Equatable, Sendable {
 
 	/// How charging can be held on this machine. Chosen by which keys exist, never by OS version
 	/// (key availability moved around 15.8.x / 26.x / 27 and reports contradict any version gate).
-	public enum Backend: String, Equatable, Sendable {
+	public enum Backend: String, Codable, Equatable, Sendable {
 		case legacy         // CH0B / CH0C inhibit
 		case tahoe          // CHTE inhibit
 		case firmwareLimit  // bfD0 / bfE0 / bfF0: firmware holds a % limit itself
 		case softwareCut    // adapter cut at the limit (CHIE / CH0J / CH0I): compat mode, burns battery cycles
 		case none
+
+		/// Settings -> Charge control
+		public var title: String {
+			switch self {
+			case .tahoe, .legacy: return "SMC inhibit"
+			case .firmwareLimit: return "Firmware limit"
+			case .softwareCut: return "Adapter cut (compatibility)"
+			case .none: return "Not supported"
+			}
+		}
 	}
 
 	public var backend: Backend {

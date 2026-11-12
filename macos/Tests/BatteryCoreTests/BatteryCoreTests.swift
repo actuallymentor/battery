@@ -207,10 +207,10 @@ final class CommandTests: XCTestCase {
 	func testMaintain() throws {
 		XCTAssertEqual( try parse( "maintain stop" ), .maintain( .stop ) )
 		XCTAssertEqual( try parse( "maintain recover" ), .maintain( .recover ) )
-		XCTAssertEqual( try parse( "maintain 80" ), .maintain( .set( .level( lower: 80, upper: 80 ), forceDischarge: false ) ) )
-		XCTAssertEqual( try parse( "maintain 70-80 --force-discharge" ), .maintain( .set( .level( lower: 70, upper: 80 ), forceDischarge: true ) ) )
-		XCTAssertEqual( try parse( "maintain 11.4V 0.3V" ), .maintain( .set( .voltage( center: 11.4, hysteresis: 0.3 ), forceDischarge: false ) ) )
-		XCTAssertEqual( try parse( "maintain 11.4V 0.3V --force-discharge" ), .maintain( .set( .voltage( center: 11.4, hysteresis: 0.3 ), forceDischarge: true ) ) )
+		XCTAssertEqual( try parse( "maintain 80" ), .maintain( .set( .level( lower: 80, upper: 80 ), forceDischarge: false, enabled: true ) ) )
+		XCTAssertEqual( try parse( "maintain 70-80 --force-discharge" ), .maintain( .set( .level( lower: 70, upper: 80 ), forceDischarge: true, enabled: true ) ) )
+		XCTAssertEqual( try parse( "maintain 11.4V 0.3V" ), .maintain( .set( .voltage( center: 11.4, hysteresis: 0.3 ), forceDischarge: false, enabled: true ) ) )
+		XCTAssertEqual( try parse( "maintain 11.4V 0.3V --force-discharge" ), .maintain( .set( .voltage( center: 11.4, hysteresis: 0.3 ), forceDischarge: true, enabled: true ) ) )
 		XCTAssertThrowsError( try parse( "maintain" ) )
 		XCTAssertThrowsError( try parse( "maintain banana" ) )
 	}
@@ -262,16 +262,16 @@ final class BatteryStatusTests: XCTestCase {
 
 	func testJSONRoundTrip() {
 		let s = BatteryStatus( percent: 81, voltage: 12.4, remaining: "1:05", acAttached: true, chargingEnabled: false,
-		                       maintain: "70-80", forceDischarge: true, smcKeys: [ "CHTE", "CHIE" ], daemonVersion: "2.0.0" )
+		                       maintain: .level( lower: 70, upper: 80 ), forceDischarge: true, smcKeys: [ "CHTE", "CHIE" ], daemonVersion: "2.0.0" )
 		XCTAssertEqual( BatteryStatus.decode( s.encoded() ), s )
 	}
 
 	func testHeadline() {
 		XCTAssertEqual( BatteryStatus( percent: 50, acAttached: false ).headline, "On battery" )
 		XCTAssertEqual( BatteryStatus( percent: 50, acAttached: true, chargingEnabled: true ).headline, "Charging" )
-		XCTAssertEqual( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, maintain: "80" ).headline, "Holding at limit" )
+		XCTAssertEqual( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, maintain: .level( lower: 80, upper: 80 ) ).headline, "Holding at limit" )
 		XCTAssertEqual( BatteryStatus( percent: 100, acAttached: true ).headline, "Fully charged" )
-		XCTAssertEqual( BatteryStatus( percent: 100, acAttached: true, chargingEnabled: false, maintain: "80" ).headline, "Holding at limit" )
+		XCTAssertEqual( BatteryStatus( percent: 100, acAttached: true, chargingEnabled: false, maintain: .level( lower: 80, upper: 80 ) ).headline, "Holding at limit" )
 		XCTAssertEqual( BatteryStatus( percent: 60, acAttached: true, discharging: true ).headline, "Discharging on adapter" )
 		XCTAssertEqual( BatteryStatus( percent: 60, acAttached: true, activity: "Charging to 90%" ).headline, "Charging to 90%" )
 	}
@@ -279,22 +279,21 @@ final class BatteryStatusTests: XCTestCase {
 	func testStatusLine() {
 		XCTAssertEqual( BatteryStatus( percent: 50, remaining: "2:10", acAttached: false ).statusLine, "On battery · 2:10 left" )
 		XCTAssertEqual( BatteryStatus( percent: 50, remaining: "0:40", acAttached: true, chargingEnabled: true ).statusLine, "Charging · 0:40 to full" )
-		XCTAssertEqual( BatteryStatus( percent: 80, remaining: "0:00", acAttached: true, chargingEnabled: false, maintain: "80" ).statusLine, "Holding at limit" )
+		XCTAssertEqual( BatteryStatus( percent: 80, remaining: "0:00", acAttached: true, chargingEnabled: false, maintain: .level( lower: 80, upper: 80 ) ).statusLine, "Holding at limit" )
 		XCTAssertEqual( BatteryStatus( percent: 50, acAttached: false ).statusLine, "On battery" )                      // no estimate yet
 		XCTAssertEqual( BatteryStatus( percent: 100, remaining: "0:00", acAttached: true ).statusLine, "Fully charged" )
 		XCTAssertEqual( BatteryStatus( percent: 60, remaining: "1:00", acAttached: true, activity: "Charging to 90%" ).statusLine, "Charging to 90%" )
-		XCTAssertTrue( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, maintain: "80" ).chargingPaused )
+		XCTAssertTrue( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, maintain: .level( lower: 80, upper: 80 ) ).chargingPaused )
 		XCTAssertFalse( BatteryStatus( percent: 80, acAttached: false, chargingEnabled: false ).chargingPaused )          // unplugged: nothing is paused
 		XCTAssertFalse( BatteryStatus( percent: 80, acAttached: true, chargingEnabled: false, discharging: true ).chargingPaused )
 	}
 
-	func testMaintainTargetParse() {
-		XCTAssertEqual( BatteryStatus( percent: 1, acAttached: true, maintain: "70-80" ).maintainTarget, .level( lower: 70, upper: 80 ) )
-		XCTAssertNil( BatteryStatus( percent: 1, acAttached: true ).maintainTarget )
+	func testLimitDefaultsToTheActiveBand() {
+		XCTAssertEqual( BatteryStatus( percent: 1, acAttached: true, maintain: .level( lower: 70, upper: 80 ) ).limit, .level( lower: 70, upper: 80 ) )
+		XCTAssertEqual( BatteryStatus( percent: 1, acAttached: true, limit: .level( lower: 75, upper: 80 ) ).maintain, nil )   // remembered while off
 	}
 
 }
-
 
 // MARK: #475 range semantics + backends
 
@@ -420,7 +419,7 @@ final class LimitsTests: XCTestCase {
 final class StatusRenderingTests: XCTestCase {
 
 	func testStatusFromSnapshot() {
-		let s = BatteryStatus( percent: 81, voltage: 12.4, remaining: "1:05", acAttached: true, chargingEnabled: false, maintain: "70-80", activity: "Charging to 90%", warning: "x" )
+		let s = BatteryStatus( percent: 81, voltage: 12.4, remaining: "1:05", acAttached: true, chargingEnabled: false, maintain: .level( lower: 70, upper: 80 ), activity: "Charging to 90%", warning: "x" )
 		let text = Report.status( s )
 		XCTAssertTrue( text.hasPrefix( "Battery at 81% (1:05 remaining), 12.4V, smc charging disabled" ) )
 		XCTAssertTrue( text.contains( "maintained at 70% - 80%" ) )
@@ -429,7 +428,7 @@ final class StatusRenderingTests: XCTestCase {
 	}
 
 	func testCSVFromSnapshot() {
-		let s = BatteryStatus( percent: 50, remaining: "no estimate", acAttached: true, chargingEnabled: true, discharging: false, maintain: "80" )
+		let s = BatteryStatus( percent: 50, remaining: "no estimate", acAttached: true, chargingEnabled: true, discharging: false, maintain: .level( lower: 80, upper: 80 ) )
 		XCTAssertEqual( Report.csv( s ), "50,no estimate,enabled,not discharging,80" )
 	}
 
@@ -547,11 +546,45 @@ final class MaintainValidationTests: XCTestCase {
 	}
 
 	func testPersistedLineRoundTrip() throws {
-		let t = MaintainTarget.level( lower: 70, upper: 80 )
-		XCTAssertEqual( MaintainTarget.parseLine( t.persistedLine( force: true ) )?.force, true )
-		XCTAssertEqual( MaintainTarget.parseLine( t.persistedLine( force: false ) )?.target, t )
-		XCTAssertEqual( MaintainTarget.parseLine( "11.4V 0.3V --force-discharge" )?.target, .voltage( center: 11.4, hysteresis: 0.3 ) )
-		XCTAssertNil( MaintainTarget.parseLine( "junk" ) )
+		var m = MaintainState( backend: .tahoe )
+		let r = MaintainState.Reading( percent: 50, chargingEnabled: true, acAttached: true )
+		_ = m.set( .level( lower: 70, upper: 80 ), force: true, enabled: true, reading: r )
+		XCTAssertEqual( m.persisted, "70-80 --force-discharge" )
+		_ = m.stop()
+		XCTAssertEqual( m.persisted, "70-80 --force-discharge --off" )
+		let back = try XCTUnwrap( MaintainState.parse( m.persisted! ) )
+		XCTAssertEqual( back.target, .level( lower: 70, upper: 80 ) ); XCTAssertTrue( back.force ); XCTAssertFalse( back.enabled )
+		XCTAssertEqual( MaintainState.parse( "11.4V 0.3V --force-discharge" )?.target, .voltage( center: 11.4, hysteresis: 0.3 ) )
+		XCTAssertEqual( MaintainState.parse( "80" )?.enabled, true )      // a beta.1 file: on
+		XCTAssertNil( MaintainState.parse( "junk" ) )
+	}
+
+	/// Every command passes one gate in the daemon
+	func testRefusalTable() {
+		let full = caps( [ "CHTE", "CHIE" ] ), noCut = caps( [ "CHTE" ] ), none = caps( [] )
+		XCTAssertNil( Limits.refusal( .charge( 90 ), caps: full ) )
+		XCTAssertNotNil( Limits.refusal( .charge( 0 ), caps: full ) )
+		XCTAssertNotNil( Limits.refusal( .charge( 90 ), caps: none ) )
+		XCTAssertNotNil( Limits.refusal( .charging( on: false ), caps: none ) )
+		XCTAssertNil( Limits.refusal( .discharge( 50 ), caps: full ) )
+		XCTAssertNotNil( Limits.refusal( .discharge( 50 ), caps: noCut ) )
+		XCTAssertNotNil( Limits.refusal( .discharge( 4 ), caps: full ) )
+		XCTAssertNotNil( Limits.refusal( .adapter( on: false ), caps: noCut ) )
+		XCTAssertNotNil( Limits.refusal( .calibrate, caps: noCut ) )
+		XCTAssertNil( Limits.refusal( .calibrate, caps: full ) )
+		XCTAssertNotNil( Limits.refusal( .schedule( days: 91 ), caps: full ) )
+		XCTAssertNotNil( Limits.refusal( .maintain( .set( .level( lower: 80, upper: 80 ), forceDischarge: true, enabled: true ) ), caps: noCut ) )
+		XCTAssertNil( Limits.refusal( .maintain( .set( .level( lower: 80, upper: 80 ), forceDischarge: false, enabled: false ) ), caps: noCut ) )
+		XCTAssertNil( Limits.refusal( .maintain( .stop ), caps: none ) )
+		XCTAssertNil( Limits.refusal( .installCLI, caps: none ) )
+	}
+
+	func testCommandWireRoundTrip() {
+		let cmds: [ Command ] = [ .maintain( .set( .level( lower: 75, upper: 80 ), forceDischarge: true, enabled: false ) ), .maintain( .stop ), .logs( lines: 3 ),
+		                          .charging( on: false ), .schedule( days: 30 ), .probe, .legacyFound, .maintain( .set( .voltage( center: 11.4, hysteresis: 0.1 ), forceDischarge: false, enabled: true ) ) ]
+		for c in cmds { XCTAssertEqual( Command.decode( c.encoded() ), c ) }
+		XCTAssertNil( Command.decode( "{\"nope\":{}}" ) )
+		XCTAssertTrue( Command.status.isLocal ); XCTAssertFalse( Command.probe.isLocal )
 	}
 
 }
@@ -596,23 +629,112 @@ final class ControllerExtrasTests: XCTestCase {
 final class LimitSettingsTests: XCTestCase {
 
 	func testFixedBand() {
-		XCTAssertEqual( LimitSettings( limit: 80 ).target, .level( lower: 75, upper: 80 ) )
-		XCTAssertEqual( LimitSettings( limit: 100 ).target, .level( lower: 95, upper: 100 ) )
-		XCTAssertEqual( LimitSettings( limit: 20 ).target, .level( lower: 15, upper: 20 ) )
+		XCTAssertEqual( LimitSettings.target( limit: 80 ), .level( lower: 75, upper: 80 ) )
+		XCTAssertEqual( LimitSettings.target( limit: 100 ), .level( lower: 95, upper: 100 ) )
+		XCTAssertEqual( LimitSettings.target( limit: 20 ), .level( lower: 15, upper: 20 ) )
 	}
 
 	func testSliderClamp() {
-		XCTAssertEqual( LimitSettings( limit: 5 ).limit, 20 )
-		XCTAssertEqual( LimitSettings( limit: 500 ).limit, 100 )
+		XCTAssertEqual( LimitSettings.target( limit: 5 ).upper, 20 )
+		XCTAssertEqual( LimitSettings.target( limit: 500 ).upper, 100 )
 	}
 
-	func testAdoptDaemonTarget() {
-		var s = LimitSettings()
-		s.adopt( .level( lower: 50, upper: 60 ), force: true )
-		XCTAssertEqual( s.limit, 60 ); XCTAssertEqual( s.target, .level( lower: 55, upper: 60 ) ); XCTAssertTrue( s.force )
-		s.adopt( .voltage( center: 11.4, hysteresis: 0.1 ), force: false )   // not a band: ignore
-		XCTAssertEqual( s.limit, 60 )
-		XCTAssertEqual( s.dischargeTarget, 50 )
+	func testSliderShowsTheDaemonTarget() {
+		XCTAssertEqual( LimitSettings.limit( of: .level( lower: 50, upper: 60 ) ), 60 )     // a CLI band: only the top matters
+		XCTAssertEqual( LimitSettings.limit( of: .voltage( center: 11.4, hysteresis: 0.1 ) ), 80 )   // not a band: default
+		XCTAssertEqual( LimitSettings.limit( of: nil ), 80 )
+		XCTAssertEqual( LimitSettings.dischargeTarget( limit: 60 ), 50 )
+	}
+
+}
+
+/// The maintain loop end to end: readings in, intents out. What used to run untested as root.
+final class MaintainStateTests: XCTestCase {
+
+	private func reading( _ percent: Int, charging: Bool? = true, ac: Bool = true, cut: Bool = false, lid: Bool = false, fw: Bool? = nil ) -> MaintainState.Reading {
+		MaintainState.Reading( percent: percent, chargingEnabled: charging, acAttached: ac, adapterCut: cut, lidClosed: lid, firmwareActive: fw )
+	}
+	private let band = MaintainTarget.level( lower: 75, upper: 80 )
+
+	func testHoldsAtTheTopAndResumesBelowTheBand() {
+		var m = MaintainState( backend: .tahoe )
+		XCTAssertEqual( m.set( band, force: false, enabled: true, reading: reading( 50 ) ), [] )
+		XCTAssertEqual( m.tick( reading( 80 ) ), [ .led( .green ), .charging( on: false, holdAtLevel: 80 ) ] )
+		XCTAssertNotNil( m.heldSince )
+		XCTAssertEqual( m.tick( reading( 78, charging: false ) ), [] )                                     // inside the band: hold
+		XCTAssertEqual( m.tick( reading( 74, charging: false ) ), [ .led( .orange ), .charging( on: true, holdAtLevel: nil ) ] )
+		XCTAssertTrue( m.refilling )
+		XCTAssertEqual( m.tick( reading( 77 ) ), [] )                                                      // on the way up: keep going (#475)
+		XCTAssertEqual( m.tick( reading( 80 ) ), [ .led( .green ), .charging( on: false, holdAtLevel: 80 ) ] )
+		XCTAssertFalse( m.refilling )
+	}
+
+	func testPluggingInInsideTheBandHolds() {
+		var m = MaintainState( backend: .tahoe )
+		_ = m.set( band, force: false, enabled: true, reading: reading( 77 ) )
+		XCTAssertEqual( m.tick( reading( 77 ) ), [ .led( .green ), .charging( on: false, holdAtLevel: 77 ) ] )
+	}
+
+	func testRaisingTheLimitChargesUpToIt() {
+		var m = MaintainState( backend: .tahoe )
+		_ = m.set( band, force: false, enabled: true, reading: reading( 82 ) )
+		_ = m.tick( reading( 82 ) )
+		XCTAssertEqual( m.set( .level( lower: 80, upper: 85 ), force: false, enabled: true, reading: reading( 82, charging: false ) ), [ .charging( on: true, holdAtLevel: nil ) ] )
+		XCTAssertEqual( m.tick( reading( 83 ) ), [] )
+		XCTAssertEqual( m.tick( reading( 85 ) ).last, .charging( on: false, holdAtLevel: 85 ) )
+	}
+
+	func testOffKeepsTheTargetAndRestoresStock() {
+		var m = MaintainState( backend: .tahoe )
+		_ = m.set( band, force: true, enabled: true, reading: reading( 50 ) )
+		XCTAssertEqual( m.stop(), [ .resetAll ] )
+		XCTAssertNil( m.active ); XCTAssertEqual( m.target, band ); XCTAssertTrue( m.force )
+		XCTAssertEqual( m.tick( reading( 90 ) ), [] )
+		// The slider moves while off: remembered, nothing touched
+		XCTAssertEqual( m.set( .level( lower: 65, upper: 70 ), force: true, enabled: false, reading: reading( 50 ) ), [] )
+		XCTAssertEqual( m.persisted, "65-70 --force-discharge --off" )
+		// Switched back on from the slider's value
+		XCTAssertEqual( m.set( .level( lower: 65, upper: 70 ), force: true, enabled: true, reading: reading( 50 ) ), [] )
+		XCTAssertEqual( m.active, .level( lower: 65, upper: 70 ) )
+	}
+
+	func testJobsSuspendAndResume() {
+		var m = MaintainState( backend: .tahoe )
+		_ = m.set( band, force: false, enabled: true, reading: reading( 50 ) )
+		m.suspend()
+		XCTAssertEqual( m.tick( reading( 90 ) ), [] )
+		XCTAssertEqual( m.stop(), [] )                                                  // the job owns the hardware
+		XCTAssertEqual( m.resume( restoring: true, reading: reading( 90 ) ), [ .resetAll ] )
+		_ = m.set( band, force: false, enabled: true, reading: reading( 50 ) )
+		m.suspend()
+		XCTAssertEqual( m.resume( restoring: false, reading: reading( 90, cut: true ) ), [ .adapter( on: true ) ] )   // back on, a cut adapter restored
+		XCTAssertEqual( m.active, band )
+	}
+
+	func testForceDischargeCutsAboveTheBandButNotWithTheLidClosed() {
+		var m = MaintainState( backend: .tahoe )
+		_ = m.set( band, force: true, enabled: true, reading: reading( 90 ) )
+		XCTAssertEqual( m.tick( reading( 90 ) ).first, .adapter( on: false ) )
+		XCTAssertEqual( m.tick( reading( 90, ac: false, cut: true, lid: true ) ).first, .adapter( on: true ) )
+		XCTAssertEqual( m.tick( reading( 79, charging: false, ac: false, cut: true ) ).first, .adapter( on: true ) )
+	}
+
+	func testFirmwareBackendOnlyReasserts() {
+		var m = MaintainState( backend: .firmwareLimit )
+		_ = m.set( band, force: false, enabled: true, reading: reading( 50, fw: false ) )
+		XCTAssertEqual( m.tick( reading( 50, fw: false ) ), [ .firmwareLimit( upper: 80, lower: 75 ) ] )
+		XCTAssertEqual( m.tick( reading( 80, fw: true ) ), [] )
+		XCTAssertNotNil( m.heldSince )
+		XCTAssertEqual( m.set( .level( lower: 80, upper: 85 ), force: false, enabled: true, reading: reading( 82, fw: true ) ), [] )   // no refill dance: firmware does it
+	}
+
+	func testWarningOnlyWhileActive() {
+		var m = MaintainState( backend: .tahoe )
+		XCTAssertNil( m.warning( reading( 80 ), isCharging: true, amperage: 900 ) )
+		_ = m.set( band, force: false, enabled: true, reading: reading( 80 ) )
+		let t0 = Date( timeIntervalSince1970: 0 )
+		_ = m.tick( reading( 80 ), now: t0 )
+		XCTAssertNotNil( m.warning( reading( 80, charging: false ), isCharging: true, amperage: 900, now: t0.addingTimeInterval( 300 ) ) )
 	}
 
 }

@@ -59,7 +59,7 @@ function setup() {
 	require_env CI_KEYCHAIN_PASSWORD DEVELOPER_ID_APPLICATION_P12_BASE64 DEVELOPER_ID_APPLICATION_P12_PASSWORD APPLE_TEAM_ID
 	[[ $notary == 0 ]] || require_env NOTARY_API_KEY_P8_BASE64 NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID
 
-	[[ "$APPLE_TEAM_ID" == "$TEAM_ID" ]] || fail "APPLE_TEAM_ID does not match DEVELOPMENT_TEAM in project.yml"
+	[[ "$APPLE_TEAM_ID" == "$TEAM_ID" ]] || fail "APPLE_TEAM_ID does not match BATTERY_TEAM_ID in project.yml"
 
 	# A half-finished setup must not leave credentials behind, EXIT also covers fail()
 	trap 'cleanup' EXIT

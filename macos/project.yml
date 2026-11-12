@@ -9,7 +9,10 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ARCHS: arm64
     ONLY_ACTIVE_ARCH: NO
-    DEVELOPMENT_TEAM: CAWM399GFD
+    # The one copy of the team id. Xcode signs with it (Debug clears DEVELOPMENT_TEAM, release archives ad hoc and sign later),
+    # the daemon embeds it (BatteryTeamID below) to pin its XPC callers, scripts/release/lib.sh reads it from here.
+    BATTERY_TEAM_ID: CAWM399GFD
+    DEVELOPMENT_TEAM: $(BATTERY_TEAM_ID)
     ENABLE_HARDENED_RUNTIME: YES
     MARKETING_VERSION: 2.0.0-dev
     CURRENT_PROJECT_VERSION: 1
@@ -24,7 +27,7 @@ settings:
       DEVELOPMENT_TEAM: ""
 packages:
   BatteryCore: { path: . }
-  # scripts/release/lib.sh reads this version (and DEVELOPMENT_TEAM, SUPublicEDKey) from this file, keep the one-line form
+  # scripts/release/lib.sh reads this version (and BATTERY_TEAM_ID, SUPublicEDKey) from this file, keep the one-line form
   Sparkle: { url: "https://github.com/sparkle-project/Sparkle", exactVersion: 2.10.1 }
 
 targets:
@@ -85,12 +88,11 @@ targets:
     dependencies:
       - package: BatteryCore
         product: BatteryCore
-    # Embedded in the binary (__info_plist). The daemon pins its XPC callers to BatteryTeamID, so the team lives only
-    # in DEVELOPMENT_TEAM above; Debug has none and skips the check.
+    # Embedded in the binary (__info_plist). The daemon pins its XPC callers to BatteryTeamID; Debug builds skip the check.
     info:
       path: Daemon/Info.plist
       properties:
-        BatteryTeamID: $(DEVELOPMENT_TEAM)
+        BatteryTeamID: $(BATTERY_TEAM_ID)
     settings:
       base:
         PRODUCT_NAME: batteryd

@@ -1,7 +1,7 @@
 import Foundation
 import BatteryCore
 
-/// Root daemon: owns the SMC. Everything else talks to it over XPC.
+/// Root daemon: owns the SMC. Everything else talks to it over XPC: one snapshot call, one `run( Command )` call.
 final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 
 	private let smc = SMC()
@@ -22,8 +22,9 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		_ = maintainer
 		_ = scheduler
 
-		// Jobs and force-discharge aren't persisted: after a crash or reboot the adapter must not stay cut
-		if maintainer?.forceDischarge != true { control?.adapter( on: true ) }
+		// Jobs aren't persisted: after a crash or reboot the adapter must not stay cut, unless an active force-discharge owns it
+		let forcing = maintainer.map { $0.state.active != nil && $0.state.force } ?? false
+		if !forcing { control?.adapter( on: true ) }
 
 		events.onWake = { [ weak self ] in log( "wake" ); self?.maintainer?.reconcile(); self?.jobs?.reconcile(); self?.scheduler?.check() }
 		events.onWillSleep = { [ weak self ] in self?.maintainer?.willSleep() }
@@ -53,165 +54,123 @@ final class Service: NSObject, BatteryDaemonXPC, NSXPCListenerDelegate {
 		return true
 	}
 
+	// MARK: XPC
+
 	func snapshot( reply: @escaping ( Bool, String ) -> Void ) {
 		onMain { [ self ] in
-			guard let control, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
-			var warning = maintainer?.warning( reading )
-			if control.backend == .none { warning = control.unsupportedMessage }
+			guard let control, let maintainer, let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
 			let status = BatteryStatus(
 				percent: reading.snapshot.percent, voltage: reading.voltage, remaining: reading.snapshot.remaining, acAttached: reading.snapshot.acAttached,
 				chargingEnabled: control.chargingEnabled, discharging: control.adapterCut,
-				maintain: maintainer?.target?.persisted, forceDischarge: maintainer?.forceDischarge ?? false,
+				maintain: maintainer.state.active, limit: maintainer.state.target, forceDischarge: maintainer.state.force,
 				activity: jobs?.activity, smcKeys: caps.keys.sorted(), daemonVersion: batteryFullVersion,
-				backend: control.backend.rawValue, isCharging: reading.isCharging, amperage: reading.amperage,
-				warning: warning, scheduleDays: scheduler?.days ?? 0, nextTopOff: scheduler?.nextRun,
-				cycleCount: reading.cycleCount, healthPercent: reading.healthPercent )
+				backend: control.backend, isCharging: reading.isCharging, amperage: reading.amperage,
+				warning: Limits.chargeControl( caps ) ?? maintainer.warning( reading ), scheduleDays: scheduler?.days ?? 0, nextTopOff: scheduler?.nextRun,
+				cycleCount: reading.cycleCount, healthPercent: reading.healthPercent, cliInstalled: CLILink.installed )
 			reply( true, status.encoded() )
 		}
 	}
 
-	func probe( reply: @escaping ( Bool, String ) -> Void ) {
+	/// Arguments come from any signed client: decode, gate (`Limits.refusal`), then act. Never trust the caller's parsing.
+	func run( _ json: String, reply: @escaping ( Bool, String ) -> Void ) {
+		let uid = NSXPCConnection.current()?.effectiveUserIdentifier     // thread-local: read before hopping
+		guard let command = Command.decode( json ) else { return reply( false, "Unreadable command (version mismatch? update Battery.app)" ) }
 		onMain { [ self ] in
-			guard smc != nil else { return reply( false, "AppleSMC unavailable" ) }
-			let values = SMCCapabilities.probeKeys.map { "\( $0 )=\( smc?.read( $0 ) ?? "-" )" }.joined( separator: " " )
-			reply( true, "\( caps.summary )\n\( values )" )
+			if let answer = housekeeping( command, uid: uid ) { return reply( answer.0, answer.1 ) }
+			guard let control, let maintainer, let jobs, let scheduler else { return reply( false, "AppleSMC unavailable" ) }
+			if let why = Limits.refusal( command, caps: caps ) { return reply( false, why ) }
+
+			switch command {
+
+			case .maintain( .set( let target, let force, let enabled ) ):
+				if enabled { jobs.abort() }     // a remembered-only change (slider while off) leaves a running job alone
+				maintainer.set( target, force: force, enabled: enabled )
+				reply( true, enabled ? "Maintaining battery at \( target.display )" : "Limit set to \( target.display ), off" )
+
+			case .maintain( .stop ):
+				maintainer.stop()
+				reply( true, "Battery maintenance stopped" )
+
+			/// Drop any job and the maintain target, restore stock charging (also clears a firmware limit). `maintain recover` and uninstall.
+			case .maintain( .recover ):
+				jobs.cancel()
+				maintainer.stop()
+				control.resetAll()
+				reply( true, "Charging restored" )
+
+			case .charge( let percent ):
+				jobs.start( .charge( percent ) )
+				reply( true, "Charging to \( percent )%" )
+
+			case .discharge( let percent ):
+				jobs.start( .discharge( percent ) )
+				reply( true, "Discharging to \( percent )%" )
+
+			case .calibrate:
+				let c = Calibration()
+				jobs.start( .calibrate( c ) )
+				reply( true, "Calibration started: \( c.phase.message )" )
+
+			/// Manual override: the user asked for a specific state, so nothing else keeps fighting it (#460 / #440).
+			case .charging( let on ):
+				guard let reading = Power.read() else { return reply( false, "Battery unreadable" ) }
+				jobs.abort()
+				if control.adapterCutByUs { control.adapter( on: true ) }     // a replaced job may have cut it
+				if maintainer.state.active != nil { maintainer.stop(); log( "manual charging override stopped maintain" ) }
+				let ok = control.charging( on, level: reading.snapshot.percent )
+				reply( ok, ok ? "ok" : "Writing the charge control failed (see `battery logs`)" )
+
+			case .adapter( let on ):
+				jobs.abort()
+				let ok = control.adapter( on: on )
+				reply( ok, ok ? "ok" : "Writing the adapter control failed (see `battery logs`)" )
+
+			case .schedule( let days ):
+				scheduler.set( days: days )
+				reply( true, days > 0 ? "Top off every \( days ) days" : "Schedule off" )
+
+			/// Full removal: restore charging, forget the schedule, drop the CLI link, delete persisted state and the log. The app unregisters the daemon right after.
+			case .uninstall:
+				jobs.cancel()
+				maintainer.stop()
+				scheduler.set( days: 0 )
+				control.resetAll()
+				CLILink.uninstall()
+				// Last: nothing may write state or log lines after this
+				try? FileManager.default.removeItem( atPath: batteryStateDir )
+				try? FileManager.default.removeItem( atPath: batteryLogPath )
+				reply( true, "Charging restored, helper state removed" )
+
+			case .probe:
+				let values = SMCCapabilities.probeKeys.map { "\( $0 )=\( smc?.read( $0 ) ?? "-" )" }.joined( separator: " " )
+				reply( true, "\( caps.summary )\n\( values )" )
+
+			case .status, .statusCSV, .logs, .version, .help, .update, .reinstall, .installCLI, .uninstallCLI, .legacyFound, .removeLegacy:
+				reply( false, "Not a daemon command" )     // local to the CLI, or handled above
+			}
 		}
 	}
 
-	// MARK: Maintain and jobs. Arguments come from any signed client: validate here, never trust the caller.
-
-	func maintain( _ setting: String, forceDischarge: Bool, reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			guard let maintainer else { return reply( false, "AppleSMC unavailable" ) }
-			guard let target = try? MaintainTarget( persisted: setting ) else { return reply( false, "Invalid maintain target: \( setting )" ) }
-			jobs?.abort()
-			if let why = maintainer.start( target, force: forceDischarge ) { return reply( false, why ) }
-			reply( true, "Maintaining battery at \( target.display )" )
-		}
-	}
-
-	func stopMaintain( reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			maintainer?.stop()
-			reply( true, "Battery maintenance stopped" )
-		}
-	}
-
-	func charge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			guard let jobs, let control else { return reply( false, "AppleSMC unavailable" ) }
-			if let why = Limits.check( charge: percent ) { return reply( false, why ) }
-			guard control.backend != .none else { return reply( false, control.unsupportedMessage ) }
-			jobs.start( .charge( percent ) )
-			reply( true, "Charging to \( percent )%" )
-		}
-	}
-
-	func discharge( _ percent: Int, reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			guard let jobs, let control else { return reply( false, "AppleSMC unavailable" ) }
-			if let why = Limits.check( discharge: percent ) { return reply( false, why ) }
-			guard control.caps.canCutAdapter else { return reply( false, "Discharging isn't available on this Mac (no adapter-cut key)." ) }
-			jobs.start( .discharge( percent ) )
-			reply( true, "Discharging to \( percent )%" )
-		}
-	}
-
-	func calibrate( reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			guard let jobs, let control else { return reply( false, "AppleSMC unavailable" ) }
-			guard control.caps.canCutAdapter, control.backend != .none else { return reply( false, "Calibration isn't available on this Mac (needs adapter cut and charge control)." ) }
-			let c = Calibration()
-			jobs.start( .calibrate( c ) )
-			reply( true, "Calibration started: \( c.phase.message )" )
-		}
-	}
-
-	/// Drop any job and the maintain target, restore stock charging (also clears a firmware limit). `maintain recover` and uninstall.
-	func resetAll( reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			jobs?.cancel()
-			maintainer?.stop()
-			control?.resetAll()
-			reply( true, "Charging restored" )
-		}
-	}
-
-	/// Manual override: the user asked for a specific state, so nothing else keeps fighting it (#460 / #440).
-	func setCharging( _ on: Bool, reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			guard let control, let reading = Power.read() else { return reply( false, "AppleSMC unavailable" ) }
-			guard control.backend != .none else { return reply( false, control.unsupportedMessage ) }
-			jobs?.abort()
-			if control.adapterCutByUs { control.adapter( on: true ) }     // a replaced job may have cut it
-			if maintainer?.target != nil { maintainer?.stop(); log( "manual charging override stopped maintain" ) }
-			let ok = control.charging( on, level: reading.snapshot.percent )
-			reply( ok, ok ? "ok" : "Writing the charge control failed (see `battery logs`)" )
-		}
-	}
-
-	func setAdapter( _ on: Bool, reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			guard let control else { return reply( false, "AppleSMC unavailable" ) }
-			guard control.caps.canCutAdapter else { return reply( false, "No adapter-cut key on this Mac." ) }
-			jobs?.abort()
-			let ok = control.adapter( on: on )
-			reply( ok, ok ? "ok" : "Writing the adapter control failed (see `battery logs`)" )
-		}
-	}
-
-	func setSchedule( _ days: Int, reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			guard let scheduler else { return reply( false, "AppleSMC unavailable" ) }
-			guard Limits.scheduleDays.contains( days ) else { return reply( false, "Schedule must be 0-90 days." ) }
-			scheduler.set( days: days )
-			reply( true, days > 0 ? "Top off every \( days ) days" : "Schedule off" )
-		}
-	}
-
-	// MARK: Housekeeping
-
-	func legacyFound( reply: @escaping ( Bool, String ) -> Void ) {
-		guard let uid = NSXPCConnection.current()?.effectiveUserIdentifier else { return reply( false, "No caller" ) }   // thread-local: read before hopping
-		onMain { reply( true, Legacy.found( uid: uid ).joined( separator: "," ) ) }
-	}
-
-	func removeLegacy( reply: @escaping ( Bool, String ) -> Void ) {
-		guard let uid = NSXPCConnection.current()?.effectiveUserIdentifier else { return reply( false, "No caller" ) }
-		onMain {
-			let removed = Legacy.remove( uid: uid )
-			log( "removed v1 leftovers: \( removed )" )
-			reply( true, removed.joined( separator: "," ) )
-		}
-	}
-
-	func installCLI( reply: @escaping ( Bool, String ) -> Void ) {
-		onMain {
+	/// Commands that need no SMC: still answered on a Mac without AppleSMC. Nil = not one of these.
+	private func housekeeping( _ command: Command, uid: uid_t? ) -> ( Bool, String )? {
+		switch command {
+		case .installCLI:
 			let ( ok, text ) = CLILink.install()
 			log( "install CLI: \( text )" )
-			reply( ok, text )
-		}
-	}
-
-	func uninstallCLI( reply: @escaping ( Bool, String ) -> Void ) {
-		onMain {
+			return ( ok, text )
+		case .uninstallCLI:
 			CLILink.uninstall()
-			reply( true, "ok" )
-		}
-	}
-
-	func uninstall( reply: @escaping ( Bool, String ) -> Void ) {
-		onMain { [ self ] in
-			jobs?.cancel()
-			maintainer?.stop()
-			scheduler?.set( days: 0 )
-			control?.resetAll()
-			CLILink.uninstall()
-
-			// Last: nothing may write state or log lines after this
-			try? FileManager.default.removeItem( atPath: batteryStateDir )
-			try? FileManager.default.removeItem( atPath: batteryLogPath )
-			reply( true, "Charging restored, helper state removed" )
+			return ( true, "ok" )
+		case .legacyFound:
+			guard let uid else { return ( false, "No caller" ) }
+			return ( true, Legacy.found( uid: uid ).joined( separator: "," ) )
+		case .removeLegacy:
+			guard let uid else { return ( false, "No caller" ) }
+			let removed = Legacy.remove( uid: uid )
+			log( "removed v1 leftovers: \( removed )" )
+			return ( true, removed.joined( separator: "," ) )
+		default:
+			return nil
 		}
 	}
 

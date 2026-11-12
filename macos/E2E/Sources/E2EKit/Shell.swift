@@ -34,6 +34,12 @@ public func sh( _ path: String, _ args: [ String ] = [], timeout: TimeInterval =
 	return Result( code: p.terminationStatus, out: String( decoding: out, as: UTF8.self ).trimmingCharacters( in: .whitespacesAndNewlines ), err: String( decoding: err, as: UTF8.self ).trimmingCharacters( in: .whitespacesAndNewlines ) )
 }
 
+/// Polls until `condition` holds, or times out with false. The common case of `eventually`.
+@discardableResult
+public func until( _ seconds: TimeInterval = 10, every: TimeInterval = 0.25, _ condition: () -> Bool ) -> Bool {
+	eventually( seconds, every: every ) { condition() ? true : nil } ?? false
+}
+
 /// Polls until `check` returns a value (not nil / not false), or times out with nil.
 @discardableResult
 public func eventually<T>( _ seconds: TimeInterval = 10, every: TimeInterval = 0.25, _ check: () -> T? ) -> T? {

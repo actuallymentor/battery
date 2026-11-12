@@ -7,15 +7,15 @@ struct BatteryApp: App {
 	@State private var model = AppModel()
 	private let updater = Updater()
 	@AppStorage( Pref.showPercent ) private var showPercent = true
-	@AppStorage( Pref.iconStyle ) private var iconStyle = IconStyle.battery.rawValue
-	@AppStorage( Pref.appearance ) private var appearance = Appearance.system.rawValue
+	@AppStorage( Pref.iconStyle ) private var iconStyle = IconStyle.battery
+	@AppStorage( Pref.appearance ) private var appearance = Appearance.system
 
 	var body: some Scene {
 
 		MenuBarExtra {
 			MenuContent( model: model )
 		} label: {
-			MenuBarLabel( status: model.status, helper: model.helper, showPercent: showPercent, style: IconStyle( rawValue: iconStyle ) ?? .battery )
+			MenuBarLabel( status: model.status, helper: model.helper, showPercent: showPercent, style: iconStyle )
 				.onChange( of: appearance, initial: true ) { applyAppearance() }
 				.modifier( SetupPrompt( model: model ) )
 		}
@@ -41,7 +41,7 @@ struct MenuBarLabel: View {
 	var body: some View {
 		HStack( spacing: 3 ) {
 			if style == .battery, helper == .ready, let status {
-				Image( nsImage: BatteryGlyph.image( percent: status.percent, charging: status.acAttached && status.chargingEnabled != false && status.percent < 100, paused: status.chargingPaused ) )
+				Image( nsImage: BatteryGlyph.image( percent: status.percent, charging: status.isChargingNow, paused: status.chargingPaused ) )
 			} else {
 				Image( systemName: symbol )
 			}
@@ -63,5 +63,5 @@ struct MenuBarLabel: View {
 
 /// App-wide override of the device theme (nil = follow the system)
 @MainActor func applyAppearance() {
-	NSApp.appearance = ( Appearance( rawValue: UserDefaults.standard.string( forKey: Pref.appearance ) ?? "" ) ?? .system ).nsAppearance
+	NSApp.appearance = ( UserDefaults.standard.string( forKey: Pref.appearance ).flatMap( Appearance.init ) ?? .system ).nsAppearance
 }

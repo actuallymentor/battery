@@ -34,7 +34,7 @@ Defaults in `lib.sh`, override via env:
 - SMAppService daemon plist in `Battery.app/Contents/Library/LaunchDaemons/`, `BundleProgram` inside the bundle
 - CLI, daemon, Sparkle: nested anywhere in the bundle, `sign.sh` finds every Mach-O
 - Entitlements: set them in Xcode, signing preserves them
-- Identity: `lib.sh` reads `DEVELOPMENT_TEAM`, `SUPublicEDKey` and the Sparkle `exactVersion` from `macos/project.yml`; `sign.sh` checks the built binaries, the daemon plist and `batteryDaemonName` agree
+- Identity: `lib.sh` reads `BATTERY_TEAM_ID`, `SUPublicEDKey` and the Sparkle `exactVersion` from `macos/project.yml`; `sign.sh` checks the built binaries, the daemon plist and `batteryDaemonName` agree
 
 ## Gotchas
 

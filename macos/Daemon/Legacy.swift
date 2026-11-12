@@ -64,6 +64,9 @@ enum CLILink {
 	static let link = "/usr/local/bin/battery"
 	static let target = "/Applications/Battery.app/Contents/Helpers/battery"
 
+	/// Our link, pointing into the app (the status reports it; the app never reads the disk itself)
+	static var installed: Bool { ( try? FileManager.default.destinationOfSymbolicLink( atPath: link ) ) == target }
+
 	static func install() -> ( Bool, String ) {
 		let fm = FileManager.default
 		guard fm.isExecutableFile( atPath: target ) else { return ( false, "Move Battery.app to /Applications first." ) }

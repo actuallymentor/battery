@@ -1,6 +1,7 @@
 import Foundation
 
-/// Everything the app needs in one daemon round trip. JSON over XPC.
+/// Everything the app needs in one daemon round trip. JSON over XPC. The daemon is the source of truth for all of it:
+/// the app shows this, it does not keep its own copy.
 public struct BatteryStatus: Codable, Equatable, Sendable {
 
 	public var percent: Int
@@ -12,8 +13,10 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 	public var chargingEnabled: Bool?
 	public var discharging: Bool?
 
-	/// `MaintainTarget.persisted` form, nil when not maintaining
-	public var maintain: String?
+	/// The band held right now, nil when the limit is off
+	public var maintain: MaintainTarget?
+	/// The remembered target, also while off (what the slider shows). Nil until one was ever set.
+	public var limit: MaintainTarget?
 	public var forceDischarge: Bool
 
 	/// Running job ("Charging to 90%"), nil when idle
@@ -24,8 +27,8 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 
 	public var daemonVersion: String
 
-	/// How this Mac holds charging (`SMCCapabilities.Backend` raw value)
-	public var backend: String
+	/// How this Mac holds charging. The init default is the common case for fixtures; the daemon always passes its own.
+	public var backend: SMCCapabilities.Backend
 
 	/// Observed, not requested: is current actually flowing into the pack, and how much (mA, + = charging)
 	public var isCharging: Bool?
@@ -42,11 +45,14 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 	public var cycleCount: Int?
 	public var healthPercent: Int?
 
+	/// /usr/local/bin/battery points into the app (the daemon writes it, so it reports it)
+	public var cliInstalled: Bool
+
 	public init( percent: Int, voltage: Double? = nil, remaining: String = "no estimate", acAttached: Bool,
-	             chargingEnabled: Bool? = nil, discharging: Bool? = nil, maintain: String? = nil, forceDischarge: Bool = false,
+	             chargingEnabled: Bool? = nil, discharging: Bool? = nil, maintain: MaintainTarget? = nil, limit: MaintainTarget? = nil, forceDischarge: Bool = false,
 	             activity: String? = nil, smcKeys: [ String ] = [], daemonVersion: String = "",
-	             backend: String = "unknown", isCharging: Bool? = nil, amperage: Int? = nil, warning: String? = nil, scheduleDays: Int = 0, nextTopOff: Date? = nil,
-	             cycleCount: Int? = nil, healthPercent: Int? = nil ) {
+	             backend: SMCCapabilities.Backend = .tahoe, isCharging: Bool? = nil, amperage: Int? = nil, warning: String? = nil, scheduleDays: Int = 0, nextTopOff: Date? = nil,
+	             cycleCount: Int? = nil, healthPercent: Int? = nil, cliInstalled: Bool = false ) {
 		self.scheduleDays = scheduleDays
 		self.nextTopOff = nextTopOff
 		self.cycleCount = cycleCount
@@ -62,24 +68,24 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 		self.chargingEnabled = chargingEnabled
 		self.discharging = discharging
 		self.maintain = maintain
+		self.limit = limit ?? maintain
 		self.forceDischarge = forceDischarge
 		self.activity = activity
 		self.smcKeys = smcKeys
 		self.daemonVersion = daemonVersion
+		self.cliInstalled = cliInstalled
 	}
 
 	/// Force discharge, discharge-to and calibrate depend on an adapter-cut key
 	public var canCutAdapter: Bool { SMCCapabilities( keys: Set( smcKeys ) ).canCutAdapter }
 
 	/// This Mac has some way to hold charging
-	public var canLimit: Bool { backend != "none" }
-
-	public var maintainTarget: MaintainTarget? { maintain.flatMap { try? MaintainTarget( persisted: $0 ) } }
+	public var canLimit: Bool { backend != .none }
 
 	/// One-line state for the popover header
 	public var headline: String {
 		if let activity { return activity }
-		if backend == "none" { return "Limiting not supported" }
+		if backend == .none { return "Limiting not supported" }
 		if discharging == true { return "Discharging on adapter" }
 		if !acAttached { return "On battery" }
 		if chargingEnabled == false { return maintain != nil ? "Holding at limit" : "Charging paused" }
@@ -92,6 +98,9 @@ public struct BatteryStatus: Codable, Equatable, Sendable {
 
 	/// Plugged in, but charging is held off: by the limit, or by a manual pause
 	public var chargingPaused: Bool { acAttached && chargingEnabled == false && discharging != true && activity == nil }
+
+	/// Current is flowing in: the menu bar glyph's bolt
+	public var isChargingNow: Bool { acAttached && chargingEnabled != false && percent < 100 }
 
 	/// "2:10 left" on battery, "0:40 to full" while charging, nothing otherwise
 	public var timeLine: String? {

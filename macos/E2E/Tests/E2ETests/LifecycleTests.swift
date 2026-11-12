@@ -31,7 +31,7 @@ final class LifecycleTests: XCTestCase {
 			if let s = loginSwitch(), !s.on { s.press() }
 			GUI.launch()
 			enableButton()?.press()
-			_ = eventually( 30 ) { self.helperUp() ? true : nil }
+			_ = until( 30 ) { self.helperUp() }
 		}
 		setupWindow?.find( role: "AXButton", label: "Done" )?.press()
 		quitSystemSettings()
@@ -76,8 +76,8 @@ final class LifecycleTests: XCTestCase {
 		let confirm = try XCTUnwrap( eventually( 5 ) { GUI.button( "Restore charging and uninstall" ) }, "no confirmation sheet:\n\( GUI.snapshot )" )
 		confirm.press()
 
-		XCTAssertNotNil( eventually( 20 ) { GUI.app == nil ? true : nil }, "the app should quit after uninstalling" )
-		XCTAssertNotNil( eventually( 20 ) { self.registered ? nil : true }, "the helper should be gone from launchd" )
+		XCTAssertTrue( until( 20 ) { GUI.app == nil }, "the app should quit after uninstalling" )
+		XCTAssertTrue( until( 20 ) { !( self.registered ) }, "the helper should be gone from launchd" )
 		XCTAssertFalse( helperUp(), "the CLI should find no helper" )
 
 		// Back the way a new user starts: the setup window opens by itself, one click, helper answering, "All set"
@@ -85,10 +85,10 @@ final class LifecycleTests: XCTestCase {
 		let window = try XCTUnwrap( eventually( 15 ) { self.setupWindow }, "no setup window after uninstall:\n\( GUI.snapshot )" )
 		XCTAssertNotNil( window.find( role: "AXStaticText", label: "One-time setup required" ) )
 		try XCTUnwrap( window.find( role: "AXButton", label: "Open Login Items" ) ).press()
-		XCTAssertNotNil( eventually( 30 ) { self.helperUp() ? true : nil }, "helper did not come back:\n\( GUI.snapshot )" )
+		XCTAssertTrue( until( 30 ) { self.helperUp() }, "helper did not come back:\n\( GUI.snapshot )" )
 		let done = try XCTUnwrap( eventually( 15 ) { self.setupWindow?.find( role: "AXButton", label: "Done" ) }, "setup window should say all set:\n\( GUI.snapshot )" )
 		done.press()
-		XCTAssertNotNil( eventually( 5 ) { self.setupWindow == nil ? true : nil }, "Done should close the setup window" )
+		XCTAssertTrue( until( 5 ) { self.setupWindow == nil }, "Done should close the setup window" )
 		quitSystemSettings()
 		XCTAssertNotNil( eventually( 15 ) { GUI.openPopover()?.find( role: "AXCheckBox", label: "Charge limit" ) }, "popover should show the limit switch again" )
 		XCTAssertTrue( registered )
@@ -132,15 +132,15 @@ final class LifecycleTests: XCTestCase {
 			eventually( 5 ) { sw.find { $0.role == "AXButton" && $0.title == "Modify Settings" } }?.press()
 		}
 
-		XCTAssertNotNil( eventually( 20 ) { self.currentSwitch?.on == false ? true : nil }, "switch should be off" )
-		XCTAssertNotNil( eventually( 20 ) { self.helperUp() ? nil : true }, "helper should stop answering once approval is revoked" )
+		XCTAssertTrue( until( 20 ) { self.currentSwitch?.on == false }, "switch should be off" )
+		XCTAssertTrue( until( 20 ) { !( self.helperUp() ) }, "helper should stop answering once approval is revoked" )
 		XCTAssertNotNil( eventually( 20 ) { GUI.openPopover()?.find( role: "AXStaticText", label: "Switch on Battery in Login Items" ) }, "app should ask for approval:\n\( GUI.snapshot )" )
 		XCTAssertNotNil( GUI.popover?.find( role: "AXButton", label: "Open Login Items" ) )
 		XCTAssertNotNil( eventually( 10 ) { self.setupWindow }, "the setup window should open when approval is revoked" )
 
 		// Granting needs no password
 		try XCTUnwrap( loginSwitch() ).press()
-		XCTAssertNotNil( eventually( 30 ) { self.helperUp() ? true : nil }, "helper should answer once approved again" )
+		XCTAssertTrue( until( 30 ) { self.helperUp() }, "helper should answer once approved again" )
 		XCTAssertNotNil( eventually( 15 ) { GUI.openPopover()?.find( role: "AXCheckBox", label: "Charge limit" ) } )
 		let done = try XCTUnwrap( eventually( 10 ) { self.setupWindow?.find( role: "AXButton", label: "Done" ) }, "setup window should say all set" )
 		done.press()

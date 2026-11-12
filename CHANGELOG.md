@@ -5,6 +5,10 @@
 ### Changed
 - First launch opens a setup window ("One-time setup required" → **Open Login Items**) instead of waiting for a click on the menu bar icon. It also opens when approval is switched off later, and says "All set" once the helper runs.
 
+- The helper remembers the charge limit, also while the switch is off: the slider shows the same value for every user, after a reboot, and after a CLI change. (Before, the app kept its own copy and reconciled.)
+- Settings shows a failed action under the tabs until dismissed. Before, the message vanished within milliseconds.
+- All helper-backed switches (limit, allow discharge, top-off, Terminal) flip on the click and lock until the helper has answered.
+
 ### Fixed
 - Settings → Helper → "Use `battery` in Terminal" flips on the click and is locked until done. Before, it lagged a few seconds and looked broken, inviting repeat clicks.
 - Raising the limit while charging is held now charges up to the new limit. Before, a battery inside the new 5% band stayed held (82% held at 80, raised to 85: no charging).

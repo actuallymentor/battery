@@ -46,14 +46,14 @@ public enum Report {
 
 	/// `battery status`, rendered from the daemon snapshot so the root daemon never formats text
 	public static func status( _ s: BatteryStatus ) -> String {
-		var out = status( PowerSnapshot( percent: s.percent, remaining: s.remaining, acAttached: s.acAttached ), voltage: s.voltage, charging: s.chargingEnabled, maintain: s.maintainTarget )
+		var out = status( PowerSnapshot( percent: s.percent, remaining: s.remaining, acAttached: s.acAttached ), voltage: s.voltage, charging: s.chargingEnabled, maintain: s.maintain )
 		if let activity = s.activity { out += "\n\( activity )" }
 		if let warning = s.warning { out += "\nWarning: \( warning )" }
 		return out
 	}
 
 	public static func csv( _ s: BatteryStatus ) -> String {
-		csv( PowerSnapshot( percent: s.percent, remaining: s.remaining, acAttached: s.acAttached ), charging: s.chargingEnabled, discharging: s.discharging, maintain: s.maintainTarget )
+		csv( PowerSnapshot( percent: s.percent, remaining: s.remaining, acAttached: s.acAttached ), charging: s.chargingEnabled, discharging: s.discharging, maintain: s.maintain )
 	}
 
 	/// `battery status_csv`: percent,remaining,charging,discharging,maintain

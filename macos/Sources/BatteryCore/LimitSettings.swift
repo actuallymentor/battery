@@ -1,32 +1,23 @@
 import Foundation
 
-/// What the popover edits: one limit. Charging resumes `band` points below it (v1's fixed 5 point hysteresis, ranges stay a CLI thing).
-public struct LimitSettings: Equatable, Sendable {
+/// The app's one-number view of a maintain target: a limit, held as a band `band` points wide (v1's fixed 5 point
+/// hysteresis, ranges stay a CLI thing). The daemon remembers the target; this only converts slider <-> band.
+public enum LimitSettings {
 
 	public static let sliderRange = 20...100
 	public static let band = 5
-
-	public private( set ) var limit: Int
-	public var force: Bool
-
-	public init( limit: Int = 80, force: Bool = true ) {
-		self.limit = Self.sliderRange.clamp( limit )
-		self.force = force
-	}
-
-	public mutating func setLimit( _ n: Int ) { limit = Self.sliderRange.clamp( n ) }
+	public static let defaultLimit = 80
 
 	/// The band to send: stop at the limit, resume `band` below (never under the maintain floor)
-	public var target: MaintainTarget { .level( lower: max( limit - Self.band, Limits.minMaintain ), upper: limit ) }
-
-	/// Adopt what the daemon is actually doing (CLI edits, reboot, other user). Only the upper edge: the band is ours.
-	public mutating func adopt( _ t: MaintainTarget, force: Bool ) {
-		guard case .level( _, let u ) = t else { return }
-		setLimit( u )
-		self.force = force
+	public static func target( limit: Int ) -> MaintainTarget {
+		let limit = sliderRange.clamp( limit )
+		return .level( lower: max( limit - band, Limits.minMaintain ), upper: limit )
 	}
 
+	/// What the slider shows for a daemon target: the top of the band, the default for voltage targets or none yet
+	public static func limit( of t: MaintainTarget? ) -> Int { t?.upper.map( sliderRange.clamp ) ?? defaultLimit }
+
 	/// Where "Discharge to…" goes: ten points under the limit, never under the slider floor.
-	public var dischargeTarget: Int { max( limit - 10, Self.sliderRange.lowerBound ) }
+	public static func dischargeTarget( limit: Int ) -> Int { max( limit - 10, sliderRange.lowerBound ) }
 
 }

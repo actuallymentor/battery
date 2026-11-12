@@ -4,31 +4,39 @@ import ServiceManagement
 import UserNotifications
 import BatteryCore
 
-/// State + actions for every view. One poll loop; the daemon is the source of truth.
+/// State + actions for every view. One poll loop; the daemon is the source of truth for everything in `status`.
+/// The app keeps no copy of a setting: a control shows the daemon's value, or the value it just asked for until the
+/// daemon has answered (`Knob`).
 @MainActor
 @Observable
 final class AppModel {
 
 	enum Helper: Equatable { case unknown, ready, notRegistered, needsApproval, unreachable }
 
+	/// Last snapshot. Kept while the helper is silent (views gate on `helper`), so the menu bar keeps its percent
+	/// and a limit that holds charging off is still known to.
 	private( set ) var status: BatteryStatus?
 	private( set ) var helper: Helper = .unknown
+	/// A failed action or repair. Sticky until dismissed or the next action succeeds.
 	private( set ) var error: String?
-	/// Last known truth while the helper answered: a limit that holds charging off keeps doing so with no helper to lift it.
-	private( set ) var limitWasActive = false
 	/// The setup window opens on its own once per launch, the first time the helper needs setting up or approving
 	var setupPrompted = false
 	var needsSetup: Bool { helper == .notRegistered || helper == .needsApproval }
+	/// A limit that holds charging off keeps doing so with no helper to lift it
+	var limitWasActive: Bool { status?.maintain != nil }
+
 	/// Actions in flight. Polling pauses while > 0 so an old snapshot can't overwrite a fresh change.
 	private var inFlight = 0
 	var busy: Bool { inFlight > 0 }
 
-	/// What the popover edits. Persisted per user; the daemon's own target wins on first contact and on outside changes.
-	var settings = LimitSettings.load() { didSet { settings.save() } }
 	private( set ) var legacyLeftovers: [ String ] = []
 
 	/// Launch at login for the menu bar app itself
-	private( set ) var launchAtLogin = SMAppService.mainApp.status == .enabled
+	var launchAtLogin: Bool {
+		get { loginItem }
+		set { setLaunchAtLogin( newValue ) }
+	}
+	private var loginItem = SMAppService.mainApp.status == .enabled
 
 	private let client = DaemonClient()
 	private let daemon = SMAppService.daemon( plistName: "co.palokaj.battery.daemon.plist" )
@@ -39,8 +47,6 @@ final class AppModel {
 	/// Auto-repair of a registered helper that stopped answering: after two silent polls in a row, at most every 10 minutes
 	private var lastHeal: Date?
 	private var silentPolls = 0
-	/// Last target we adopted or sent: a different one in the daemon means someone else (CLI, reboot) changed it.
-	private var knownTarget: String?
 	private var actionTail: Task<Void, Never>?
 
 	init() {
@@ -62,25 +68,20 @@ final class AppModel {
 	}
 
 	func refresh() async {
-		launchAtLogin = SMAppService.mainApp.status == .enabled
-		if !cliPending { cliInstalled = Self.cliLinked }     // removed or added outside the app
+		loginItem = SMAppService.mainApp.status == .enabled
 		guard inFlight == 0 else { return }
 
 		do {
 			let fresh = try await client.snapshot()
 			guard inFlight == 0 else { return }     // an action started while we waited: this snapshot is already stale
 			status = fresh
-			limitWasActive = fresh.maintain != nil
 			silentPolls = 0
-			restartOutdatedHelper( fresh.daemonVersion )
-			adoptOutsideChanges()
 			helper = .ready
-			error = nil
+			restartOutdatedHelper( fresh.daemonVersion )
 			checkLowBattery()
 			if legacyLeftovers.isEmpty, !defaults.bool( forKey: Pref.legacyDeclined ) { legacyLeftovers = ( try? await client.legacyFound() ) ?? [] }
 		} catch {
 			// Not answering: find out why
-			status = nil
 			switch daemon.status {
 			case .notRegistered, .notFound: helper = .notRegistered
 			case .requiresApproval: helper = .needsApproval
@@ -90,6 +91,15 @@ final class AppModel {
 	}
 
 	// MARK: Helper lifecycle
+
+	/// The setup button: whatever the current state needs
+	func setUpHelper() {
+		switch helper {
+		case .unreachable: repairHelper()
+		case .needsApproval: openLoginItems()
+		default: registerHelper()
+		}
+	}
 
 	func registerHelper() {
 		do { try daemon.register() } catch { self.error = error.localizedDescription }
@@ -102,13 +112,15 @@ final class AppModel {
 	/// if it still doesn't answer, a second round does. Approval itself is only asked when it was switched off.
 	/// A job removed from launchd behind our back (`launchctl bootout`) comes back with unregister + register (2026-11-12, macOS 26.1);
 	/// if it ever doesn't, switching the Login Items toggle off and on does, so we send the user there as a last resort.
+	/// Through `perform`: serialized with every other action, so a heal and a click can't unregister under each other.
 	func repairHelper() {
-		Task {
+		guard !busy else { return }
+		perform { [ self ] in
 			var answering = false
 			for _ in 0..<2 {
 				try? await daemon.unregister()
 				try? await Task.sleep( for: .seconds( 1 ) )
-				do { try daemon.register() } catch { self.error = error.localizedDescription }
+				try daemon.register()
 				if daemon.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems(); break }
 
 				try? await Task.sleep( for: .seconds( 4 ) )
@@ -116,10 +128,9 @@ final class AppModel {
 				if answering { break }
 			}
 			if !answering, daemon.status == .enabled {
-				error = "Still not answering. In Login Items switch Battery off and on again."
 				SMAppService.openSystemSettingsLoginItems()
+				throw DaemonError.failed( "Still not answering. In Login Items switch Battery off and on again." )
 			}
-			await refresh()
 		}
 	}
 
@@ -146,90 +157,106 @@ final class AppModel {
 		guard !defaults.bool( forKey: Pref.loginItemDefaulted ) else { return }
 		defaults.set( true, forKey: Pref.loginItemDefaulted )
 		try? SMAppService.mainApp.register()
-		launchAtLogin = SMAppService.mainApp.status == .enabled
+		loginItem = SMAppService.mainApp.status == .enabled
 	}
 
 	func openLoginItems() { SMAppService.openSystemSettingsLoginItems() }
 
-	func setLaunchAtLogin( _ on: Bool ) {
+	private func setLaunchAtLogin( _ on: Bool ) {
 		do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
 		catch { self.error = error.localizedDescription }
-		launchAtLogin = SMAppService.mainApp.status == .enabled
+		loginItem = SMAppService.mainApp.status == .enabled
 	}
 
-	// MARK: Limit
+	// MARK: Knobs: controls backed by the daemon
 
-	func applyLimit( enabled: Bool ) {
-		perform { [ self ] in
-			if enabled {
-				let t = settings.target
-				knownTarget = t.persisted
-				try await client.maintain( t, force: settings.force && ( status?.canCutAdapter ?? false ) )   // the default is on; Macs without an adapter-cut key just ignore it
-			} else {
-				knownTarget = nil
-				try await client.stopMaintain()
-			}
-		}
+	/// A control the daemon owns. On a click it shows the asked-for value and locks until the daemon has answered and
+	/// the next snapshot is in; then it shows the truth again. Without this a switch bounces back for a beat and invites a second click.
+	enum Knob: Hashable { case limitOn, limit, force, schedule, cli }
+	private var pending: [ Knob: Any ] = [:]
+
+	func isPending( _ k: Knob ) -> Bool { pending[ k ] != nil }
+	private func shown<T>( _ k: Knob, _ truth: T ) -> T { pending[ k ] as? T ?? truth }
+
+	private func flip<T>( _ k: Knob, to value: T, _ action: @escaping () async throws -> Void ) {
+		guard pending[ k ] == nil else { return }
+		pending[ k ] = value
+		perform( action ) { [ weak self ] in self?.pending[ k ] = nil }
 	}
 
-	/// Re-send the band after a value changed while the limit is on.
-	func commitLimitChange() { if status?.maintain != nil { applyLimit( enabled: true ) } }
+	/// The popover switch
+	var limitOn: Bool {
+		get { shown( .limitOn, status?.maintain != nil ) }
+		set { flip( .limitOn, to: newValue ) { [ self ] in try await client.send( newValue ? .maintain( .set( target, forceDischarge: force, enabled: true ) ) : .maintain( .stop ) ) } }
+	}
+
+	/// The slider. Edits show at once; they reach the daemon shortly after the last step, or on mouse release (see `limitChanged`).
+	var limit: Int {
+		get { shown( .limit, LimitSettings.limit( of: status?.limit ) ) }
+		set { limitChanged( to: newValue ) }
+	}
+
+	var allowDischarge: Bool {
+		get { shown( .force, status?.forceDischarge ?? true ) }
+		set { flip( .force, to: newValue ) { [ self ] in try await client.send( .maintain( .set( target, forceDischarge: newValue && canCutAdapter, enabled: limitOn ) ) ) } }
+	}
+
+	var scheduleOn: Bool {
+		get { shown( .schedule, ( status?.scheduleDays ?? 0 ) > 0 ) }
+		set { flip( .schedule, to: newValue ) { [ self ] in try await client.send( .schedule( days: newValue ? 30 : 0 ) ) } }
+	}
+
+	var scheduleDays: Int {
+		get { status?.scheduleDays ?? 0 }
+		set { perform { [ self ] in try await client.send( .schedule( days: newValue ) ) } }
+	}
+
+	var cliInstalled: Bool {
+		get { shown( .cli, status?.cliInstalled ?? false ) }
+		set { flip( .cli, to: newValue ) { [ self ] in try await client.send( newValue ? .installCLI : .uninstallCLI ) } }
+	}
+
+	/// What the slider's number means as a band, and the discharge option as the daemon takes it
+	private var target: MaintainTarget { LimitSettings.target( limit: limit ) }
+	private var canCutAdapter: Bool { status?.canCutAdapter ?? false }
+	private var force: Bool { allowDischarge && canCutAdapter }
+	var dischargeTarget: Int { LimitSettings.dischargeTarget( limit: limit ) }
 
 	private var limitCommit: Task<Void, Never>?
+	/// Which edit a commit belongs to: only the latest one may stop showing the pending value
+	private var limitEdits = 0
 
 	/// Keyboard and VoiceOver steps never "end editing": they apply shortly after the last step. A mouse drag applies once, on
 	/// release: while the button is held the pending apply waits, so a value passed on the way (a pause at 30% on the way to 80%)
 	/// never reaches the helper. The button state, not onEditingChanged: on macOS that fires unreliably for drags (seen in e2e).
+	/// The daemon remembers the limit also while the switch is off, so the slider is sent either way.
 	func limitChanged( to n: Int ) {
-		settings.setLimit( n )
+		pending[ .limit ] = LimitSettings.sliderRange.clamp( n )
+		limitEdits += 1
+		let edit = limitEdits
 		limitCommit?.cancel()
 		limitCommit = Task { [ weak self ] in
 			try? await Task.sleep( for: .milliseconds( 400 ) )
 			while NSEvent.pressedMouseButtons & 1 != 0, !Task.isCancelled { try? await Task.sleep( for: .milliseconds( 50 ) ) }
-			if !Task.isCancelled { self?.commitLimitChange() }
+			guard !Task.isCancelled, let self else { return }
+			perform( { try await self.client.send( .maintain( .set( self.target, forceDischarge: self.force, enabled: self.limitOn ) ) ) } ) { [ weak self ] in
+				if self?.limitEdits == edit { self?.pending[ .limit ] = nil }     // a newer edit is on its way: keep showing it
+			}
 		}
-	}
-
-	/// The daemon owns the real limit (it persists across reboots, the CLI can change it). When its target differs from the
-	/// last one we know, show that instead of stale edits.
-	private func adoptOutsideChanges() {
-		let current = status?.maintain
-		guard current != knownTarget else { return }
-		knownTarget = current
-		if let t = status?.maintainTarget { settings.adopt( t, force: ( status?.canCutAdapter ?? false ) ? ( status?.forceDischarge ?? false ) : settings.force ) }
 	}
 
 	// MARK: Jobs
 
-	func setSchedule( days: Int ) { perform { [ self ] in try await client.setSchedule( days ) } }
-	func chargeTo( _ n: Int ) { perform { [ self ] in try await client.charge( n ) } }
-	func dischargeTo( _ n: Int ) { perform { [ self ] in try await client.discharge( n ) } }
-	func calibrate() { perform { [ self ] in try await client.calibrate() } }
-	func recover() { perform { [ self ] in try await client.resetAll() } }
-
-	// MARK: Command line
-
-	/// What the Terminal switch shows. A click flips it at once and locks it (`cliPending`) until the helper is done, then it
-	/// shows what is on disk. Read straight from disk, SwiftUI never noticed the change and the switch lagged a poll behind.
-	private( set ) var cliInstalled = AppModel.cliLinked
-	private( set ) var cliPending = false
-	private static var cliLinked: Bool { ( try? FileManager.default.destinationOfSymbolicLink( atPath: "/usr/local/bin/battery" ) ) == "/Applications/Battery.app/Contents/Helpers/battery" }
-
-	func setCLIInstalled( _ on: Bool ) {
-		guard !cliPending else { return }
-		cliInstalled = on
-		cliPending = true
-		perform { [ self ] in
-			defer { cliPending = false; cliInstalled = Self.cliLinked }
-			if on { try await client.installCLI() } else { try await client.uninstallCLI() }
-		}
-	}
+	func chargeTo( _ n: Int ) { perform { [ self ] in try await client.send( .charge( n ) ) } }
+	func dischargeTo( _ n: Int ) { perform { [ self ] in try await client.send( .discharge( n ) ) } }
+	func calibrate() { perform { [ self ] in try await client.send( .calibrate ) } }
+	func recover() { perform { [ self ] in try await client.send( .maintain( .recover ) ) } }
 
 	// MARK: v1 migration
 
 	func removeLegacy() {
 		perform { [ self ] in
-			try await client.removeLegacy()
+			try await client.send( .removeLegacy )
 			legacyLeftovers = []
 		}
 	}
@@ -242,7 +269,7 @@ final class AppModel {
 	/// Settings -> "Uninstall": hand charging back to macOS, drop the helper.
 	func uninstall() {
 		perform { [ self ] in
-			try? await client.uninstall()
+			try? await client.send( .uninstall )
 			try? await daemon.unregister()
 			try? await SMAppService.mainApp.unregister()
 			if let id = Bundle.main.bundleIdentifier { defaults.removePersistentDomain( forName: id ) }
@@ -272,8 +299,9 @@ final class AppModel {
 
 	// MARK: Plumbing
 
-	/// Run a daemon action: actions execute strictly in the order issued, failures surface, polling resumes afterwards.
-	private func perform( _ action: @escaping () async throws -> Void ) {
+	/// Run a daemon action: actions execute strictly in the order issued, failures surface and stay until dismissed,
+	/// a fresh snapshot is in before `done` runs (so a knob never shows a stale truth in between).
+	private func perform( _ action: @escaping () async throws -> Void, done: ( () -> Void )? = nil ) {
 		inFlight += 1
 		let previous = actionTail
 		actionTail = Task { [ self ] in
@@ -281,9 +309,44 @@ final class AppModel {
 			do { try await action(); error = nil } catch { self.error = error.localizedDescription }
 			inFlight -= 1
 			await refresh()
+			done?()
 		}
 	}
 
 	func dismissError() { error = nil }
+
+}
+
+/// Copy for each helper state, shared by the popover, the setup window and Settings. Strings are e2e anchors.
+extension AppModel.Helper {
+
+	/// Settings -> Helper -> Status
+	var short: String {
+		switch self {
+		case .ready: return "Running"
+		case .needsApproval: return "Needs approval"
+		case .notRegistered: return "Not enabled"
+		case .unreachable: return "Not responding"
+		case .unknown: return "…"
+		}
+	}
+
+	var title: String {
+		switch self {
+		case .needsApproval: return "Switch on Battery in Login Items"
+		case .unreachable: return "Helper not responding"
+		default: return "One-time setup required"
+		}
+	}
+
+	var message: String {
+		switch self {
+		case .needsApproval: return "Battery's helper is waiting for your approval. Press the button below, then switch on Battery under App Background Activity."
+		case .unreachable: return "The helper is registered but not answering (often after moving or replacing the app). Repair re-registers it and may ask for approval again."
+		default: return "Battery needs a small background helper to control charging. Press the button below to open Login Items, then switch on Battery."
+		}
+	}
+
+	var button: String { self == .unreachable ? "Repair helper" : "Open Login Items" }
 
 }

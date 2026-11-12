@@ -2,7 +2,7 @@ import Foundation
 import BatteryCore
 
 /// Runs one-shot jobs (`charge N`, `discharge N`, `calibrate`) on a timer. The rules live in `JobPlanner`
-/// (pure, tested); this only turns intents into SMC writes. Maintenance pauses while a job runs, then resumes.
+/// (pure, tested); this only hands intents to `ChargeControl`. Maintenance pauses while a job runs, then resumes.
 /// Main-queue only.
 final class Jobs {
 
@@ -63,13 +63,6 @@ final class Jobs {
 		if step.finished { end( restoring: false ) }
 	}
 
-	private func run( _ intents: [ Intent ] ) {
-		for intent in intents {
-			switch intent {
-			case .adapter( let on ): control.adapter( on: on )
-			case .charging( let on, let level ): control.charging( on, level: level )
-			}
-		}
-	}
+	private func run( _ intents: [ Intent ] ) { control.run( intents ) }
 
 }

@@ -51,6 +51,17 @@ OPEN RISK: a dead helper with an active limit leaves charging off (verified). De
 - Lifecycle suite added (2 tests, `scripts/e2e.sh lifecycle`): uninstall + set up again (no approval needed, macOS remembers it), Login Items switch revoked (password via `babysit mac unlock`, only after the test verifies the focused field) and granted again.
 - Not automated: sleep/wake and reboot (need the screen/FileVault login). Mac left with `caffeinate` stopped.
 
+## Prefactor pass (2026-11-12)
+Seven structural fixes from a four-lens review, all landed together:
+- The daemon owns every setting. `MaintainState` keeps the target also while off (`--off` in the state file); the app shows `BatteryStatus` and keeps no copy (`LimitSettings.load/save`, `knownTarget`, `adoptOutsideChanges`, `limitWasActive` storage gone). `cliInstalled` comes from the snapshot.
+- XPC is `snapshot` + `run( Command JSON )`. `Command` is Codable and the wire type; one `Limits.refusal` gate; one switch in `Service.run`. New action = enum case + branch.
+- The maintain loop is `MaintainState` in BatteryCore (readings in, `Intent`s out), with scenario tests for #475, the raised limit, lid-closed force discharge, the firmware backend, suspend/resume. `Maintainer` is timer + IO. `ChargeControl.run` is the one intent sink for jobs and maintain.
+- Action errors are sticky until dismissed (they were wiped by the next poll), and Settings shows them too.
+- `AppModel.Knob`: one optimistic primitive (`flip`/`shown`) for every daemon-backed control; views bind to settable model props. Helper copy lives on the `Helper` enum.
+- Identity constants come from `project.yml` (lib.sh parses it, the daemon reads its team from its own Info.plist, sign.sh verifies the built binaries); `check-identity.sh` is gone.
+- Tooling: `scripts/e2e/mac-run.sh` holds the Mac side, `e2e.sh` only babysit plumbing; no `AuthKey.p8` shipped for e2e; `scripts/dev` removed; CI shares one Xcode 26 action and `release.yml` reuses `ci.yml`. E2E tests use `until { }`.
+- Totals: 82 core tests; e2e suites see the run log in the commit.
+
 ## Pre-beta fixes (2026-11-12)
 Review of the e2e/beta work found and fixed:
 - Helper not answering while registered+approved: the app now repairs it itself (2 silent polls, once per launch). Verified: `launchctl bootout` with the app quit stays dead; opening the app brings it back in ~8s, no click. Now checked by `e2e.sh` (via `babysit mac sudo`).

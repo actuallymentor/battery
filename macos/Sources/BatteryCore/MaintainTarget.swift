@@ -8,7 +8,7 @@ public enum Voltage {
 }
 
 /// What `battery maintain` keeps the battery at.
-public enum MaintainTarget: Equatable, Sendable {
+public enum MaintainTarget: Codable, Equatable, Sendable {
 
 	/// Charge level band. A single value N is `lower == upper == N`.
 	case level( lower: Int, upper: Int )
@@ -66,14 +66,8 @@ public enum MaintainTarget: Equatable, Sendable {
 		try self.init( parsing: parts.first ?? "", hysteresis: parts.count > 1 ? parts[ 1 ] : nil )
 	}
 
-	/// On-disk form in the daemon: the target plus an optional `--force-discharge` suffix.
-	public func persistedLine( force: Bool ) -> String { persisted + ( force ? " --force-discharge" : "" ) }
-
-	public static func parseLine( _ line: String ) -> ( target: MaintainTarget, force: Bool )? {
-		let force = line.contains( "--force-discharge" )
-		let setting = line.replacingOccurrences( of: " --force-discharge", with: "" ).trimmingCharacters( in: .whitespacesAndNewlines )
-		return ( try? MaintainTarget( persisted: setting ) ).map { ( $0, force ) }
-	}
+	/// The top of the band: what the app's slider shows. Nil for voltage targets.
+	public var upper: Int? { if case .level( _, let u ) = self { return u }; return nil }
 
 	/// Human form: "80%", "70% - 80%", "11.4V ±0.1V"
 	public var display: String {

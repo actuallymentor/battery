@@ -39,7 +39,7 @@ final class GUITests: E2ECase {
 		let held = eventually( 15 ) { GUI.menuBarItem?.help.contains( "Holding at limit" ) == true ? true : nil }
 		XCTAssertNotNil( held, "plugged in, limit reached: tooltip should say so, got \( GUI.menuBarItem?.help ?? "nil" )" )
 		CLI.battery( "maintain", "stop" )
-		XCTAssertNotNil( eventually( 15 ) { GUI.menuBarItem?.help.contains( "Holding" ) == false ? true : nil } )
+		XCTAssertTrue( until( 15 ) { GUI.menuBarItem?.help.contains( "Holding" ) == false } )
 	}
 
 	// MARK: Popover
@@ -57,25 +57,25 @@ final class GUITests: E2ECase {
 		GUI.openPopover()
 		let limit = try XCTUnwrap( GUI.limitText )
 		if GUI.limitSwitch?.on == true { GUI.limitSwitch?.press() }
-		XCTAssertNotNil( eventually( 10 ) { csv().maintain.isEmpty ? true : nil } )
+		XCTAssertTrue( until( 10 ) { csv().maintain.isEmpty } )
 
 		XCTAssertTrue( GUI.limitSwitch?.press() == true )
-		XCTAssertNotNil( eventually( 10 ) { csv().maintain.isEmpty ? nil : true }, "switch on should start maintain in the helper" )
+		XCTAssertTrue( until( 10 ) { !( csv().maintain.isEmpty ) }, "switch on should start maintain in the helper" )
 		XCTAssertEqual( csv().maintain, "\( max( limit - 5, 10 ) )-\( limit )", "fixed 5 point band below the limit" )
 		XCTAssertEqual( GUI.limitSwitch?.on, true )
 
 		GUI.limitSwitch?.press()
-		XCTAssertNotNil( eventually( 10 ) { csv().maintain.isEmpty ? true : nil }, "switch off should stop maintain" )
+		XCTAssertTrue( until( 10 ) { csv().maintain.isEmpty }, "switch off should stop maintain" )
 		XCTAssertTrue( csv().chargingEnabled )
 	}
 
 	func testCLIChangesShowUpInTheSwitch() throws {
 		GUI.openPopover()
 		CLI.battery( "maintain", "80" )
-		XCTAssertNotNil( eventually( 15 ) { GUI.limitSwitch?.on == true ? true : nil }, "the app should adopt a limit set from the CLI" )
+		XCTAssertTrue( until( 15 ) { GUI.limitSwitch?.on == true }, "the app should adopt a limit set from the CLI" )
 		XCTAssertEqual( GUI.limitText, 80 )
 		CLI.battery( "maintain", "stop" )
-		XCTAssertNotNil( eventually( 15 ) { GUI.limitSwitch?.on == false ? true : nil } )
+		XCTAssertTrue( until( 15 ) { GUI.limitSwitch?.on == false } )
 	}
 
 	// MARK: Gear menu
@@ -95,7 +95,7 @@ final class GUITests: E2ECase {
 
 	func testGearStatusLineMatchesTheHelperState() throws {
 		CLI.battery( "maintain", "80" )
-		_ = eventually( 15 ) { csv().chargingEnabled ? nil : true }
+		_ = until( 15 ) { !( csv().chargingEnabled ) }
 		let header = try XCTUnwrap( eventually( 10 ) { GUI.gearItems().first.flatMap { $0.hasPrefix( "Holding at limit" ) ? $0 : nil } }, "gear header should read Holding at limit" )
 		XCTAssertTrue( header.hasPrefix( "Holding at limit" ), header )
 	}
@@ -106,13 +106,13 @@ final class GUITests: E2ECase {
 	func testChargeTo100FromGearStartsAJobInTheHelper() throws {
 		let before = jobStarts( "Charging to 100%" )
 		XCTAssertTrue( GUI.pick( "Charge to 100%" ) )
-		XCTAssertNotNil( eventually( 10 ) { jobStarts( "Charging to 100%" ) > before ? true : nil }, "the helper never started the charge job" )
+		XCTAssertTrue( until( 10 ) { jobStarts( "Charging to 100%" ) > before }, "the helper never started the charge job" )
 		// Below 100% the job keeps running, and the popover offers the way out
 		if CLI.battery( "status" ).out.lowercased().contains( "charging to" ) {
 			GUI.openPopover()
 			let cancel = try XCTUnwrap( eventually( 10 ) { GUI.cancelJob }, "a running job offers the way out" )
 			XCTAssertTrue( cancel.press() )
-			XCTAssertNotNil( eventually( 10 ) { CLI.battery( "status" ).out.lowercased().contains( "charging to" ) ? nil : true } )
+			XCTAssertTrue( until( 10 ) { !( CLI.battery( "status" ).out.lowercased().contains( "charging to" ) ) } )
 		}
 	}
 
@@ -120,11 +120,11 @@ final class GUITests: E2ECase {
 		try XCTSkipUnless( Self.canCutAdapter, "this Mac cannot cut the adapter" )
 		try XCTSkipUnless( csv().percent > 40, "battery too low" )
 		XCTAssertTrue( GUI.pick( "Discharge to" ) )
-		XCTAssertNotNil( eventually( 10 ) { CLI.battery( "status" ).out.contains( "ischarging to" ) ? true : nil } )
+		XCTAssertTrue( until( 10 ) { CLI.battery( "status" ).out.contains( "ischarging to" ) } )
 		GUI.openPopover()
 		let cancel = try XCTUnwrap( eventually( 10 ) { GUI.cancelJob }, "a running job offers the way out" )
 		XCTAssertTrue( cancel.press() )
-		XCTAssertNotNil( eventually( 20 ) { csv().discharging == "not discharging" ? true : nil } )
+		XCTAssertTrue( until( 20 ) { csv().discharging == "not discharging" } )
 	}
 
 	func testCalibrateAsksFirstAndCancelStartsNothing() throws {
@@ -151,9 +151,28 @@ final class GUITests: E2ECase {
 		let slider = try XCTUnwrap( w.find( role: "AXSlider", label: "Charge limit" ) )
 		CLI.battery( "maintain", "80" )
 		// The app has adopted the helper's limit once its status refreshes (the Battery rows follow the same poll)
-		_ = eventually( 15 ) { slider.number == 80 && GUI.row( "Charging" ) == "Disabled" ? true : nil }
+		_ = until( 15 ) { slider.number == 80 && GUI.row( "Charging" ) == "Disabled" }
 		XCTAssertTrue( slider.slide( to: 70 ), "slider should step to 70, is at \( slider.number ?? -1 )" )
-		XCTAssertNotNil( eventually( 10 ) { csv().maintain == "65-70" ? true : nil }, "moving the slider while the limit is on re-applies it: got \( csv().maintain )" )
+		XCTAssertTrue( until( 10 ) { csv().maintain == "65-70" }, "moving the slider while the limit is on re-applies it: got \( csv().maintain )" )
+	}
+
+	/// The helper remembers the limit, not the app: moved while the switch is off, it is stored (not held), and the switch turns on that value
+	func testSliderWhileOffIsRememberedByTheHelper() throws {
+		CLI.battery( "maintain", "80" )
+		XCTAssertTrue( until( 15 ) { GUI.openPopover()?.find( role: "AXCheckBox", label: "Charge limit" )?.on == true } )
+		try XCTUnwrap( GUI.limitSwitch ).press()
+		XCTAssertTrue( until( 10 ) { self.csv().maintain == "" }, "switch off should stop the hold" )
+
+		let w = try XCTUnwrap( GUI.openSettings( tab: "Charging" ), GUI.snapshot )
+		let slider = try XCTUnwrap( w.find( role: "AXSlider", label: "Charge limit" ) )
+		XCTAssertTrue( slider.slide( to: 70 ), "slider should step to 70, is at \( slider.number ?? -1 )" )
+		let file = { ( try? String( contentsOfFile: "/var/db/co.palokaj.battery/maintain", encoding: .utf8 ) ) ?? "" }
+		XCTAssertTrue( until( 10 ) { file().hasPrefix( "65-70" ) && file().contains( "--off" ) }, "the helper should remember 65-70, off; file: \( file() )" )
+		XCTAssertEqual( csv().maintain, "", "moving the slider while off must not start holding" )
+		GUI.closeSettings()
+
+		try XCTUnwrap( GUI.openPopover()?.find( role: "AXCheckBox", label: "Charge limit" ) ).press()
+		XCTAssertTrue( until( 10 ) { self.csv().maintain == "65-70" }, "the switch should hold the slider's value, got \( csv().maintain )" )
 	}
 
 	/// A mouse drag applies once, on release: pausing on the way (longer than the keyboard debounce) must not reach the helper
@@ -161,7 +180,7 @@ final class GUITests: E2ECase {
 		let w = try XCTUnwrap( GUI.openSettings( tab: "Charging" ), GUI.snapshot )
 		let slider = try XCTUnwrap( w.find( role: "AXSlider", label: "Charge limit" ) )
 		CLI.battery( "maintain", "80" )
-		_ = eventually( 15 ) { slider.number == 80 && GUI.row( "Charging" ) == "Disabled" ? true : nil }
+		_ = until( 15 ) { slider.number == 80 && GUI.row( "Charging" ) == "Disabled" }
 		let f = try XCTUnwrap( slider.frame )
 		let before = csv().maintain
 
@@ -190,20 +209,20 @@ final class GUITests: E2ECase {
 		let toggle = try XCTUnwrap( GUI.toggle( "Allow discharge", in: w ) )
 		let was = toggle.on
 		XCTAssertTrue( toggle.press() )
-		XCTAssertNotNil( eventually( 5 ) { GUI.toggle( "Allow discharge" )?.on == !was ? true : nil } )
+		XCTAssertTrue( until( 5 ) { GUI.toggle( "Allow discharge" )?.on == !was } )
 		GUI.toggle( "Allow discharge" )?.press()
-		XCTAssertNotNil( eventually( 5 ) { GUI.toggle( "Allow discharge" )?.on == was ? true : nil } )
+		XCTAssertTrue( until( 5 ) { GUI.toggle( "Allow discharge" )?.on == was } )
 	}
 
 	func testTopOffScheduleToggleReachesTheHelper() throws {
 		let w = try XCTUnwrap( GUI.openSettings( tab: "Charging" ), GUI.snapshot )
 		let toggle = try XCTUnwrap( GUI.toggle( "Top off to 100% regularly", in: w ) )
-		if toggle.on { toggle.press(); _ = eventually( 5 ) { toggle.on ? nil : true } }
+		if toggle.on { toggle.press(); _ = until( 5 ) { !( toggle.on ) } }
 		XCTAssertTrue( toggle.press() )
 		let days = { try? String( contentsOfFile: "/var/db/co.palokaj.battery/schedule", encoding: .utf8 ).split( separator: " " ).first.map( String.init ) }
-		XCTAssertNotNil( eventually( 10 ) { days() != "0" ? true : nil }, "schedule should be on in the helper" )
+		XCTAssertTrue( until( 10 ) { days() != "0" }, "schedule should be on in the helper" )
 		toggle.press()
-		XCTAssertNotNil( eventually( 10 ) { days() == "0" ? true : nil }, "schedule should be off again" )
+		XCTAssertTrue( until( 10 ) { days() == "0" }, "schedule should be off again" )
 	}
 
 	func testBatterySectionMatchesTheHelper() throws {
@@ -214,7 +233,7 @@ final class GUITests: E2ECase {
 		XCTAssertNotNil( GUI.row( "Time remaining" ) )
 		XCTAssertNotNil( GUI.row( "Charge control" ) )
 		CLI.battery( "charging", "off" )
-		XCTAssertNotNil( eventually( 15 ) { GUI.row( "Charging" ) == "Disabled" ? true : nil }, "the row follows the helper" )
+		XCTAssertTrue( until( 15 ) { GUI.row( "Charging" ) == "Disabled" }, "the row follows the helper" )
 	}
 
 	// MARK: Settings: General and Helper
@@ -235,7 +254,7 @@ final class GUITests: E2ECase {
 		let flipped = eventually( 5 ) { ( GUI.menuBarItem?.title.contains( "%" ) == true ) == !was ? true : nil }
 		toggle.press()
 		XCTAssertNotNil( flipped, "the menu bar title should gain or lose the percentage" )
-		XCTAssertNotNil( eventually( 5 ) { ( GUI.menuBarItem?.title.contains( "%" ) == true ) == was ? true : nil } )
+		XCTAssertTrue( until( 5 ) { ( GUI.menuBarItem?.title.contains( "%" ) == true ) == was } )
 	}
 
 	func testHelperTabReportsAReadyHelper() throws {
@@ -252,15 +271,15 @@ final class GUITests: E2ECase {
 		// The label is markdown ("Use `battery` in Terminal"): match on the plain tail, as the switch or its label text
 		let terminalSwitch = { GUI.settings?.find( role: "AXCheckBox", label: "in Terminal", contains: true ) ?? GUI.toggle( "Use battery in Terminal" ) }
 		let was = linked()
-		defer { if linked() != was { terminalSwitch()?.press(); _ = eventually( 5 ) { linked() == was ? true : nil } } }
+		defer { if linked() != was { terminalSwitch()?.press(); _ = until( 5 ) { linked() == was } } }
 
 		for want in [ !was, was ] {
 			let toggle = try XCTUnwrap( terminalSwitch(), GUI.snapshot )
 			XCTAssertEqual( toggle.on, !want )
 			toggle.press()
-			XCTAssertNotNil( eventually( 0.5, every: 0.05 ) { terminalSwitch()?.on == want ? true : nil }, "the switch should flip right away" )
-			XCTAssertNotNil( eventually( 5 ) { linked() == want ? true : nil }, "the helper should \( want ? "add" : "remove" ) \( link )" )
-			XCTAssertNotNil( eventually( 5 ) { terminalSwitch()?.enabled == true ? true : nil }, "the switch should unlock once done" )
+			XCTAssertTrue( until( 0.5, every: 0.05 ) { terminalSwitch()?.on == want }, "the switch should flip right away" )
+			XCTAssertTrue( until( 5 ) { linked() == want }, "the helper should \( want ? "add" : "remove" ) \( link )" )
+			XCTAssertTrue( until( 5 ) { terminalSwitch()?.enabled == true }, "the switch should unlock once done" )
 		}
 	}
 
@@ -277,11 +296,11 @@ final class GUITests: E2ECase {
 	func testQuitAndRelaunchKeepsTheLimit() throws {
 		CLI.battery( "maintain", "80" )
 		XCTAssertTrue( GUI.pick( "Quit" ) )
-		XCTAssertNotNil( eventually( 10 ) { GUI.app == nil ? true : nil }, "Quit should end the app" )
+		XCTAssertTrue( until( 10 ) { GUI.app == nil }, "Quit should end the app" )
 		XCTAssertEqual( csv().maintain, "80", "the helper keeps the limit with no app running" )
 		XCTAssertTrue( GUI.launch() )
 		GUI.openPopover()
-		XCTAssertNotNil( eventually( 15 ) { GUI.limitSwitch?.on == true ? true : nil }, "relaunched app shows the limit the helper kept" )
+		XCTAssertTrue( until( 15 ) { GUI.limitSwitch?.on == true }, "relaunched app shows the limit the helper kept" )
 		XCTAssertEqual( GUI.limitText, 80 )
 	}
 

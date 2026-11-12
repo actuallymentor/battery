@@ -80,10 +80,19 @@ final class ChargeControl {
 		led( .off )
 	}
 
-	// MARK: Unsupported
+	// MARK: Intents
 
-	var unsupportedMessage: String {
-		"This Mac exposes no charge-limit control (looked for CHTE, CH0B/CH0C, bfD0/bfE0/bfF0, CHIE). Found: \( caps.keys.sorted().joined( separator: " " ) )."
+	/// What `JobPlanner` and `MaintainState` decided, in order. The only place intents become writes.
+	func run( _ intents: [ Intent ] ) {
+		for intent in intents {
+			switch intent {
+			case .adapter( let on ): adapter( on: on )
+			case .charging( let on, let level ): charging( on, level: level )
+			case .firmwareLimit( let upper, let lower ): firmwareLimit( upper: upper, lower: lower )
+			case .led( let color ): led( color )
+			case .resetAll: resetAll()
+			}
+		}
 	}
 
 }

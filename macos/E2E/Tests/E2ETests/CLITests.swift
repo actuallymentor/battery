@@ -102,7 +102,7 @@ final class CLITests: E2ECase {
 		let start = csv()
 		try XCTSkipUnless( start.percent >= 30, "battery too low to hold a limit under the level safely" )
 		XCTAssertTrue( CLI.battery( "maintain", String( max( start.percent - 10, 20 ) ) ).ok )
-		XCTAssertNotNil( eventually( 15 ) { csv().chargingEnabled ? nil : true }, "charging should be inhibited above the limit" )
+		XCTAssertTrue( until( 15 ) { !( csv().chargingEnabled ) }, "charging should be inhibited above the limit" )
 	}
 
 	func testChangingTheLimitReplacesTheOldOne() {
@@ -123,16 +123,17 @@ final class CLITests: E2ECase {
 			CLI.battery( "maintain", "stop" )
 			return
 		}
-		XCTAssertNotNil( eventually( 20 ) { csv().discharging == "discharging" ? true : nil }, "force-discharge should switch to battery power while above the limit" )
+		XCTAssertTrue( until( 20 ) { csv().discharging == "discharging" }, "force-discharge should switch to battery power while above the limit" )
 		CLI.battery( "maintain", "stop" )
-		XCTAssertNotNil( eventually( 20 ) { csv().discharging == "not discharging" ? true : nil }, "stopping must put the adapter back" )
+		XCTAssertTrue( until( 20 ) { csv().discharging == "not discharging" }, "stopping must put the adapter back" )
 	}
 
 	func testLimitPersistsToDisk() {
 		CLI.battery( "maintain", "80" )
 		XCTAssertEqual( try? String( contentsOfFile: "/var/db/co.palokaj.battery/maintain", encoding: .utf8 ).trimmingCharacters( in: .whitespacesAndNewlines ).split( separator: " " ).first.map( String.init ), "80" )
 		CLI.battery( "maintain", "stop" )
-		XCTAssertFalse( FileManager.default.fileExists( atPath: "/var/db/co.palokaj.battery/maintain" ), "stop must delete the persisted target or a reboot resurrects it" )
+		let line = ( try? String( contentsOfFile: "/var/db/co.palokaj.battery/maintain", encoding: .utf8 ) ) ?? ""
+		XCTAssertTrue( line.contains( "--off" ), "stop must mark the persisted target off or a reboot resurrects it, saw '\( line )'" )
 	}
 
 	// MARK: Charging and adapter switches
@@ -147,9 +148,9 @@ final class CLITests: E2ECase {
 	func testAdapterOffAndOn() throws {
 		try XCTSkipUnless( Self.canCutAdapter, "this Mac cannot cut the adapter" )
 		XCTAssertTrue( CLI.battery( "adapter", "off" ).ok )
-		XCTAssertNotNil( eventually( 15 ) { csv().discharging == "discharging" ? true : nil } )
+		XCTAssertTrue( until( 15 ) { csv().discharging == "discharging" } )
 		XCTAssertTrue( CLI.battery( "adapter", "on" ).ok )
-		XCTAssertNotNil( eventually( 15 ) { csv().discharging == "not discharging" ? true : nil } )
+		XCTAssertTrue( until( 15 ) { csv().discharging == "not discharging" } )
 	}
 
 	func testRecoverUndoesEverything() {
@@ -180,7 +181,7 @@ final class CLITests: E2ECase {
 		XCTAssertTrue( CLI.battery( "discharge", String( c.percent - 5 ) ).ok )
 		XCTAssertTrue( CLI.battery( "status" ).out.contains( "ischarging to" ) )
 		CLI.battery( "maintain", "recover" )
-		XCTAssertNotNil( eventually( 20 ) { csv().discharging == "not discharging" ? true : nil } )
+		XCTAssertTrue( until( 20 ) { csv().discharging == "not discharging" } )
 	}
 
 	func testCalibrateStartsAndCancels() throws {
@@ -191,7 +192,7 @@ final class CLITests: E2ECase {
 		XCTAssertTrue( CLI.battery( "status" ).out.lowercased().contains( "calibrat" ) )
 		XCTAssertTrue( CLI.battery( "maintain", "recover" ).ok )
 		XCTAssertFalse( CLI.battery( "status" ).out.lowercased().contains( "calibrat" ) )
-		XCTAssertNotNil( eventually( 20 ) { csv().discharging == "not discharging" ? true : nil } )
+		XCTAssertTrue( until( 20 ) { csv().discharging == "not discharging" } )
 	}
 
 	// MARK: Schedule

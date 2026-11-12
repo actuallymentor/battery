@@ -16,10 +16,15 @@ public enum Job: Equatable, Sendable {
 	}
 }
 
-/// What a job wants done to the hardware. The daemon turns these into SMC writes.
+/// What jobs and the maintain loop want done to the hardware. The daemon turns these into SMC writes (`ChargeControl.run`).
 public enum Intent: Equatable, Sendable {
 	case adapter( on: Bool )
 	case charging( on: Bool, holdAtLevel: Int? )
+	/// Firmware backend: hand the band to the firmware
+	case firmwareLimit( upper: Int, lower: Int )
+	case led( LEDColor )
+	/// Everything back to stock: charging on, adapter on, firmware limit off
+	case resetAll
 }
 
 public struct JobStep: Equatable, Sendable {

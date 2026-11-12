@@ -44,7 +44,7 @@ APP_NAME="${APP_NAME:-Battery}"
 # Identity constants have ONE home, project.yml: the team the daemon pins its XPC callers to (through its own Info.plist),
 # the Sparkle key baked into the app's Info.plist, and the Sparkle version Xcode links. Everything here reads them from there.
 function project_setting() { sed -n "$1" "$PROJECT_YML" | head -1; }
-TEAM_ID=$(project_setting 's/^ *DEVELOPMENT_TEAM: *\([A-Z0-9]\{10\}\).*/\1/p')
+TEAM_ID=$(project_setting 's/^ *BATTERY_TEAM_ID: *\([A-Z0-9]\{10\}\).*/\1/p')
 SPARKLE_PUBLIC_ED_KEY=$(project_setting 's/^ *SUPublicEDKey: *\(.*\)$/\1/p')
 SPARKLE_VERSION=$(project_setting 's/.*Sparkle: *{.*exactVersion: *\([0-9.]*\).*/\1/p')
 [[ -n "$TEAM_ID" && -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_VERSION" ]] ||
