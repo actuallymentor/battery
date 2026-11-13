@@ -1,6 +1,7 @@
 const { shell, app, Tray, Menu, powerMonitor, nativeTheme } = require( 'electron' )
 const { enable_battery_limiter, disable_battery_limiter, initialize_battery, is_limiter_enabled, get_battery_status, uninstall_battery } = require( './battery' )
 const { log } = require( "./helpers" )
+const { t } = require( './i18n' )
 const { get_logo_template } = require( './theme' )
 const { get_force_discharge_setting, update_force_discharge_setting } = require( './settings' )
 
@@ -31,13 +32,13 @@ const generate_app_menu = async () => {
         return Menu.buildFromTemplate( [
 
             {
-                label: `Enable ${ maintain_percentage }% battery limit`,
+                label: t( 'menu.enable_limit', { percentage: maintain_percentage } ),
                 type: 'radio',
                 checked: limiter_on,
                 click: enable_limiter
             },
             {
-                label: `Disable ${ maintain_percentage }% battery limit`,
+                label: t( 'menu.disable_limit', { percentage: maintain_percentage } ),
                 type: 'radio',
                 checked: !limiter_on,
                 click: disable_limiter
@@ -46,21 +47,21 @@ const generate_app_menu = async () => {
                 type: 'separator'
             },
             {
-                label: `Battery: ${ battery_state }`,
+                label: t( 'menu.battery', { state: battery_state } ),
                 enabled: false
             },
             {
-                label: `Power: ${ daemon_state }`,
+                label: t( 'menu.power', { state: daemon_state } ),
                 enabled: false
             },
             {
                 type: 'separator'
             },
             {
-                label: `Advanced settings`,
+                label: t( 'menu.advanced_settings' ),
                 submenu: [
                     {
-                        label: `Allow force-discharging`,
+                        label: t( 'menu.allow_force_discharging' ),
                         type: 'checkbox',
                         checked: allow_discharge,
                         click: async () => {
@@ -71,15 +72,15 @@ const generate_app_menu = async () => {
                 ]
             },
             {
-                label: `About v${ app.getVersion() }`,
+                label: t( 'menu.about', { version: app.getVersion() } ),
                 submenu: [
                     {
-                        label: `Check for updates`,
+                        label: t( 'menu.check_for_updates' ),
                         click: () => shell.openExternal( `https://github.com/actuallymentor/battery/releases` )
                     },
                     {
                         type: 'normal',
-                        label: `Uninstall Battery ${ app.getVersion() }`,
+                        label: t( 'menu.uninstall', { version: app.getVersion() } ),
                         click: async () => {
                             const uninstalled = await uninstall_battery()
                             if( !uninstalled ) return
@@ -91,23 +92,23 @@ const generate_app_menu = async () => {
                         type: 'separator'
                     },
                     {
-                        label: `User manual`,
+                        label: t( 'menu.user_manual' ),
                         click: () => shell.openExternal( `https://github.com/actuallymentor/battery#readme` )
                     },
                     {
                         type: 'normal',
-                        label: 'Command-line usage',
+                        label: t( 'menu.command_line_usage' ),
                         click: () => shell.openExternal( `https://github.com/actuallymentor/battery#-command-line-version` )
                     },
                     {
                         type: 'normal',
-                        label: 'Help and feature requests',
+                        label: t( 'menu.help_and_feature_requests' ),
                         click: () => shell.openExternal( `https://github.com/actuallymentor/battery/issues` )
                     }
                 ]
             },
             {
-                label: 'Quit',
+                label: t( 'menu.quit' ),
                 click: () => {
                     tray.destroy()
                     app.quit()
@@ -181,7 +182,7 @@ async function set_initial_interface() {
     tray = new Tray( get_logo_template( 100, true ) )
 
     // Set "loading" context
-    tray.setTitle( '  updating...' )
+    tray.setTitle( t( 'tray.updating' ) )
     
     log( "Tray app boot complete" )
 
