@@ -1,15 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.0.0-beta.2 (2026-11-13)
 
 ### Changed
-- First launch opens a setup window ("One-time setup required" → **Open Login Items**) instead of waiting for a click on the menu bar icon. It also opens when approval is switched off later, and says "All set" once the helper runs.
-
+- First launch opens a setup window ("One-time setup required" → **Set up helper**) instead of waiting for a click on the menu bar icon. It also opens when approval is switched off later, shows progress while the helper starts, and says "All set" once it runs. Login Items only opens when macOS really needs the click (after a reinstall the approval is remembered).
 - The helper remembers the charge limit, also while the switch is off: the slider shows the same value for every user, after a reboot, and after a CLI change. (Before, the app kept its own copy and reconciled.)
 - Settings shows a failed action under the tabs until dismissed. Before, the message vanished within milliseconds.
 - All helper-backed switches (limit, allow discharge, top-off, Terminal) flip on the click and lock until the helper has answered.
 
 ### Fixed
+- Settings → Helper → **Uninstall Battery…** also moves Battery.app to the Trash. Before, the app stayed in Applications, Spotlight still found it, and opening it started the setup again.
+- The setup button after a reinstall: macOS remembers the helper approval, so Login Items never opened and the button looked dead. It now starts the helper, shows "Starting the helper…", and the window says "All set" when it answers.
 - Settings → Helper → "Use `battery` in Terminal" flips on the click and is locked until done. Before, it lagged a few seconds and looked broken, inviting repeat clicks.
 - Raising the limit while charging is held now charges up to the new limit. Before, a battery inside the new 5% band stayed held (82% held at 80, raised to 85: no charging).
 

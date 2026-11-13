@@ -19,7 +19,10 @@ struct SetupWindow: View {
 					Button( "Done" ) { dismissWindow( id: Self.id ) }.buttonStyle( .borderedProminent ).keyboardShortcut( .defaultAction )
 				}
 			} else {
-				HelperSetup( model: model )
+				VStack( alignment: .leading, spacing: 10 ) {
+					HelperSetup( model: model )
+					ErrorRow( model: model )     // "The helper didn't start…" must show here too, the popover may be closed
+				}
 			}
 		}
 		.padding( 20 )

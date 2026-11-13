@@ -44,9 +44,12 @@ final class LifecycleTests: XCTestCase {
 	private func helperUp() -> Bool { CLI.battery( [ "status" ], timeout: 5 ).ok }
 	private var registered: Bool { sh( "/bin/launchctl", [ "print", "system/\( daemon )" ] ).ok }
 
-	private func enableButton() -> AX? { GUI.openPopover()?.find( role: "AXButton", label: "Open Login Items" ) }
+	private func enableButton() -> AX? { GUI.openPopover()?.find( role: "AXButton", label: "Set up helper" ) }
 	/// Opens by itself when the helper needs setting up or approving
 	private var setupWindow: AX? { GUI.app?.windows.first { $0.title == "Set Up Battery" } }
+	private static let appPath = "/Applications/Battery.app"
+	/// The installed bundle, copied aside before the uninstall test trashes it (~/.Trash is off limits to ssh-spawned processes, TCC)
+	private static let backupApp = NSTemporaryDirectory() + "Battery-e2e-backup.app"
 
 	/// Login Items -> App Background Activity -> the "Battery" switch
 	private var settingsApp: AX? { AX.app( bundleID: settingsID ) }
@@ -70,6 +73,9 @@ final class LifecycleTests: XCTestCase {
 		XCTAssertTrue( helperUp(), "needs a working helper to start from" )
 		XCTAssertTrue( registered )
 
+		_ = sh( "/bin/rm", [ "-rf", Self.backupApp ] )
+		XCTAssertTrue( sh( "/usr/bin/ditto", [ Self.appPath, Self.backupApp ] ).ok, "could not copy the installed app aside" )
+
 		XCTAssertNotNil( GUI.openSettings( tab: "Helper" ), "Settings window did not open" )
 		let uninstall = try XCTUnwrap( eventually( 5 ) { GUI.button( "Uninstall Battery…" ) } )
 		uninstall.press()
@@ -79,12 +85,17 @@ final class LifecycleTests: XCTestCase {
 		XCTAssertTrue( until( 20 ) { GUI.app == nil }, "the app should quit after uninstalling" )
 		XCTAssertTrue( until( 20 ) { !( self.registered ) }, "the helper should be gone from launchd" )
 		XCTAssertFalse( helperUp(), "the CLI should find no helper" )
+		XCTAssertTrue( until( 10 ) { !FileManager.default.fileExists( atPath: Self.appPath ) }, "Battery.app should have left Applications (to the Trash)" )
+		XCTAssertTrue( sh( "/usr/bin/ditto", [ Self.backupApp, Self.appPath ] ).ok, "could not reinstall the copy" )     // same build, for the rest of the suite
 
-		// Back the way a new user starts: the setup window opens by itself, one click, helper answering, "All set"
+		// Back the way a new user starts: the setup window opens by itself, one click, helper answering, "All set".
+		// macOS remembers the approval, so Login Items must NOT be needed: the button starts the helper and waits for it.
 		XCTAssertTrue( GUI.launch() )
 		let window = try XCTUnwrap( eventually( 15 ) { self.setupWindow }, "no setup window after uninstall:\n\( GUI.snapshot )" )
 		XCTAssertNotNil( window.find( role: "AXStaticText", label: "One-time setup required" ) )
-		try XCTUnwrap( window.find( role: "AXButton", label: "Open Login Items" ) ).press()
+		try XCTUnwrap( window.find( role: "AXButton", label: "Set up helper" ) ).press()
+		// Progress while it starts, unless the helper was so quick the window already says all set
+		XCTAssertNotNil( eventually( 5 ) { self.setupWindow?.find( role: "AXStaticText", label: "Starting the helper…" ) ?? self.setupWindow?.find( role: "AXButton", label: "Done" ) }, "neither progress nor all set after the click:\n\( GUI.snapshot )" )
 		XCTAssertTrue( until( 30 ) { self.helperUp() }, "helper did not come back:\n\( GUI.snapshot )" )
 		let done = try XCTUnwrap( eventually( 15 ) { self.setupWindow?.find( role: "AXButton", label: "Done" ) }, "setup window should say all set:\n\( GUI.snapshot )" )
 		done.press()

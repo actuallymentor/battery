@@ -113,10 +113,19 @@ final class AppModel {
 		}
 	}
 
+	/// First setup. Login Items opens only when macOS actually wants a click there: after an uninstall (or a reinstall)
+	/// the approval is usually remembered, the helper just starts, and the button would otherwise look dead. So wait for
+	/// it to answer: `busy` shows "Starting the helper…" meanwhile, and the window flips to "All set" by itself.
 	func registerHelper() {
-		do { try daemon.register(); error = nil } catch { self.error = error.localizedDescription }
-		if daemon.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
-		Task { await refresh() }
+		perform { [ self ] in
+			try daemon.register()
+			if daemon.status == .requiresApproval { return SMAppService.openSystemSettingsLoginItems() }
+			for _ in 0..<6 {     // each snapshot waits up to 5 s on its own
+				if ( try? await client.snapshot() ) != nil { return }
+				try? await Task.sleep( for: .seconds( 1 ) )
+			}
+			throw DaemonError.failed( "The helper didn't start. Try Repair, or switch Battery off and on in Login Items." )
+		}
 	}
 
 	/// Registered but not answering (app was moved, bundle replaced, stale job spec): start over.
@@ -285,13 +294,20 @@ final class AppModel {
 		legacyLeftovers = []
 	}
 
-	/// Settings -> "Uninstall": hand charging back to macOS, drop the helper.
+	/// Settings -> "Uninstall": hand charging back to macOS, drop the helper, then trash the app itself so Spotlight
+	/// can't relaunch it into the setup flow. Unregister before trashing: SMAppService reads the daemon plist from the bundle.
 	func uninstall() {
 		perform { [ self ] in
-			try? await client.send( .uninstall )
+			// Charging must be back to stock before anything is removed: a silent helper may still hold a limit (or a firmware
+			// limit), and trashing the app would take the recovery tools with it. The error stays under Settings; the user can Repair.
+			do { try await client.send( .uninstall ) }
+			catch { throw DaemonError.failed( "The helper didn't answer, charging may still be limited. Repair the helper, then uninstall again." ) }
 			try? await daemon.unregister()
 			try? await SMAppService.mainApp.unregister()
 			if let id = Bundle.main.bundleIdentifier { defaults.removePersistentDomain( forName: id ) }
+			let app = Bundle.main.bundleURL
+			do { try FileManager.default.trashItem( at: app, resultingItemURL: nil ) }
+			catch { NSWorkspace.shared.activateFileViewerSelecting( [ app ] ) }     // not ours to delete (admin-owned): hand it to the user
 			NSApplication.shared.terminate( nil )
 		}
 	}
@@ -372,10 +388,16 @@ extension AppModel.Helper {
 		switch self {
 		case .needsApproval: return "Battery's helper is waiting for your approval. Press the button below, then switch on Battery under App Background Activity."
 		case .unreachable: return "The helper is registered but not answering (often after moving or replacing the app). Repair re-registers it and may ask for approval again."
-		default: return "Battery needs a small background helper to control charging. Press the button below to open Login Items, then switch on Battery."
+		default: return "Battery needs a small background helper to control charging. Press the button below; if macOS asks, switch on Battery in Login Items."
 		}
 	}
 
-	var button: String { self == .unreachable ? "Repair helper" : "Open Login Items" }
+	var button: String {
+		switch self {
+		case .unreachable: return "Repair helper"
+		case .needsApproval: return "Open Login Items"
+		default: return "Set up helper"
+		}
+	}
 
 }

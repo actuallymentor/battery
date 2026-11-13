@@ -32,6 +32,8 @@ Tests restore a neutral Mac (no limit, no job, no schedule, charging and adapter
 
 ## Gotchas
 
+- The uninstall test moves Battery.app to the Trash (that is what the button does). `~/.Trash` is TCC-protected for ssh-spawned processes, so the test copies the installed bundle aside first and reinstalls that copy rather than restoring from the Trash; one trashed copy per run stays until emptied in Finder.
+
 - A locked screen hides every window from Accessibility, and the Mac re-locks when a `babysit mac run` session ends. `scripts/e2e/hold.sh` holds one open (only types the password if the screen is really locked, `unlock` types into whatever has focus). `caffeinate -d -u` stops idle-lock.
 - Replacing `/Applications/Battery.app` with a signed build: the app notices the new build and restarts the helper, no click. If it does not answer within 60s `e2e.sh` presses Repair (`mac-run.sh repair`), no approval needed.
 - The app adopts limits set from the CLI, so GUI tests wait for the status poll before acting on the slider.

@@ -15,7 +15,7 @@ Apple Silicon, **macOS 14+**. Intel Macs: use [AlDente](https://apphousekitchen.
 | DMG | Releases page, once the first signed beta is published. Drag `Battery.app` to `/Applications` |
 | Homebrew | cask planned, not available yet |
 
-First launch: a setup window opens. **Open Login Items** → switch on *Battery* in *System Settings → General → Login Items & Extensions*. One time, no password prompts afterwards. Coming from v1? Battery offers to remove the old install.
+First launch: a setup window opens. **Set up helper** → macOS asks you to switch on *Battery* in *System Settings → General → Login Items & Extensions*. One time, no password prompts afterwards. Coming from v1? Battery offers to remove the old install.
 
 ## Use
 

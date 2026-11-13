@@ -108,6 +108,9 @@ struct HelperSetup: View {
 				Text( "Your charge limit may keep the battery from charging until the helper runs again." ).font( .callout ).foregroundStyle( .orange ).fixedSize( horizontal: false, vertical: true )
 			}
 			Button( model.helper.button ) { model.setUpHelper() }.buttonStyle( .borderedProminent ).disabled( model.busy )
+			if model.busy {
+				HStack( spacing: 6 ) { ProgressView().controlSize( .small ); Text( "Starting the helper…" ).font( .callout ).foregroundStyle( .secondary ) }
+			}
 		}
 	}
 
