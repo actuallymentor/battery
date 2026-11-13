@@ -2,6 +2,7 @@
 const { app } = require( 'electron' )
 const { exec } = require( 'node:child_process' )
 const { log, alert, wait, confirm } = require( './helpers' )
+const { t } = require( './i18n' )
 const { get_force_discharge_setting } = require( './settings' )
 const { USER } = process.env
 const binfolder = '/usr/local/co.palokaj.battery'
@@ -105,10 +106,10 @@ const get_battery_status = async () => {
         discharging = discharging == 'discharging'
         remaining = remaining.match( /\d{1,2}:\d{1,2}/ ) ? remaining : 'unknown'
 
-        let battery_state = `${ percentage }% (${ remaining } remaining)`
+        let battery_state = t( 'status.battery_state', { percentage, remaining } )
         let daemon_state = ``
-        if( discharging ) daemon_state += `forcing discharge to ${ maintain_percentage || 80 }%`
-        else daemon_state += `smc charging ${ charging ? 'enabled' : 'disabled' }`
+        if( discharging ) daemon_state += t( 'status.daemon_discharging', { percentage: maintain_percentage || 80 } )
+        else daemon_state += t( 'status.daemon_charging', { state: t( charging ? 'status.charging_enabled' : 'status.charging_disabled' ) } )
 
         const status_object = { percentage, remaining, charging, discharging, maintain_percentage, battery_state, daemon_state }
         log( 'Battery status: ', JSON.stringify( status_object ) )
@@ -116,7 +117,7 @@ const get_battery_status = async () => {
 
     } catch ( e ) {
         log( `Error getting battery status: `, e )
-        await alert( `Battery limiter error: ${ e.message }` )
+        await alert( t( 'dialog.battery_limiter_error', { message: e.message } ) )
         const ERR_COMMAND_NOT_FOUND = 127
         if ( e.code === ERR_COMMAND_NOT_FOUND ) {
             // No battery script found. Constant alerts will be preventing a user from quitting, so do it now.
@@ -212,15 +213,15 @@ const initialize_battery = async () => {
         // Reinstall or try updating
         if( !is_installed ) {
             log( `Installing battery for ${ USER }...` )
-            if( !online ) return alert( `Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.` )
-            await alert( `Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.` )
+            if( !online ) return alert( t( 'dialog.internet_required' ) )
+            await alert( t( 'dialog.welcome_install' ) )
             try {
                 const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
                 log( `Install result success `, result )
-                await alert( `Battery background components installed/updated successfully. You can find the battery limiter icon in the top right of your menu bar.` )
+                await alert( t( 'dialog.install_success' ) )
             } catch ( e ) {
                 log( `Battery setup failed: `, e )
-                await alert( `Failed to install battery background components.\n\n${e.message}`)
+                await alert( t( 'dialog.install_failed', { message: e.message } ) )
                 app.quit()
                 app.exit()
             }
@@ -234,7 +235,7 @@ const initialize_battery = async () => {
                 log( `Update details: `, result )
             } catch ( e ) {
                 log( `Battery update failed: `, e )
-                await alert( `Couldn’t complete the update.\n\n${e.message}`)
+                await alert( t( 'dialog.update_failed', { message: e.message } ) )
             }
         }
 
@@ -243,7 +244,7 @@ const initialize_battery = async () => {
 
     } catch ( e ) {
         log( `Error Initializing battery: `, e )
-        await alert( `Battery limiter initialization error: ${ e.message }` )
+        await alert( t( 'dialog.initialization_error', { message: e.message } ) )
         app.quit()
         app.exit()
     }
@@ -260,11 +261,11 @@ const uninstall_battery = async () => {
             // If you need to change this, check whether 'pkill -f <process cmd pattern>' is still used by 'battery uninstall'.
             if ( e.code !== 'SIGNAL' ) throw e;
         })
-        await alert( `Battery is now uninstalled!` )
+        await alert( t( 'dialog.uninstalled' ) )
         return true
     } catch ( e ) {
         log( 'Error uninstalling battery: ', e )
-        alert( `Error uninstalling battery: ${ e.message }` )
+        alert( t( 'dialog.uninstall_error', { message: e.message } ) )
         return false
     }
 
@@ -278,7 +279,7 @@ const is_limiter_enabled = async () => {
         return result.stdout.includes( 'being maintained at' )
     } catch ( e ) {
         log( `Error getting battery status: `, e )
-        alert( `Battery limiter error: ${ e.message }` )
+        alert( t( 'dialog.battery_limiter_error', { message: e.message } ) )
     }
 
 }

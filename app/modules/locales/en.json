@@ -1,0 +1,42 @@
+{
+    "menu": {
+        "enable_limit": "Enable {percentage}% battery limit",
+        "disable_limit": "Disable {percentage}% battery limit",
+        "battery": "Battery: {state}",
+        "power": "Power: {state}",
+        "advanced_settings": "Advanced settings",
+        "allow_force_discharging": "Allow force-discharging",
+        "about": "About v{version}",
+        "check_for_updates": "Check for updates",
+        "uninstall": "Uninstall Battery {version}",
+        "user_manual": "User manual",
+        "command_line_usage": "Command-line usage",
+        "help_and_feature_requests": "Help and feature requests",
+        "quit": "Quit"
+    },
+    "status": {
+        "battery_state": "{percentage}% ({remaining} remaining)",
+        "daemon_discharging": "forcing discharge to {percentage}%",
+        "daemon_charging": "smc charging {state}",
+        "charging_enabled": "enabled",
+        "charging_disabled": "disabled"
+    },
+    "tray": {
+        "updating": "  updating..."
+    },
+    "dialog": {
+        "confirm_button": "Confirm",
+        "cancel_button": "Cancel",
+        "no_home": "No HOME variable set, this should never happen",
+        "force_discharge_confirm": "This setting allows your battery to drain to the desired maintenance level while plugged in. This does not work well in Clamshell mode (laptop closed with an external monitor).\n\nAllow force-discharging?",
+        "battery_limiter_error": "Battery limiter error: {message}",
+        "internet_required": "Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.",
+        "welcome_install": "Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.",
+        "install_success": "Battery background components installed/updated successfully. You can find the battery limiter icon in the top right of your menu bar.",
+        "install_failed": "Failed to install battery background components.\n\n{message}",
+        "update_failed": "Couldn’t complete the update.\n\n{message}",
+        "initialization_error": "Battery limiter initialization error: {message}",
+        "uninstalled": "Battery is now uninstalled!",
+        "uninstall_error": "Error uninstalling battery: {message}"
+    }
+}

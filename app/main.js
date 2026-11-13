@@ -1,5 +1,6 @@
 const { app } = require( 'electron' )
 const { alert, log } = require( './modules/helpers' )
+const { set_locale } = require( './modules/i18n' )
 const { set_initial_interface } = require( './modules/interface' )
 
 // Enable auto-updates
@@ -13,7 +14,11 @@ require( 'update-electron-app' )( {
 // Event listeners
 // /////////////////////////////*/
 
-app.whenReady().then( set_initial_interface )
+app.whenReady().then( () => {
+    // Use the system language for the interface
+    set_locale()
+    set_initial_interface()
+} )
 
 /* ///////////////////////////////
 // Global config

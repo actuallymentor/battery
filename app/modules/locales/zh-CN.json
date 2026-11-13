@@ -1,0 +1,42 @@
+{
+    "menu": {
+        "enable_limit": "启用 {percentage}% 电量限制",
+        "disable_limit": "关闭 {percentage}% 电量限制",
+        "battery": "电池：{state}",
+        "power": "电源：{state}",
+        "advanced_settings": "高级设置",
+        "allow_force_discharging": "允许强制放电",
+        "about": "关于 v{version}",
+        "check_for_updates": "检查更新",
+        "uninstall": "卸载 Battery {version}",
+        "user_manual": "用户手册",
+        "command_line_usage": "命令行用法",
+        "help_and_feature_requests": "帮助与功能建议",
+        "quit": "退出"
+    },
+    "status": {
+        "battery_state": "{percentage}%（剩余 {remaining}）",
+        "daemon_discharging": "强制放电至 {percentage}%",
+        "daemon_charging": "SMC 充电{state}",
+        "charging_enabled": "已启用",
+        "charging_disabled": "已禁用"
+    },
+    "tray": {
+        "updating": "  更新中…"
+    },
+    "dialog": {
+        "confirm_button": "确定",
+        "cancel_button": "取消",
+        "no_home": "未设置 HOME 环境变量，这不应该发生",
+        "force_discharge_confirm": "开启后，即使插着电也允许电池放电到设定的维持电量。该选项在合盖模式（笔记本合盖并外接显示器）下效果不佳。\n\n允许强制放电？",
+        "battery_limiter_error": "电量限制器错误：{message}",
+        "internet_required": "电量限制工具需要联网下载最新版本，请连接网络后重新打开应用。",
+        "welcome_install": "欢迎使用电量限制工具。应用需要安装或更新部分组件，会要求你输入密码，通常只需要输入一次。",
+        "install_success": "后台组件安装/更新成功。你可以在菜单栏右上角找到电量限制图标。",
+        "install_failed": "安装电量后台组件失败。\n\n{message}",
+        "update_failed": "更新未能完成。\n\n{message}",
+        "initialization_error": "电量限制器初始化错误：{message}",
+        "uninstalled": "电量限制工具已卸载！",
+        "uninstall_error": "卸载电量工具时出错：{message}"
+    }
+}

@@ -5,8 +5,9 @@ const util = require( 'util' )
 let has_alerted_user_no_home = false
 
 const { dialog } = require( 'electron' )
+const { t } = require( './i18n' )
 const alert = ( message ) => dialog.showMessageBox( { message } )
-const confirm = ( message ) => dialog.showMessageBox( { message, buttons: [ "Confirm", "Cancel" ] } ).then( ( { response } ) => {
+const confirm = ( message ) => dialog.showMessageBox( { message, buttons: [ t( 'dialog.confirm_button' ), t( 'dialog.cancel_button' ) ] } ).then( ( { response } ) => {
     if( response == 0 ) return true
     return false
 } )
@@ -26,7 +27,7 @@ const log = async ( ...messages ) => {
             const line = util.format(...messages) + "\n";
             await fs.appendFile( `${ HOME }/.battery/gui.log`, line, 'utf8' )
         } else if( !has_alerted_user_no_home ) {
-            alert( `No HOME variable set, this should never happen` )
+            alert( t( 'dialog.no_home' ) )
             has_alerted_user_no_home = true
         }
     } catch ( e ) {

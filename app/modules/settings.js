@@ -1,5 +1,6 @@
 const Store = require( 'electron-store' )
 const { log, confirm } = require( './helpers' )
+const { t } = require( './i18n' )
 const store = new Store( {
     force_discharge_if_needed: {
         type: 'boolean'
@@ -26,7 +27,7 @@ const update_force_discharge_setting = async () => {
 
         const currently_allowed = get_force_discharge_setting()
         if( !currently_allowed ) {
-            const proceed = await confirm( `This setting allows your battery to drain to the desired maintenance level while plugged in. This does not work well in Clamshell mode (laptop closed with an external monitor).\n\nAllow force-discharging?` )
+            const proceed = await confirm( t( 'dialog.force_discharge_confirm' ) )
             if( !proceed ) return false
         }
 
